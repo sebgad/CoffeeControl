@@ -99,7 +99,7 @@ void setup(){
 
   bEspOnline = connectWiFi();
 
-  if bEspOnline{
+  if (bEspOnline == true) {
     // ESP has wifi connection
 
     // register mDNS. ESP is available under http://coffee.local
