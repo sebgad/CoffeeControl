@@ -12,14 +12,15 @@
 #include <WiFi.h>
 #include "WifiAccess.h"
 #include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
 #include <SPIFFS.h>
 
 #define FORMAT_SPIFFS_IF_FAILED true
 
 long iTemp = 0;
 long iPressure = 0;
-long check_wifi = millis();
-long bEspOnline = false;
+bool bEspOnline = false;
+bool bEspMdns = false;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -98,19 +99,31 @@ void setup(){
 
   bEspOnline = connectWiFi();
 
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html");
-  });
-  server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", readTemperature().c_str());
-  });
-  server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send_P(200, "text/plain", readPressure().c_str());
-  });
+  if bEspOnline{
+    // ESP has wifi connection
 
-  // Start server
-  server.begin();
+    // register mDNS. ESP is available under http://coffee.local
+    if (!MDNS.begin("coffee")) {
+          Serial.println("Error setting up MDNS responder!");
+    }
+    // add service to standart http connection
+    MDNS.addService("http", "tcp", 80);
+
+    // Route for root / web page
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(SPIFFS, "/index.html");
+    });
+    server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send_P(200, "text/plain", readTemperature().c_str());
+    });
+    server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send_P(200, "text/plain", readPressure().c_str());
+    });
+
+    // Start server
+    server.begin();
+
+  }
 }
  
 void loop(){
