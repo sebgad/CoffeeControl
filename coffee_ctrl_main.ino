@@ -1,12 +1,13 @@
 /*********
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com
-  
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files.
-  
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+ * 
+ * coffee_ctrl_main
+ * A script to control an espresso machine and display measurement values on a webserver of an ESP32
+ * 
+ * TODOS:
+ *  - Implement googleCharts for displaying results on an html-file
+ *  - Create different Tasks for operating the PID regulator and other tasks
+ *  - Implement PID regulator
+ *  
 *********/
 
 #include <WiFi.h>
@@ -109,6 +110,7 @@ void setup(){
     // add service to standart http connection
     MDNS.addService("http", "tcp", 80);
 
+    // TODO: Suggestion to change to google charts since it's totally free and easy to use. Also suggest to use JSON for storage Data in SPIFFS.
     // Route for root / web page
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
       request->send(SPIFFS, "/index.html");
