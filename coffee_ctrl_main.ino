@@ -23,8 +23,23 @@ long iPressure = 0;
 bool bEspOnline = false;
 bool bEspMdns = false;
 
+// Create Timer
+hw_timer_t * objTimer = NULL;
+portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
+
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
+
+void IRAM_ATTR onTimer(){
+  /** Interrupt Service Routine
+   * 
+  **/
+
+  // Define Critical Code section, also needs to be called in Main-Loop
+  portENTER_CRITICAL_ISR(&objTimerMux);
+  //TODO Do some stuff here
+  portEXIT_CRITICAL_ISR(&objTimerMux);
+}
 
 String readTemperature() {
   iTemp++;
@@ -124,6 +139,18 @@ void setup(){
 
     // Start server
     server.begin();
+
+  // Initialize Timer 
+  // Prescaler: 80 --> 1 step per microsecond
+  // true: increasing counter
+  objTimer = timerBegin(0, 80, true);
+  // Attach ISR function to timer
+  timerAttachInterrupt(objTimer, &onTimer, true);
+  // Define timer alarm
+  // factor is 100000, equals 100ms when prescaler is 80
+  // true: Alarm will be reseted automatically
+  timerAlarmWrite(objTimer, 100000, true);
+  timerAlarmEnable(objTimer);
 
   }
 }
