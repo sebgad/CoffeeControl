@@ -47,7 +47,6 @@ body {
   text-decoration: none;
 }
 
-
 /* Right-aligned link */
 .navbar a.right {
   float: right;
@@ -73,15 +72,6 @@ body {
   flex-wrap: wrap;
 }
 
-/* Create two unequal columns that sits next to each other */
-/* Sidebar/left column */
-.side {
-  -ms-flex: 30%; /* IE10 */
-  flex: 30%;
-  background-color: #f1f1f1;
-  padding: 20px;
-}
-
 /* Main column */
 .main {   
   -ms-flex: 70%; /* IE10 */
@@ -105,18 +95,25 @@ body {
   text-align: center;
 }
 
-/* Fake image, just for this example */
-.fakeimg {
-  background-color: #aaa;
-  width: 100%;
-  padding: 20px;
-}
-
 /* Footer */
 .footer {
   padding: 20px;
   text-align: center;
   background: #ddd;
+}
+
+.content {
+    width: 300px;
+    /*border: 4px solid red;*/
+    background:#ededed;
+    padding: 10px;
+    overflow: hidden;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 /* Responsive layout - when the screen is less than 700px wide, make the two columns stack on top of each other instead of next to each other */
@@ -137,8 +134,32 @@ body {
 </style>
 <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 <script type="text/javascript">
-   google.charts.load('current', {'packages':['gauge']});
+   google.charts.load('current', {'packages':['gauge', 'table']});
    google.charts.setOnLoadCallback(drawChart);
+   google.charts.setOnLoadCallback(drawTable);
+
+	 function drawTable() {
+   	var data = new google.visualization.DataTable();
+    data.addColumn('string', 'Name');
+    data.addColumn('boolean', 'Status');
+    data.addRows([
+    ['Pump', true],
+    ['Heating',  false],
+    ['Main-Switch', true],
+    ]);
+	  // check each row
+  	for (var i = 0; i < data.getNumberOfRows(); i++) {
+    	// check boolean value
+    	if (data.getValue(i, 1)) {
+      	data.setProperty(i, 1, 'style', 'background-color: orange; color:orange;');
+    } else {
+    	data.setProperty(i, 1, 'style', 'background-color: grey; color:grey;');
+    }
+  	}
+
+    var table = new google.visualization.Table(document.getElementById('table_div'));
+		table.draw(data, {showRowNumber: false, width: '60%', height: '100%', allowHtml: true,});
+   }
 
    function drawChart() {
 
@@ -157,7 +178,7 @@ body {
        greenFrom: 90, greenTo: 95,
        redFrom: 95, redTo: 120,
        yellowFrom:0, yellowTo: 90,
-       minorTicks: 20
+       minorTicks: 10
      };
 
      var optionsPressure = {
@@ -218,6 +239,8 @@ body {
 <div class="row">
   <div class="main">
     <h2>Control Board</h2>
+    <h3>Status</h3>
+    <div id="table_div"></div>
     <h3>Actual Sensor Values</h3>
     <div class="container">
       <div class="item", id="gauge_Temp"></div>
@@ -227,7 +250,7 @@ body {
 </div>
 
 <div class="footer">
-  <h2>Footer</h2>
+  <h5>Footer</h5>
 </div>
 
 </body>
