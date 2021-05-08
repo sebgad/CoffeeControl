@@ -15,6 +15,9 @@
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
+#include <ArduinoJson.h>
+#include "time.h"
+
 
 #define FORMAT_SPIFFS_IF_FAILED true
 
@@ -22,6 +25,22 @@ long iTemp = 0;
 long iPressure = 0;
 bool bEspOnline = false;
 bool bEspMdns = false;
+
+// NTP Client
+const char* charNtpServerUrl = "europe.pool.ntp.org";
+const long  iGmtOffsetSec = 60000;
+const int   iDayLightOffsetSec = 3600;
+
+// Data Handling with JSON file. Containing nested arrays
+// Serialization --> Transforming data to byte stream and dump it to json file. 
+//                   Example: {timetamp:[245324, 245536, 253466], temperature:[20,30,40,50], pressure:[7.0, 8.1, 8.3]}
+// Deserialization --> Reverse process to read in the data. The webserver is doing that via google graph library
+StaticJsonDocument<10000> ObjJsonDocument;
+JsonArray objDataTime = ObjJsonDocument.createNestedArray("timestamp");
+JsonArray objDataTemp = ObjJsonDocument.createNestedArray("temperature");
+JsonArray objDataPressure = ObjJsonDocument.createNestedArray("pressure");
+// Maximum Data points of each array. If exceeded, first data point will be deleted
+const int iMaxArrSize = 10000;
 
 // Create Timer
 hw_timer_t * objTimer = NULL;
@@ -153,6 +172,9 @@ void setup(){
     // Start server
     server.begin();
 
+    // initialize NTP client
+    configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
+
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond
   // true: increasing counter
@@ -167,6 +189,42 @@ void setup(){
 
   }
 }
+
+unsigned long getEpochTime() {
+  /** Get Epoche unix Time format
+   * Returns: unix time stamp in seconds after 01.01.1970 as integer
+   */
+  time_t obj_timestamp;
+  
+  // verify whether timestamp is valid
+  struct tm struct_timestamp;
+  if (!getLocalTime(&struct_timestamp)) {
+    // return 0 if timestamp is not valid
+    return(0);
+  }
+
+  time(&obj_timestamp);
+  return obj_timestamp;   
+}
+
+void addPointsToJsonStream(){
+  /** Write Data Points to defined JSON Array
+   * 
+  */
+  long int i_epoch_time = getEpochTime();
+  objDataTime.add(i_epoch_time);
+  objDataTemp.add(iTemp);
+  objDataPressure.add(iPressure);
+
+  if (objDataTime.size() > iMaxArrSize) {
+    // Delete First entry if Max size is exceeded
+    objDataTime.remove(0);
+    objDataTemp.remove(0);
+    objDataPressure.remove(0);
+  }
+}
+
+
  
 void loop(){
 
