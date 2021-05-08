@@ -130,6 +130,19 @@ void setup(){
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
       request->send(SPIFFS, "/index.html");
     });
+  
+    server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(SPIFFS, "/graphs.html");
+    });
+
+    server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(SPIFFS, "/style.css");
+    });
+
+    server.on("/table.js", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(SPIFFS, "/table.js");
+    });
+    
     //server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
     //  request->send_P(200, "text/plain", readTemperature().c_str());
     //});
