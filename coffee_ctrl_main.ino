@@ -4,10 +4,23 @@
  * A script to control an espresso machine and display measurement values on a webserver of an ESP32
  * 
  * TODOS:
- *  - Implement googleCharts for displaying results on an html-file
  *  - Create different Tasks for operating the PID regulator and other tasks
+ *      - xms task for analog / digital read out of the sensor values
+ *      - 100ms task for PID controler
+ *      - 300ms task for adding measurement value to array
+ *      - 900ms task for serializing stream to JSON file
+ *      - how to implement it? how many ISR?
  *  - Implement PID regulator
- *  
+ *      - temperatur as input, SSR control as output
+ *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
+ *      - Implement both ideas and switching regulation over web interface, e.g. config page?
+ *  - Implement JSON data import on webserver
+ *      - define update interval seperately for the gauges, status table and chart graph
+ *      - write JSON import function
+ *  - Add measurement values and integrate them in JSON request
+ *      - add status measurement values and state machines? e.g. heating is "on" depending on a duty cycle threshold? Water pump is on, etc.
+ *  - Implement config web page and define parameters which can be set dynamically (pid control parameters, etc.)
+ *  - Make it look nice, maybe?
 *********/
 
 #include <WiFi.h>
@@ -21,12 +34,12 @@
 
 #define FORMAT_SPIFFS_IF_FAILED true
 
-long iTemp = 0;
-long iPressure = 0;
+volatile long iTemp = 0;
+volatile long iPressure = 0;
 bool bEspOnline = false;
 bool bEspMdns = false;
 
-// NTP Client
+// configure NTP Client
 const char* charNtpServerUrl = "europe.pool.ntp.org";
 const long  iGmtOffsetSec = 60000;
 const int   iDayLightOffsetSec = 3600;
@@ -42,7 +55,7 @@ JsonArray objDataPressure = ObjJsonDocument.createNestedArray("pressure");
 // Maximum Data points of each array. If exceeded, first data point will be deleted
 const int iMaxArrSize = 10000;
 
-// Create Timer
+// Create Timerobject
 hw_timer_t * objTimer = NULL;
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -51,7 +64,7 @@ AsyncWebServer server(80);
 
 void IRAM_ATTR onTimer(){
   /** Interrupt Service Routine
-   * 
+   *  - PID-Regulator
   **/
 
   // Define Critical Code section, also needs to be called in Main-Loop
@@ -176,7 +189,7 @@ void setup(){
     configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
 
   // Initialize Timer 
-  // Prescaler: 80 --> 1 step per microsecond
+  // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
   // true: increasing counter
   objTimer = timerBegin(0, 80, true);
   // Attach ISR function to timer
@@ -186,13 +199,12 @@ void setup(){
   // true: Alarm will be reseted automatically
   timerAlarmWrite(objTimer, 100000, true);
   timerAlarmEnable(objTimer);
-
   }
 }
 
 unsigned long getEpochTime() {
-  /** Get Epoche unix Time format
-   * Returns: unix time stamp in seconds after 01.01.1970 as integer
+  /** Get verified epoche unix time stamp
+   * Returns: unix time stamp: seconds after 01.01.1970 as long integer
    */
   time_t obj_timestamp;
   
@@ -208,7 +220,7 @@ unsigned long getEpochTime() {
 }
 
 void addPointsToJsonStream(){
-  /** Write Data Points to defined JSON Array
+  /** add data points to defined JSON Array
    * 
   */
   long int i_epoch_time = getEpochTime();
@@ -217,7 +229,7 @@ void addPointsToJsonStream(){
   objDataPressure.add(iPressure);
 
   if (objDataTime.size() > iMaxArrSize) {
-    // Delete First entry if Max size is exceeded
+    // release first entry if max size is exceeded
     objDataTime.remove(0);
     objDataTemp.remove(0);
     objDataPressure.remove(0);
