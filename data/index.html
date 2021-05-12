@@ -1,111 +1,109 @@
-<!DOCTYPE HTML><html>
-<!-- Rui Santos - Complete project details at https://RandomNerdTutorials.com
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files.
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software. -->
+<!DOCTYPE html>
+<html lang="en">
 <head>
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <title>Silvia Control</title>
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!--Embedded external code to get a plot in java-->
-  <script src="https://code.highcharts.com/highcharts.js"></script>
-  <style>
-    body {
-      min-width: 310px;
-      max-width: 800px;
-      height: 400px;
-      margin: 0 auto;
-    }
-    h2 {
-      font-family: Arial;
-      font-size: 2.5rem;
-      text-align: center;
-    }
-  </style>
+
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  <script type="text/javascript" src="table.js"></script>
+
+  <script type="text/javascript">
+   google.charts.load('current', {'packages':['gauge']});
+   google.charts.setOnLoadCallback(drawChart);
+
+   function drawChart() {
+
+     var dataTemp = google.visualization.arrayToDataTable([
+       ['Label', 'Value'],
+       ['Temp', 80],
+     ]);
+
+     var dataPress= google.visualization.arrayToDataTable([
+       ['Label', 'Value'],
+       ['Pressure', 5.5],
+     ]);
+
+     var optionsTemp = {
+       width: 400, height: 120,
+       greenFrom: 90, greenTo: 95,
+       redFrom: 95, redTo: 120,
+       yellowFrom:0, yellowTo: 90,
+       minorTicks: 10
+     };
+
+     var optionsPressure = {
+       width: 400, height: 120,
+       greenFrom: 8.5, greenTo: 9,
+       redFrom: 9, redTo: 11,
+       yellowFrom:0, yellowTo: 8.5,
+       minorTicks: 10,
+       min:0, max:11,
+     };
+
+     var formatterPress = new google.visualization.NumberFormat({
+       suffix: 'bar',
+       fractionDigits: 1
+       });
+
+     formatterPress.format(dataPress, 1);
+
+     var formatterTemp = new google.visualization.NumberFormat({
+       suffix: '°C',
+       fractionDigits: 1,
+       });
+       formatterTemp.format(dataTemp, 1); 
+
+     var chartTemp = new google.visualization.Gauge(document.getElementById('gauge_Temp'));
+     var chartPress = new google.visualization.Gauge(document.getElementById('gauge_Press'));
+     
+     chartTemp.draw(dataTemp, optionsTemp);
+     chartPress.draw(dataPress, optionsPressure);
+
+     setInterval(function() {
+       dataTemp.setValue(0, 1, 40 + Math.round(40 * Math.random()));
+       formatterTemp.format(dataTemp, 1);
+       chartTemp.draw(dataTemp, optionsTemp);
+     }, 13000);
+     setInterval(function() {
+       dataPress.setValue(0, 1, 4 + Math.round(4.5 * Math.random(), 2));
+       formatterPress.format(dataPress, 1);
+       chartPress.draw(dataPress, optionsPressure);
+     }, 5000);
+   }
+ </script> 
 </head>
 <body>
-  <h2>Coffee Controller</h2>
-  <div id="chart-temperature" class="container"></div>
-  <div id="chart-pressure" class="container"></div>
-</body>
-<script>
-var chartT = new Highcharts.Chart({
-  chart:{ renderTo : 'chart-temperature' },
-  title: { text: 'Kesseltemperatur' },
-  series: [{
-    showInLegend: false,
-    data: []
-  }],
-  plotOptions: {
-    line: { animation: false,
-      dataLabels: { enabled: true }
-    },
-    series: { color: '#059e8a' }
-  },
-  xAxis: { type: 'datetime',
-    dateTimeLabelFormats: { second: '%H:%M:%S' }
-  },
-  yAxis: {
-    title: { text: 'Temperature (Celsius)' }
-  },
-  credits: { enabled: false }
-});
-setInterval(function ( ) {
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      var x = (new Date()).getTime(),
-          y = parseFloat(this.responseText);
-      //console.log(this.responseText);
-      if(chartT.series[0].data.length > 40) {
-        chartT.series[0].addPoint([x, y], true, true, true);
-      } else {
-        chartT.series[0].addPoint([x, y], true, false, true);
-      }
-    }
-  };
-  xhttp.open("GET", "/temperature", true);
-  xhttp.send();
-}, 3000 ) ; // Every 3s an url request
 
-var chartP = new Highcharts.Chart({
-  chart:{ renderTo:'chart-pressure' },
-  title: { text: 'Water Pressure' },
-  series: [{
-    showInLegend: false,
-    data: []
-  }],
-  plotOptions: {
-    line: { animation: false,
-      dataLabels: { enabled: true }
-    },
-    series: { color: '#18009c' }
-  },
-  xAxis: {
-    type: 'datetime',
-    dateTimeLabelFormats: { second: '%H:%M:%S' }
-  },
-  yAxis: {
-    title: { text: 'Pressure (hPa)' }
-  },
-  credits: { enabled: false }
-});
-setInterval(function ( ) {
-  var xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-    if (this.readyState == 4 && this.status == 200) {
-      var x = (new Date()).getTime(),
-          y = parseFloat(this.responseText);
-      //console.log(this.responseText);
-      if(chartP.series[0].data.length > 40) {
-        chartP.series[0].addPoint([x, y], true, true, true);
-      } else {
-        chartP.series[0].addPoint([x, y], true, false, true);
-      }
-    }
-  };
-  xhttp.open("GET", "/pressure", true);
-  xhttp.send();
-}, 3000 ) ; // Every 3s an url request
-</script>
+<div class="header">
+  <h1>Silvia Control</h1>
+  <p>A simple <b>web interface</b> to control Rancilio Silvia espresso machine.</p>
+</div>
+
+<div class="navbar">
+  <a href="/" class="active">Home</a>
+  <a href="graphs">Graphs</a>
+  <a href="#">Settings</a>
+  <a href="#" class="right">About</a>
+</div>
+
+<div class="row">
+  <div class="main">
+    <h2>Control Board</h2>
+    <h3>Status</h3>
+    <div id="table_div"></div>
+    <h3>Actual Sensor Values</h3>
+    <div class="container">
+      <div class="item", id="gauge_Temp"></div>
+      <div class="item", id="gauge_Press"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <h5>Footer</h5>
+</div>
+
+</body>
 </html>
