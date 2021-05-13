@@ -204,19 +204,19 @@ void setup(){
 
 unsigned long getEpochTime() {
   /** Get verified epoche unix time stamp
-   * Returns: unix time stamp: seconds after 01.01.1970 as long integer
+   * @return: if valid: unix time stamp: seconds after 01.01.1970 as long integer, if not valid: 0 is returned
    */
-  time_t obj_timestamp;
   
   // verify whether timestamp is valid
   struct tm struct_timestamp;
   if (!getLocalTime(&struct_timestamp)) {
     // return 0 if timestamp is not valid
     return(0);
+  } else {
+    time_t obj_timestamp;
+    time(&obj_timestamp);
+    return obj_timestamp;
   }
-
-  time(&obj_timestamp);
-  return obj_timestamp;   
 }
 
 void addPointsToJsonStream(){

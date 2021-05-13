@@ -1,6 +1,7 @@
 float f_pwm =0;
 float f_pct =0;
-int sensorValue=0;
+int potiValue=0;
+int tempValue=0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -15,9 +16,11 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  sensorValue = analogRead(A2);
-  f_pct = map(sensorValue, 0, 1023, 0.0, 100.0);
-  f_pwm = map(sensorValue, 100, 1023, 0, 255);
+  potiValue = analogRead(A2);
+  tempValue = analogRead(A1);
+  
+  f_pct = map(potiValue, 0, 1023, 0.0, 100.0);
+  f_pwm = map(potiValue, 0, 1023, 0, 255);
   f_pct = constrain(f_pct, 0, 100);
   f_pwm = constrain(f_pwm, 0, 255);
 
@@ -27,17 +30,18 @@ void loop() {
   // print out the value you read:
 
   //Serial.println(voltage);
-  //Serial.pintln(f_pct);
+  Serial.println(f_pct);
 
   //
   //digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
   //delay(100);                       // wait for a second
   //digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
   //delay(100);
-  digitalWrite(3,f_pwm);
+  analogWrite(3,f_pwm);
+
   digitalWrite(6, HIGH);
-  delayMicroseconds(100*f_pct); // Approximately 10% duty cycle @ 1KHz
+  delayMicroseconds(10*f_pct); // Approximately 10% duty cycle @ 1KHz
   digitalWrite(6, LOW);
-  delayMicroseconds(100 - 100*f_pct);
+  delayMicroseconds(1000 - 10*f_pct);
 
 }
