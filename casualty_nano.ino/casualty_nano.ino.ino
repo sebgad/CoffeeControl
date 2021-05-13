@@ -8,6 +8,7 @@ void setup() {
   Serial.begin(19200);
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(3, OUTPUT);
+  pinMode(6, OUTPUT);
   
 
 }
@@ -34,9 +35,9 @@ void loop() {
   //digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
   //delay(100);
   digitalWrite(3,f_pwm);
-  //digitalWrite(3, HIGH);
-  //delayMicroseconds(100*f_pct); // Approximately 10% duty cycle @ 1KHz
-  //digitalWrite(3, LOW);
-  //delayMicroseconds(100 - 100*f_pct);
+  digitalWrite(6, HIGH);
+  delayMicroseconds(100*f_pct); // Approximately 10% duty cycle @ 1KHz
+  digitalWrite(6, LOW);
+  delayMicroseconds(100 - 100*f_pct);
 
 }
