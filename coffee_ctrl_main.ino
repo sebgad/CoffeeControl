@@ -21,6 +21,8 @@
  *      - add status measurement values and state machines? e.g. heating is "on" depending on a duty cycle threshold? Water pump is on, etc.
  *  - Implement config web page and define parameters which can be set dynamically (pid control parameters, etc.)
  *  - Make it look nice, maybe?
+ *  - Probably running into Memory problem, because internal RAM size (512kb) is not sufficient. You can verify it with 
+ *    ./tools/create_random_json.py and create a big JSON-File and test it here: https://arduinojson.org/v6/assistant. Solution needs to be found.
 *********/
 
 #include <WiFi.h>
@@ -48,10 +50,29 @@ const int   iDayLightOffsetSec = 3600;
 // Serialization --> Transforming data to byte stream and dump it to json file. 
 //                   Example: {timetamp:[245324, 245536, 253466], temperature:[20,30,40,50], pressure:[7.0, 8.1, 8.3]}
 // Deserialization --> Reverse process to read in the data. The webserver is doing that via google graph library
+
+// Define custom Json Document to allocate external memory
+// TODO: Check if external PSRAM is available and flash memory can be used?
+struct SpiRamAllocator {
+  void* allocate(size_t size) {
+    return heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
+  }
+
+  void deallocate(void* pointer) {
+    heap_caps_free(pointer);
+  }
+
+  void* reallocate(void* ptr, size_t new_size) {
+    return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM);
+  }
+};
+
+/// BasicJsonDocument<SpiRamAllocator> ObjJsonDocument(10000);
 StaticJsonDocument<10000> ObjJsonDocument;
 JsonArray objDataTime = ObjJsonDocument.createNestedArray("timestamp");
 JsonArray objDataTemp = ObjJsonDocument.createNestedArray("temperature");
 JsonArray objDataPressure = ObjJsonDocument.createNestedArray("pressure");
+
 // Maximum Data points of each array. If exceeded, first data point will be deleted
 const int iMaxArrSize = 10000;
 
@@ -69,7 +90,9 @@ void IRAM_ATTR onTimer(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
   portENTER_CRITICAL_ISR(&objTimerMux);
-  //TODO Do some stuff here
+    //TODO Do some stuff here
+    readTemperature();
+    readPressure();
   portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
@@ -223,21 +246,22 @@ void addPointsToJsonStream(){
   /** add data points to defined JSON Array
    * 
   */
-  long int i_epoch_time = getEpochTime();
-  objDataTime.add(i_epoch_time);
+  long int i_time = millis();
+  objDataTime.add(i_time);
   objDataTemp.add(iTemp);
   objDataPressure.add(iPressure);
 
   if (objDataTime.size() > iMaxArrSize) {
     // release first entry if max size is exceeded
+    // TODO: Memory is not released by the function remove(). Possible memory leakage needs to be fixed.
     objDataTime.remove(0);
     objDataTemp.remove(0);
     objDataPressure.remove(0);
   }
 }
 
-
- 
 void loop(){
-
+  addPointsToJsonStream();
+  delay(5000);
+  serializeJsonPretty(ObjJsonDocument, Serial);
 }
