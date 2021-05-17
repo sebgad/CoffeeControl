@@ -18,7 +18,9 @@ f_store_interval = 0.5 #s
 
 # Key: Name, values: [min, max, precision]
 dct_signals = {'pressure': [0, 8, 2],
-               'temperature': [20, 140, 1]}
+               'temperature': [20, 140, 1],
+               'pumpOn': [0, 1, 0],
+               'HeatOn': [0, 1, 0]}
 
 i = 0
 i_size = 0

@@ -10,7 +10,7 @@ import random
 f_out = r"/home/sebastian/out.txt"
 f= open(f_out, "w")
 
-i_n_points = 10e3
+i_n_points = 1*10e2
 # Key: Name, values: [min, max, precision]
 dct_signals = {'pressure': [0, 8, 3],
                'temperature': [20, 140, 2]}
