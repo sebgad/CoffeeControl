@@ -24,45 +24,51 @@
 #include <SPIFFS.h>
 #include "time.h"
 
-
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
 const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000; // bytes
 
-// Sensor Variable
+// Sensor variables, must be from type volatile int to make it available over 
+// different interrupt service routine functions and the mainloop
 volatile int iTemp = 0;
 volatile int iPressure = 0;
 volatile int iPumpStatus = 0; // 0: off, 1: on
 volatile int iHeatingStatus = 0; // 0: off, 1:on
-volatile int bStoreData = 0;
+volatile int iStoreData = 0;
 
 // PID controler output
 volatile int iPidOut = 0;
 
+// bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
 bool bEspMdns = false;
 
 // configure NTP Client
 const char* charNtpServerUrl = "europe.pool.ntp.org";
-const long  iGmtOffsetSec = 60000;
-const int   iDayLightOffsetSec = 3600;
+const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
+const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 
 // Create Timerobject
 hw_timer_t * objTimerSensor = NULL;
 hw_timer_t * objTimerControler = NULL;
 hw_timer_t * objTimerFileStream = NULL;
 
-// Definition for critical section
+// Definition for critical section ports
 portMUX_TYPE objTimerSensorMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE objTimerFileStreamMux = portMUX_INITIALIZER_UNLOCKED;
+
+// Task intervals in microseconds
+const unsigned long iTaskSensorMicros = 92000;
+const unsigned long iTaskControlerMicros = 100000;
+const unsigned long iTaskFileStreamMicros = 500000;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
 void IRAM_ATTR onTimerSensor(){
-  /** Interrupt Service Routine
-   *  - Sensor read out
+  /** Interrupt Service Routine for sensor read outs
+   *  TODO: Check whether analog readOut inside ISR or online status variable should change and read out in main loop
   **/
 
   // Define Critical Code section, also needs to be called in Main-Loop
@@ -71,7 +77,6 @@ void IRAM_ATTR onTimerSensor(){
     iPressure = iPressure + 1;
     iHeatingStatus = 0;
     iPumpStatus = 1;
-    bStoreData++;
   portEXIT_CRITICAL_ISR(&objTimerSensorMux);
 }
 
@@ -94,7 +99,7 @@ void IRAM_ATTR onTimerFilestream(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
   portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
-    bStoreData = 1;
+    iStoreData++;
   portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
 }
 
@@ -230,7 +235,7 @@ void setup(){
         Serial.println("Failed to obtain time stamp online");
         obj_meas_file.println("n.a.");
       } else{
-        obj_meas_file.println(&obj_timeinfo, "%d.%m.%Y %H:%M:%S");
+        obj_meas_file.println(&obj_timeinfo, "%c");
       }  
     } else {
       // Offline Mode
@@ -257,9 +262,9 @@ void setup(){
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
-  timerAlarmWrite(objTimerSensor, 92000, true);
-  timerAlarmWrite(objTimerControler, 100000, true);
-  timerAlarmWrite(objTimerFileStream, 5000000, true);
+  timerAlarmWrite(objTimerSensor, iTaskSensorMicros, true);
+  timerAlarmWrite(objTimerControler, iTaskControlerMicros, true);
+  timerAlarmWrite(objTimerFileStream, iTaskFileStreamMicros, true);
   timerAlarmEnable(objTimerSensor);
   delay(100);
   timerAlarmEnable(objTimerControler);
@@ -269,9 +274,11 @@ void setup(){
 
 
 void loop(){
-    if (bStoreData == 1){
-      Serial.print("Enter ");
-      Serial.println(millis());
+    if (iStoreData > 0){
+      portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
+        iStoreData--;
+      portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
+      
       portENTER_CRITICAL_ISR(&objTimerSensorMux);
         int f_pressure_local = iPressure;
         int i_temp_local = iTemp;
@@ -279,10 +286,6 @@ void loop(){
         int f_heating_status_local = iHeatingStatus;
       portEXIT_CRITICAL_ISR(&objTimerSensorMux);
     
-      portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
-        bStoreData = 0;
-      portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
-      
       File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
         if (obj_meas_file.size() < iMaxBytes) {
           unsigned long i_time = millis();
@@ -297,6 +300,7 @@ void loop(){
           obj_meas_file.println(f_heating_status_local);
           obj_meas_file.close();
         } else {
+          Serial.println("Data file size exceeded, delete it.");
           obj_meas_file.close();
           SPIFFS.remove(strMeasFilePath);
         }
