@@ -5,20 +5,13 @@
  * 
  * TODOS:
  *  - Create different Tasks for operating the PID regulator and other tasks
- *      - xms task for analog / digital read out of the sensor values
+ *      -  92ms for sensor measurement aquisition
  *      - 100ms task for PID controler
- *      - 300ms task for adding measurement value to array
- *      - 900ms task for serializing stream to JSON file
- *      - how to implement it? how many ISR?
+ *      - 500ms task for storing data to csv file
  *  - Implement PID regulator
  *      - temperatur as input, SSR control as output
  *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
  *      - Implement both ideas and switching regulation over web interface, e.g. config page?
- *  - Implement JSON data import on webserver
- *      - define update interval seperately for the gauges, status table and chart graph
- *      - write JSON import function
- *  - Add measurement values and integrate them in JSON request
- *      - add status measurement values and state machines? e.g. heating is "on" depending on a duty cycle threshold? Water pump is on, etc.
  *  - Implement config web page and define parameters which can be set dynamically (pid control parameters, etc.)
  *  - Make it look nice, maybe?
  *  - Make coffe.local address also available for wifi clients
@@ -29,18 +22,24 @@
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
-#include <ArduinoJson.h>
 #include "time.h"
 
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
-File objMeasFile;
 const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000; // bytes
 
-volatile long iTemp = 0;
-volatile long iPressure = 0;
+// Sensor Variable
+volatile int iTemp = 0;
+volatile int iPressure = 0;
+volatile int iPumpStatus = 0; // 0: off, 1: on
+volatile int iHeatingStatus = 0; // 0: off, 1:on
+volatile int bStoreData = 0;
+
+// PID controler output
+volatile int iPidOut = 0;
+
 bool bEspOnline = false;
 bool bEspMdns = false;
 
@@ -50,33 +49,53 @@ const long  iGmtOffsetSec = 60000;
 const int   iDayLightOffsetSec = 3600;
 
 // Create Timerobject
-hw_timer_t * objTimer = NULL;
-portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
+hw_timer_t * objTimerSensor = NULL;
+hw_timer_t * objTimerControler = NULL;
+hw_timer_t * objTimerFileStream = NULL;
+
+// Definition for critical section
+portMUX_TYPE objTimerSensorMux = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE objTimerFileStreamMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
-void IRAM_ATTR onTimer(){
+void IRAM_ATTR onTimerSensor(){
+  /** Interrupt Service Routine
+   *  - Sensor read out
+  **/
+
+  // Define Critical Code section, also needs to be called in Main-Loop
+  portENTER_CRITICAL_ISR(&objTimerSensorMux);
+    iTemp = iTemp + 1;
+    iPressure = iPressure + 1;
+    iHeatingStatus = 0;
+    iPumpStatus = 1;
+    bStoreData++;
+  portEXIT_CRITICAL_ISR(&objTimerSensorMux);
+}
+
+void IRAM_ATTR onTimerControler(){
   /** Interrupt Service Routine
    *  - PID-Regulator
   **/
 
   // Define Critical Code section, also needs to be called in Main-Loop
-  portENTER_CRITICAL_ISR(&objTimerMux);
+  portENTER_CRITICAL_ISR(&objTimerSensorMux);
     //TODO Do some stuff here
-    readTemperature();
-    readPressure();
-  portEXIT_CRITICAL_ISR(&objTimerMux);
+    iPidOut = iTemp + iPressure + iPumpStatus + iHeatingStatus;
+  portEXIT_CRITICAL_ISR(&objTimerSensorMux);
 }
 
-String readTemperature() {
-  iTemp++;
-  return String(iTemp);
-}
+void IRAM_ATTR onTimerFilestream(){
+  /** Interrupt Service Routine
+   *  - Store to measurement file
+  **/
 
-String readPressure() {
-  iPressure++;
-  return String(iPressure);
+  // Define Critical Code section, also needs to be called in Main-Loop
+  portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
+    bStoreData = 1;
+  portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
 }
 
 bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
@@ -141,9 +160,10 @@ void setup(){
       Serial.println("SPIFFS Mount Failed");
       return;
   } else {
-    // Initialization successfull
+    // Initialization successfull, create csv file
     unsigned int i_total_bytes = SPIFFS.totalBytes();
     unsigned int i_used_bytes = SPIFFS.usedBytes();
+
     Serial.println("File system info:");
     Serial.print("Total space on SPIFFS: ");
     Serial.print(i_total_bytes);
@@ -155,101 +175,130 @@ void setup(){
 
     Serial.print("Create File ");
     Serial.println(strMeasFilePath);
-    objMeasFile = SPIFFS.open(strMeasFilePath, "w");
+    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
 
-    // generate header in file
-    objMeasFile.println("Time,Temperature,Pressure,HeatOn,PumpOn");
-  }
+    bEspOnline = connectWiFi();
 
-  bEspOnline = connectWiFi();
+    if (bEspOnline == true) {
+      // ESP has wifi connection
 
-  if (bEspOnline == true) {
-    // ESP has wifi connection
+      // register mDNS. ESP is available under http://coffee.local
+      if (!MDNS.begin("coffee")) {
+            Serial.println("Error setting up MDNS responder!");
+      }
+      // add service to standart http connection
+      MDNS.addService("http", "tcp", 80);
 
-    // register mDNS. ESP is available under http://coffee.local
-    if (!MDNS.begin("coffee")) {
-          Serial.println("Error setting up MDNS responder!");
-    }
-    // add service to standart http connection
-    MDNS.addService("http", "tcp", 80);
-
-    // TODO: Suggestion to change to google charts since it's totally free and easy to use. Also suggest to use JSON for storage Data in SPIFFS.
-    // Route for root / web page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, "/index.html");
-    });
-  
-    server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, "/graphs.html");
-    });
-
-    server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, "/style.css");
-    });
-
-    server.on("/table.js", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, "/table.js");
-    });
+      // TODO: Suggestion to change to google charts since it's totally free and easy to use. Also suggest to use JSON for storage Data in SPIFFS.
+      // Route for root / web page
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, "/index.html");
+      });
     
-    //server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
-    //  request->send_P(200, "text/plain", readTemperature().c_str());
-    //});
-    //server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
-    //  request->send_P(200, "text/plain", readPressure().c_str());
-    //});
+      server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, "/graphs.html");
+      });
 
-    // Start server
-    server.begin();
+      server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, "/style.css");
+      });
 
-    // initialize NTP client
-    configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
+      server.on("/table.js", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, "/table.js");
+      });
+
+      server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, strMeasFilePath, "text/plain");
+      });
+
+      //server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
+      //  request->send_P(200, "text/plain", readTemperature().c_str());
+      //});
+      //server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
+      //  request->send_P(200, "text/plain", readPressure().c_str());
+      //});
+
+      // Start server
+      server.begin();
+
+      // initialize NTP client
+      configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
+    
+      obj_meas_file.print("Measurement File created on ");
+      struct tm obj_timeinfo;
+      if(!getLocalTime(&obj_timeinfo)){
+        Serial.println("Failed to obtain time stamp online");
+        obj_meas_file.println("n.a.");
+      } else{
+        obj_meas_file.println(&obj_timeinfo, "%d.%m.%Y %H:%M:%S");
+      }  
+    } else {
+      // Offline Mode
+        obj_meas_file.println("n.a.");
+    }
+
+    obj_meas_file.println("");
+    // generate header in file
+    obj_meas_file.println("Time,Temperature,Pressure,HeatOn,PumpOn");
+    obj_meas_file.close();
+  }
 
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
   // true: increasing counter
-  objTimer = timerBegin(0, 80, true);
+  objTimerSensor = timerBegin(0, 80, true);
+  objTimerControler = timerBegin(1, 80, true);
+  objTimerFileStream = timerBegin(2, 80, true);
   // Attach ISR function to timer
-  timerAttachInterrupt(objTimer, &onTimer, true);
+  timerAttachInterrupt(objTimerSensor, &onTimerSensor, true);
+  timerAttachInterrupt(objTimerControler, &onTimerControler, true);
+  timerAttachInterrupt(objTimerFileStream, &onTimerFilestream, true);
+  
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
-  timerAlarmWrite(objTimer, 100000, true);
-  timerAlarmEnable(objTimer);
-  }
+  timerAlarmWrite(objTimerSensor, 92000, true);
+  timerAlarmWrite(objTimerControler, 100000, true);
+  timerAlarmWrite(objTimerFileStream, 5000000, true);
+  timerAlarmEnable(objTimerSensor);
+  delay(100);
+  timerAlarmEnable(objTimerControler);
+  delay(100);
+  timerAlarmEnable(objTimerFileStream);
 }
 
-unsigned long getEpochTime() {
-  /** Get verified epoche unix time stamp
-   * @return: if valid: unix time stamp: seconds after 01.01.1970 as long integer, if not valid: 0 is returned
-   */
-  
-  // verify whether timestamp is valid
-  struct tm struct_timestamp;
-  if (!getLocalTime(&struct_timestamp)) {
-    // return 0 if timestamp is not valid
-    return(0);
-  } else {
-    time_t obj_timestamp;
-    time(&obj_timestamp);
-    return obj_timestamp;
-  }
-}
-
-void addPointsToStream(){
-  /** add data points to file stream
-   * 
-  */
-  if (objMeasFile.size() < iMaxBytes) {
-    int i_time = millis();
-    objMeasFile.print(i_time);
-    objMeasFile.print(",");
-    objMeasFile.print(iPressure);
-    objMeasFile.print(",");
-    objMeasFile.print(iTemp);
-  }
-}
 
 void loop(){
-  addPointsToStream();
-  delay(5000);
+    if (bStoreData == 1){
+      Serial.print("Enter ");
+      Serial.println(millis());
+      portENTER_CRITICAL_ISR(&objTimerSensorMux);
+        int f_pressure_local = iPressure;
+        int i_temp_local = iTemp;
+        int i_pump_status_local = iPumpStatus;
+        int f_heating_status_local = iHeatingStatus;
+      portEXIT_CRITICAL_ISR(&objTimerSensorMux);
+    
+      portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
+        bStoreData = 0;
+      portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
+      
+      File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
+        if (obj_meas_file.size() < iMaxBytes) {
+          unsigned long i_time = millis();
+          obj_meas_file.print(i_time);
+          obj_meas_file.print(",");
+          obj_meas_file.print(f_pressure_local);
+          obj_meas_file.print(",");
+          obj_meas_file.print(i_temp_local);
+          obj_meas_file.print(",");
+          obj_meas_file.print(i_pump_status_local);
+          obj_meas_file.print(",");
+          obj_meas_file.println(f_heating_status_local);
+          obj_meas_file.close();
+        } else {
+          obj_meas_file.close();
+          SPIFFS.remove(strMeasFilePath);
+        }
+    }
 }
