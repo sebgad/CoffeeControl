@@ -4,10 +4,10 @@
  * A script to control an espresso machine and display measurement values on a webserver of an ESP32
  * 
  * TODOS:
- *  - Create different Tasks for operating the PID regulator and other tasks
- *      -  92ms for sensor measurement aquisition
+ *  - Create different interrupts for operating the PID regulator and other tasks
+ *      -  90ms for sensor measurement aquisition
  *      - 100ms task for PID controler
- *      - 500ms task for storing data to csv file
+ *      - 450ms task for storing data to csv file
  *  - Implement PID regulator
  *      - temperatur as input, SSR control as output
  *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
@@ -29,79 +29,59 @@
 const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000; // bytes
 
-// Sensor variables, must be from type volatile int to make it available over 
-// different interrupt service routine functions and the mainloop
-volatile int iTemp = 0;
-volatile int iPressure = 0;
-volatile int iPumpStatus = 0; // 0: off, 1: on
-volatile int iHeatingStatus = 0; // 0: off, 1:on
-volatile int iStoreData = 0;
+// Counter for function call timing, used in ISR
+volatile int iCntInterruptSensor = 0;
+volatile int iCntInterruptPid = 0;
+volatile int iCntInterruptStore = 0;
 
-// PID controler output
-volatile int iPidOut = 0;
+// Sensor variables
+float fTemp = 0;
+float fPressure = 0;
+int iPumpStatus = 0; // 0: off, 1: on
+int iHeatingStatus = 0; // 0: off, 1:on
+
+// PID controler output variable
+float fPidOut = 0;
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
 bool bEspMdns = false;
 
-// configure NTP Client
+// configure NTP client
 const char* charNtpServerUrl = "europe.pool.ntp.org";
 const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
 const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 
-// Create Timerobject
-hw_timer_t * objTimerSensor = NULL;
-hw_timer_t * objTimerControler = NULL;
-hw_timer_t * objTimerFileStream = NULL;
+// timer object for ISR
+hw_timer_t * objTimer = NULL;
 
-// Definition for critical section ports
-portMUX_TYPE objTimerSensorMux = portMUX_INITIALIZER_UNLOCKED;
-portMUX_TYPE objTimerFileStreamMux = portMUX_INITIALIZER_UNLOCKED;
+// Definition for critical section port
+portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Task intervals in microseconds
-const unsigned long iTaskSensorMicros = 92000;
-const unsigned long iTaskControlerMicros = 100000;
-const unsigned long iTaskFileStreamMicros = 500000;
+const unsigned long iInterruptIntervalMicros = 10000; //microseconds
+
+// Interrupt counter limits for function sensor read, pid control and measurement file store
+const int iCntTotalInterruptSensor = 9; // Number of interrupts until sensor read function is called
+const int iCntTotalInterruptPid = 10; // Number of interrupts until pid regulator function is called
+const int iCntTotalInterruptStore = 45; // Number of interrupts until sensor value is stored in measurement file
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
-void IRAM_ATTR onTimerSensor(){
+void IRAM_ATTR onTimer(){
   /** Interrupt Service Routine for sensor read outs
-   *  TODO: Check whether analog readOut inside ISR or online status variable should change and read out in main loop
+   *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
   **/
 
   // Define Critical Code section, also needs to be called in Main-Loop
-  portENTER_CRITICAL_ISR(&objTimerSensorMux);
-    iTemp = iTemp + 1;
-    iPressure = iPressure + 1;
-    iHeatingStatus = 0;
-    iPumpStatus = 1;
-  portEXIT_CRITICAL_ISR(&objTimerSensorMux);
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iCntInterruptSensor++;
+      iCntInterruptPid++;
+      iCntInterruptStore++;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
-void IRAM_ATTR onTimerControler(){
-  /** Interrupt Service Routine
-   *  - PID-Regulator
-  **/
-
-  // Define Critical Code section, also needs to be called in Main-Loop
-  portENTER_CRITICAL_ISR(&objTimerSensorMux);
-    //TODO Do some stuff here
-    iPidOut = iTemp + iPressure + iPumpStatus + iHeatingStatus;
-  portEXIT_CRITICAL_ISR(&objTimerSensorMux);
-}
-
-void IRAM_ATTR onTimerFilestream(){
-  /** Interrupt Service Routine
-   *  - Store to measurement file
-  **/
-
-  // Define Critical Code section, also needs to be called in Main-Loop
-  portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
-    iStoreData++;
-  portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
-}
 
 bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   /**
@@ -154,6 +134,7 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   return b_successful;
 }
 
+
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(115200);
@@ -194,7 +175,6 @@ void setup(){
       // add service to standart http connection
       MDNS.addService("http", "tcp", 80);
 
-      // TODO: Suggestion to change to google charts since it's totally free and easy to use. Also suggest to use JSON for storage Data in SPIFFS.
       // Route for root / web page
       server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/index.html");
@@ -212,16 +192,10 @@ void setup(){
         request->send(SPIFFS, "/table.js");
       });
 
+      // Measurement file, available under http://coffee.local/data.csv
       server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, strMeasFilePath, "text/plain");
       });
-
-      //server.on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
-      //  request->send_P(200, "text/plain", readTemperature().c_str());
-      //});
-      //server.on("/pressure", HTTP_GET, [](AsyncWebServerRequest *request){
-      //  request->send_P(200, "text/plain", readPressure().c_str());
-      //});
 
       // Start server
       server.begin();
@@ -238,7 +212,7 @@ void setup(){
         obj_meas_file.println(&obj_timeinfo, "%c");
       }  
     } else {
-      // Offline Mode
+      // Offline mode
         obj_meas_file.println("n.a.");
     }
 
@@ -251,58 +225,85 @@ void setup(){
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
   // true: increasing counter
-  objTimerSensor = timerBegin(0, 80, true);
-  objTimerControler = timerBegin(1, 80, true);
-  objTimerFileStream = timerBegin(2, 80, true);
+  objTimer = timerBegin(0, 80, true);
+
   // Attach ISR function to timer
-  timerAttachInterrupt(objTimerSensor, &onTimerSensor, true);
-  timerAttachInterrupt(objTimerControler, &onTimerControler, true);
-  timerAttachInterrupt(objTimerFileStream, &onTimerFilestream, true);
+  timerAttachInterrupt(objTimer, &onTimer, true);
   
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
-  timerAlarmWrite(objTimerSensor, iTaskSensorMicros, true);
-  timerAlarmWrite(objTimerControler, iTaskControlerMicros, true);
-  timerAlarmWrite(objTimerFileStream, iTaskFileStreamMicros, true);
-  timerAlarmEnable(objTimerSensor);
-  delay(100);
-  timerAlarmEnable(objTimerControler);
-  delay(100);
-  timerAlarmEnable(objTimerFileStream);
+  timerAlarmWrite(objTimer, iInterruptIntervalMicros, true);
+  timerAlarmEnable(objTimer);
 }
 
+void readSensors(){
+  // Read out Sensor values
+    fTemp = fTemp + 0.1;
+    fPressure = fPressure + 0.1;
+    iHeatingStatus = 1;
+    iPumpStatus = 1;
+}
+
+void controlHeating(){
+  /** PID regulator function for controling heating device
+   *
+   */
+  portENTER_CRITICAL_ISR(&objTimerMux);
+    fPidOut = 99;
+  portEXIT_CRITICAL_ISR(&objTimerMux);
+}
+
+void writeMeasFile(){
+  /** Function to store the data in measurement file
+   *
+   */
+
+  portENTER_CRITICAL_ISR(&objTimerMux);
+    float f_pressure_local = fPressure;
+    float f_temp_local = fTemp;
+    int i_pump_status_local = iPumpStatus;
+    int f_heating_status_local = iHeatingStatus;
+  portEXIT_CRITICAL_ISR(&objTimerMux);
+
+  File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
+  if (obj_meas_file.size() < iMaxBytes) {
+    unsigned long i_time = millis();
+    obj_meas_file.print(i_time);
+    obj_meas_file.print(",");
+    obj_meas_file.print(f_pressure_local);
+    obj_meas_file.print(",");
+    obj_meas_file.print(f_temp_local);
+    obj_meas_file.print(",");
+    obj_meas_file.print(i_pump_status_local);
+    obj_meas_file.print(",");
+    obj_meas_file.println(f_heating_status_local);
+    obj_meas_file.close();
+  } else {
+    Serial.println("Data file size exceeded, delete it.");
+    obj_meas_file.close();
+    SPIFFS.remove(strMeasFilePath);
+  }
+}
 
 void loop(){
-    if (iStoreData > 0){
-      portENTER_CRITICAL_ISR(&objTimerFileStreamMux);
-        iStoreData--;
-      portEXIT_CRITICAL_ISR(&objTimerFileStreamMux);
-      
-      portENTER_CRITICAL_ISR(&objTimerSensorMux);
-        int f_pressure_local = iPressure;
-        int i_temp_local = iTemp;
-        int i_pump_status_local = iPumpStatus;
-        int f_heating_status_local = iHeatingStatus;
-      portEXIT_CRITICAL_ISR(&objTimerSensorMux);
-    
-      File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
-        if (obj_meas_file.size() < iMaxBytes) {
-          unsigned long i_time = millis();
-          obj_meas_file.print(i_time);
-          obj_meas_file.print(",");
-          obj_meas_file.print(f_pressure_local);
-          obj_meas_file.print(",");
-          obj_meas_file.print(i_temp_local);
-          obj_meas_file.print(",");
-          obj_meas_file.print(i_pump_status_local);
-          obj_meas_file.print(",");
-          obj_meas_file.println(f_heating_status_local);
-          obj_meas_file.close();
-        } else {
-          Serial.println("Data file size exceeded, delete it.");
-          obj_meas_file.close();
-          SPIFFS.remove(strMeasFilePath);
-        }
+    if (iCntInterruptSensor >= iCntTotalInterruptSensor){
+        // Read sensor values if counter reaches limit
+        portENTER_CRITICAL_ISR(&objTimerMux);
+          iCntInterruptSensor = 0;
+        portEXIT_CRITICAL_ISR(&objTimerMux);
+        readSensors();
+    } else if (iCntInterruptPid >= iCntTotalInterruptPid) {
+        // Call pid regulator function if counter reaches limit
+        portENTER_CRITICAL_ISR(&objTimerMux);
+          iCntInterruptPid = 0;
+        portEXIT_CRITICAL_ISR(&objTimerMux);
+        controlHeating();
+    } else if (iCntInterruptStore >= iCntTotalInterruptStore) {
+        // Call store function if counter reaches limit 
+        portENTER_CRITICAL_ISR(&objTimerMux);
+          iCntInterruptStore = 0;
+        portEXIT_CRITICAL_ISR(&objTimerMux);
+        writeMeasFile();
     }
 }
