@@ -18,11 +18,18 @@
 *********/
 
 #include <WiFi.h>
-#include "WifiAccess.h"
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
-#include "time.h"
+#include <time.h>
+#include "WifiAccess.h"
+#include "ADS1115.h"
+#include <Wire.h>
+
+// Hardware definitions for i2c
+// I2C pins
+#define SDA_0 23
+#define SCL_0 22
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
@@ -47,6 +54,10 @@ bool bEspMdns = false;
 const char* charNtpServerUrl = "europe.pool.ntp.org";
 const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
 const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
+
+// Initialize ADS1115 I2C connection
+TwoWire objI2cBus = TwoWire(0);
+ADS1115 objAds1115(&objI2cBus);
 
 // timer object for ISR
 // Short for Sensor Read Out and PID control
@@ -165,6 +176,28 @@ void setup(){
   Serial.begin(115200);
   delay(500);
   
+  // Initialize I2c on defined pins with default adress
+  if (!objAds1115.begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
+    Serial.println("Failed to initialize I2C sensor connection, stop working.");
+    // TODO: diagnose
+    while(1);
+  } 
+
+  // Initialize ADS1115
+  objAds1115.init();
+
+  // set differential voltage: A0-A1
+  objAds1115.setMux(ADS1115_MUX_AIN0_AIN1);
+
+  // set data rate (samples per second)
+  objAds1115.setRate(ADS1115_RATE_32);
+
+  // set to continues conversion method
+  objAds1115.setMode(ADS1115_MODE_CONTINUOUS);
+
+  // set gain amplifier
+  objAds1115.setGain(ADS1115_PGA_1P024);
+
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       // Initialization of SPIFFS failed, restart it
@@ -279,6 +312,9 @@ void setup(){
 boolean readSensors(){
   // Read out Sensor values
     bool b_result = false;
+
+    // read out temperature sensor from ADS_1115
+
     
     fTemp = fTemp + 0.1;
     fPressure = fPressure + 0.1;
