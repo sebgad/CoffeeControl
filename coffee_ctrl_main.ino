@@ -26,13 +26,9 @@
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
-const char* strMeasFilePath = "/data.csv";
-const int iMaxBytes = 1000000; // bytes
 
-// Counter for function call timing, used in ISR
-volatile int iCntInterruptSensor = 0;
-volatile int iCntInterruptPid = 0;
-volatile int iCntInterruptStore = 0;
+const char* strMeasFilePath = "/data.csv";
+const int iMaxBytes = 1000000;
 
 // Sensor variables
 float fTemp = 0;
@@ -53,35 +49,64 @@ const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
 const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 
 // timer object for ISR
-hw_timer_t * objTimer = NULL;
+// Short for Sensor Read Out and PID control
+// Long for Measurement Store to csv
+hw_timer_t * objTimerShort = NULL;
+hw_timer_t * objTimerLong = NULL;
+
+// Status for function call timing, used in ISR
+volatile uint8_t iStatusMeas = 0; // 0:init/idle, 1:store value running, 2: store value finished
+volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measurement finished, 3:control
+
+// enums for the status
+enum eStatusCtrl {
+  IDLE,
+  MEASURE,
+  CONTROL,
+};
+
+enum eStatusMeas {
+  IDLE_MEAS,
+  STORE_MEAS
+};
 
 // Definition for critical section port
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Task intervals in microseconds
-const unsigned long iInterruptIntervalMicros = 10000; //microseconds
-
-// Interrupt counter limits for function sensor read, pid control and measurement file store
-const int iCntTotalInterruptSensor = 9; // Number of interrupts until sensor read function is called
-const int iCntTotalInterruptPid = 10; // Number of interrupts until pid regulator function is called
-const int iCntTotalInterruptStore = 45; // Number of interrupts until sensor value is stored in measurement file
+const unsigned long iInterruptShortIntervalMicros = 100000; //microseconds
+const unsigned long iInterruptLongIntervalMicros = 450000; //microseconds
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
-void IRAM_ATTR onTimer(){
+void IRAM_ATTR onTimerShort(){
   /** Interrupt Service Routine for sensor read outs
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
   **/
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iCntInterruptSensor++;
-      iCntInterruptPid++;
-      iCntInterruptStore++;
+      if (iStatusCtrl == IDLE) {
+        // Only change Status when idle to measurement running
+        iStatusCtrl = MEASURE;
+      }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
+void IRAM_ATTR onTimerLong(){
+  /** Interrupt Service Routine for sensor read outs
+   *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
+  **/
+
+  // Define Critical Code section, also needs to be called in Main-Loop
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      if (iStatusMeas == IDLE_MEAS) {
+        // Only change Status when idle to measurement running
+        iStatusMeas = STORE_MEAS;
+      }
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+}
 
 bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   /**
@@ -142,52 +167,59 @@ void setup(){
   
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-      // Initialization of SPIFFS failed
-      Serial.println("SPIFFS Mount Failed");
-      return;
-  } else {
-    // Initialization successfull, create csv file
-    unsigned int i_total_bytes = SPIFFS.totalBytes();
-    unsigned int i_used_bytes = SPIFFS.usedBytes();
+      // Initialization of SPIFFS failed, restart it
+      Serial.println("SPIFFS mount Failed, restart ESP");
+      delay(1000);
+      ESP.restart();
+  } else{
+    Serial.println("SPIFFS mount successfully.");
+  }
 
-    Serial.println("File system info:");
-    Serial.print("Total space on SPIFFS: ");
-    Serial.print(i_total_bytes);
-    Serial.println("byte");
-    
-    Serial.print("Total space used on SPIFFS: ");
-    Serial.print(i_used_bytes);
-    Serial.println("byte");
+  // Initialization successfull, create csv file
+  unsigned int i_total_bytes = SPIFFS.totalBytes();
+  unsigned int i_used_bytes = SPIFFS.usedBytes();
 
-    Serial.print("Create File ");
-    Serial.println(strMeasFilePath);
-    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
+  Serial.println("File system info:");
+  Serial.print("Total space on SPIFFS: ");
+  Serial.print(i_total_bytes);
+  Serial.println("byte");
+  
+  Serial.print("Total space used on SPIFFS: ");
+  Serial.print(i_used_bytes);
+  Serial.println("byte");
+  
+  // Connect to wifi
+  bEspOnline = connectWiFi();
+  char char_timestamp[50];
 
-    bEspOnline = connectWiFi();
-
-    if (bEspOnline == true) {
+  if (bEspOnline == true) {
       // ESP has wifi connection
 
       // register mDNS. ESP is available under http://coffee.local
       if (!MDNS.begin("coffee")) {
-            Serial.println("Error setting up MDNS responder!");
+        Serial.println("Error setting up MDNS responder!");
+      } else {
+        // add service to standart http connection
+        MDNS.addService("http", "tcp", 80);
       }
-      // add service to standart http connection
-      MDNS.addService("http", "tcp", 80);
 
+      // Webserver Settings
       // Route for root / web page
       server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/index.html");
       });
     
+      // Route for graphs web page
       server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/graphs.html");
       });
 
+      // Route for stylesheets.css
       server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/style.css");
       });
 
+      // Route for java script status table
       server.on("/table.js", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/table.js");
       });
@@ -197,61 +229,76 @@ void setup(){
         request->send(SPIFFS, strMeasFilePath, "text/plain");
       });
 
-      // Start server
+      // Start web server
       server.begin();
 
       // initialize NTP client
       configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
-    
-      obj_meas_file.print("Measurement File created on ");
+
+      // get local time
       struct tm obj_timeinfo;
       if(!getLocalTime(&obj_timeinfo)){
         Serial.println("Failed to obtain time stamp online");
-        obj_meas_file.println("n.a.");
-      } else{
-        obj_meas_file.println(&obj_timeinfo, "%c");
-      }  
-    } else {
-      // Offline mode
-        obj_meas_file.println("n.a.");
+      } else {
+        // write time stamp into variable
+        strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
+      }
     }
 
-    obj_meas_file.println("");
-    // generate header in file
-    obj_meas_file.println("Time,Temperature,Pressure,HeatOn,PumpOn");
-    obj_meas_file.close();
-  }
+  // generate header in file
+  Serial.print("Create File ");
+  Serial.println(strMeasFilePath);
+  
+  File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
+
+  obj_meas_file.print("Measurement File created on ");
+  obj_meas_file.println(char_timestamp);
+  obj_meas_file.println("");
+  obj_meas_file.println("Time,Temperature,Pressure,HeatOn,PumpOn");
+  obj_meas_file.close();
 
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
   // true: increasing counter
-  objTimer = timerBegin(0, 80, true);
+  objTimerShort = timerBegin(0, 80, true);
+  objTimerLong = timerBegin(1, 80, true);
 
   // Attach ISR function to timer
-  timerAttachInterrupt(objTimer, &onTimer, true);
+  timerAttachInterrupt(objTimerShort, &onTimerShort, true);
+  timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
-  timerAlarmWrite(objTimer, iInterruptIntervalMicros, true);
-  timerAlarmEnable(objTimer);
+  timerAlarmWrite(objTimerShort, iInterruptShortIntervalMicros, true);
+  timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
+  timerAlarmEnable(objTimerShort);
+  timerAlarmEnable(objTimerLong);
 }
 
-void readSensors(){
+boolean readSensors(){
   // Read out Sensor values
+    bool b_result = false;
+    
     fTemp = fTemp + 0.1;
     fPressure = fPressure + 0.1;
     iHeatingStatus = 1;
     iPumpStatus = 1;
+    b_result = true;
+
+    return b_result;
 }
 
-void controlHeating(){
+bool controlHeating(){
   /** PID regulator function for controling heating device
    *
    */
-  portENTER_CRITICAL_ISR(&objTimerMux);
-    fPidOut = 99;
-  portEXIT_CRITICAL_ISR(&objTimerMux);
+  bool b_result = false;
+  
+  fPidOut = 99;
+  b_result = true;
+  
+  return b_result;
 }
 
 void writeMeasFile(){
@@ -287,23 +334,36 @@ void writeMeasFile(){
 }
 
 void loop(){
-    if (iCntInterruptSensor >= iCntTotalInterruptSensor){
-        // Read sensor values if counter reaches limit
+  switch (iStatusCtrl) {
+    // Call sensor read out function or control function
+    case MEASURE:
+      bool b_result_sensor;
+      b_result_sensor = readSensors();
+
+      if (b_result_sensor == true) {
         portENTER_CRITICAL_ISR(&objTimerMux);
-          iCntInterruptSensor = 0;
+          iStatusCtrl = CONTROL;
         portEXIT_CRITICAL_ISR(&objTimerMux);
-        readSensors();
-    } else if (iCntInterruptPid >= iCntTotalInterruptPid) {
-        // Call pid regulator function if counter reaches limit
+      }
+      break;
+    
+    case CONTROL:
+      bool b_result_ctrl_heating;
+      b_result_ctrl_heating = controlHeating();
+      if (b_result_ctrl_heating == true) {
         portENTER_CRITICAL_ISR(&objTimerMux);
-          iCntInterruptPid = 0;
+          iStatusCtrl = IDLE;
         portEXIT_CRITICAL_ISR(&objTimerMux);
-        controlHeating();
-    } else if (iCntInterruptStore >= iCntTotalInterruptStore) {
-        // Call store function if counter reaches limit 
-        portENTER_CRITICAL_ISR(&objTimerMux);
-          iCntInterruptStore = 0;
-        portEXIT_CRITICAL_ISR(&objTimerMux);
-        writeMeasFile();
-    }
+      }
+      break;
+  }
+ 
+  switch (iStatusMeas) {
+    case STORE_MEAS:
+      writeMeasFile();
+      portENTER_CRITICAL_ISR(&objTimerMux);
+        iStatusMeas = IDLE_MEAS;
+      portEXIT_CRITICAL_ISR(&objTimerMux);
+  }
+    
 }
