@@ -1,0 +1,23 @@
+The wheatstone bridge simulation simulation offer:
+scope; Vcc + noise (0.1V to Vcc); changeable temperatur sensor from 1k to 1.6 k
+
+on https://www.falstad.com/circuit/circuitjs.html import from text the following:
+$ 1 0.000005 58.6985430941709 54 5 43 5e-11
+r 208 176 128 256 0 1300
+r 128 256 208 336 0 1300
+r 208 336 288 256 0 1300
+w 208 176 208 64 0
+w 208 336 208 400 0
+w 208 400 -64 400 0
+w 208 176 304 80 0
+w 288 256 384 160 0
+r 304 80 384 160 0 1564
+p 128 256 288 256 1 0 0
+s 208 64 112 64 0 0 false
+w 112 64 -64 64 0
+v -64 400 -64 304 0 0 40 5 0 0 0.5
+v -64 304 -64 224 0 6 40 0.1 0 0 0.5
+w -64 224 -64 64 0
+o 8 64 0 4099 10 0.00625 0 2 8 3
+o 9 128 0 143618 0.23505584777612354 0.0001 1 1 TempSensor
+38 8 0 1000 1600 Resistance
