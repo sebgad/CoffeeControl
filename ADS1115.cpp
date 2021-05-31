@@ -109,19 +109,29 @@ byte ADS1115::getMux() {
 }
 
 
-void ADS1115::setGain(byte gain) {
-  byte _gain = gain;
+void ADS1115::setGain(byte b_gain) {
+  byte _b_gain = b_gain;
   
+  // read out config Register from ADS1115
   configReg = read16(ADS1115_CONFIG_REG);
-  if (bitRead(_gain, 2)) configReg |= (1 << ADS1115_PGA2);
-  else configReg &= ~(1 << ADS1115_PGA2);
-  if (bitRead(_gain, 1)) configReg |= (1 << ADS1115_PGA1);
+
+  if (bitRead(_b_gain, 2)) {
+    // write 1 to config register at position ADS1115_PGA2
+    configReg |= (1 << ADS1115_PGA2);
+  } else {
+    // write 0 to config register at position ADS1115_PGA2
+    configReg &= ~(1 << ADS1115_PGA2);
+  }
+  
+  if (bitRead(_b_gain, 1)) configReg |= (1 << ADS1115_PGA1);
   else configReg &= ~(1 << ADS1115_PGA1);
-  if (bitRead(_gain, 0)) configReg |= (1 << ADS1115_PGA0);
+  if (bitRead(_b_gain, 0)) configReg |= (1 << ADS1115_PGA0);
   else configReg &= ~(1 << ADS1115_PGA0);
+
+  // write back modified config register
   write16(ADS1115_CONFIG_REG, configReg);
   
-  switch (_gain) {
+  switch (_b_gain) {
     case ADS1115_PGA_6P144:
       bitNumbering = ADS1115_LSB_6P144;
       break;
@@ -161,6 +171,27 @@ void ADS1115::setMode(bool mode) {
 
 byte ADS1115::getMode() { 
   return (read16(ADS1115_CONFIG_REG) & 0b100000000) >> 8;
+}
+
+
+void ADS1115::setPolarity(bool b_polarity) {
+  // read out config Register from ADS1115
+  configReg = read16(ADS1115_CONFIG_REG);
+
+  bool _b_pol = b_polarity;
+
+  if (_b_pol) {
+    configReg |= (1<<ADS1115_CMP_POL);
+  } else {
+    configReg &= (1<<ADS1115_CMP_POL);
+  }
+
+  write16(ADS1115_CONFIG_REG, configReg);
+}
+
+
+byte ADS1115::getPolarity() {
+  return (read16(ADS1115_CONFIG_REG) & (1<<ADS1115_CMP_POL)) >> ADS1115_CMP_POL;
 }
 
 

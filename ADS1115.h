@@ -16,6 +16,11 @@
 #define ADS1115_CONFIG_REG 0x01 // configuration register of the ADS1115
 
 // bit number of ADS1115_CONFIG_REG 
+#define ADS1115_CMP_QUE0 0x00
+#define ADS1115_CMP_QUE1 0x01
+#define ADS1115_CMP_LAT 0x02
+#define ADS1115_CMP_POL 0x03
+#define ADS1115_CMP_MDE 0x04
 #define ADS1115_DR0  0x05
 #define ADS1115_DR1  0x06
 #define ADS1115_DR2  0x07
@@ -68,6 +73,20 @@
 #define ADS1115_LSB_0P512  0.015625
 #define ADS1115_LSB_0P256  0.007813
 
+// Comparator polarity
+#define ADS1115_CMP_POL_ACTIVE_LOW  0b000 // default
+#define ADS1115_CMP_POL_ACTIVE_HIGH 0b001
+
+// Latching comparator
+#define ADS1115_CMP_LAT_NON 0b000 // default
+#define ADS1115_CMP_LAT_ACTIVE 0b001
+
+// Comparator QUEUE
+#define ADS1115_CMP_QUE_ASSERT_1_CONV 0b000
+#define ADS1115_CMP_QUE_ASSERT_2_CONV 0b001
+#define ADS1115_CMP_QUE_ASSERT_4_CONV 0b010
+#define ADS1115_CMP_QUE_ASSERT_4_CONV 0b011 // default
+
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
 #include "Arduino.h"
@@ -89,6 +108,8 @@ class ADS1115
     byte getRate(void);
     void setMode(bool);
     byte getMode(void);
+    void setPolarity(bool);
+    byte getPolarity(void);
     void startSingleMeas(void);
     bool conversionReady(void);
     int readConversion(void);
