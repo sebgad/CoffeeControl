@@ -70,17 +70,18 @@ void ADS1115::init() {
   if (param != ADS1115_MODE_SINGLESHOT) setMode(ADS1115_MODE_SINGLESHOT);
 }
 
-void ADS1115::setRate(byte rate) {
-  byte _rate = rate;
 
-  configReg = read16(ADS1115_CONFIG_REG);
-  if (bitRead(_rate, 2)) configReg |= (1 << ADS1115_DR2);
-  else configReg &= ~(1 << ADS1115_DR2);
-  if (bitRead(_rate, 1)) configReg |= (1 << ADS1115_DR1);
-  else configReg &= ~(1 << ADS1115_DR1);
-  if (bitRead(_rate, 0)) configReg |= (1 << ADS1115_DR0);
-  else configReg &= ~(1 << ADS1115_DR0);
-  write16(ADS1115_CONFIG_REG, configReg);
+void ADS1115::setRate(byte rate) {
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bool b2 = bitRead(rate, 2);
+  bool b1 = bitRead(rate, 1);
+  bool b0 = bitRead(rate, 0);
+
+  bitWrite(iConfigReg, ADS1115_DR2, b2);
+  bitWrite(iConfigReg, ADS1115_DR1, b1);
+  bitWrite(iConfigReg, ADS1115_DR0, b0);
+
+  write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -90,16 +91,16 @@ byte ADS1115::getRate() {
 
 
 void ADS1115::setMux(byte mux) {
-  byte _mux = mux;
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bool b2 = bitRead(mux, 2);
+  bool b1 = bitRead(mux, 1);
+  bool b0 = bitRead(mux, 0);
 
-  configReg = read16(ADS1115_CONFIG_REG);
-  if (bitRead(_mux, 2)) configReg |= (1 << ADS1115_MUX2);
-  else configReg &= ~(1 << ADS1115_MUX2);
-  if (bitRead(_mux, 1)) configReg |= (1 << ADS1115_MUX1);
-  else configReg &= ~(1 << ADS1115_MUX1);
-  if (bitRead(_mux, 0)) configReg |= (1 << ADS1115_MUX0);
-  else configReg &= ~(1 << ADS1115_MUX0);
-  write16(ADS1115_CONFIG_REG, configReg);
+  bitWrite(iConfigReg, ADS1115_MUX2, b2);
+  bitWrite(iConfigReg, ADS1115_MUX1, b1);
+  bitWrite(iConfigReg, ADS1115_MUX0, b0);
+
+  write16(ADS1115_CONFIG_REG, iConfigReg);
   delay(ADS1115_DELAY_AFTER_MUX_CHANGE);
 }
 
@@ -110,28 +111,18 @@ byte ADS1115::getMux() {
 
 
 void ADS1115::setGain(byte b_gain) {
-  byte _b_gain = b_gain;
-  
-  // read out config Register from ADS1115
-  configReg = read16(ADS1115_CONFIG_REG);
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bool b2 = bitRead(b_gain, 2);
+  bool b1 = bitRead(b_gain, 1);
+  bool b0 = bitRead(b_gain, 0);
 
-  if (bitRead(_b_gain, 2)) {
-    // write 1 to config register at position ADS1115_PGA2
-    configReg |= (1 << ADS1115_PGA2);
-  } else {
-    // write 0 to config register at position ADS1115_PGA2
-    configReg &= ~(1 << ADS1115_PGA2);
-  }
-  
-  if (bitRead(_b_gain, 1)) configReg |= (1 << ADS1115_PGA1);
-  else configReg &= ~(1 << ADS1115_PGA1);
-  if (bitRead(_b_gain, 0)) configReg |= (1 << ADS1115_PGA0);
-  else configReg &= ~(1 << ADS1115_PGA0);
+  bitWrite(iConfigReg, ADS1115_PGA2, b2);
+  bitWrite(iConfigReg, ADS1115_PGA1, b1);
+  bitWrite(iConfigReg, ADS1115_PGA0, b0);
 
-  // write back modified config register
-  write16(ADS1115_CONFIG_REG, configReg);
-  
-  switch (_b_gain) {
+  write16(ADS1115_CONFIG_REG, iConfigReg);
+
+  switch (b_gain) {
     case ADS1115_PGA_6P144:
       bitNumbering = ADS1115_LSB_6P144;
       break;
@@ -160,12 +151,9 @@ byte ADS1115::getGain() {
 
 
 void ADS1115::setMode(bool mode) {
-  bool _mode = mode;
-  
-  configReg = read16(ADS1115_CONFIG_REG);
-  if (_mode) configReg |= (1 << ADS1115_MODE);
-  else configReg &= ~(1 << ADS1115_MODE);
-  write16(ADS1115_CONFIG_REG, configReg);
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bitWrite(iConfigReg, ADS1115_CMP_MDE, mode);
+  write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -175,38 +163,55 @@ byte ADS1115::getMode() {
 
 
 void ADS1115::setPolarity(bool b_polarity) {
-  // read out config Register from ADS1115
-  configReg = read16(ADS1115_CONFIG_REG);
-
-  bool _b_pol = b_polarity;
-
-  if (_b_pol) {
-    configReg |= (1<<ADS1115_CMP_POL);
-  } else {
-    configReg &= (1<<ADS1115_CMP_POL);
-  }
-
-  write16(ADS1115_CONFIG_REG, configReg);
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bitWrite(iConfigReg, ADS1115_CMP_POL, b_polarity);
+  write16(ADS1115_CONFIG_REG, iConfigReg);
 }
-
 
 byte ADS1115::getPolarity() {
   return (read16(ADS1115_CONFIG_REG) & (1<<ADS1115_CMP_POL)) >> ADS1115_CMP_POL;
 }
 
+void ADS1115::setLatchingMode(bool b_mode) {
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bitWrite(iConfigReg, ADS1115_CMP_LAT, b_mode);
+  write16(ADS1115_CONFIG_REG, iConfigReg);
+}
+
+byte ADS1115::getLatchingMode() {
+  return (read16(ADS1115_CONFIG_REG) & (1<<ADS1115_CMP_LAT)) >> ADS1115_CMP_LAT;
+}
+
+
+void ADS1115::setQueueMode(byte b_mode) {
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  bool b1 = bitRead(b_mode, 1);
+  bool b0 = bitRead(b_mode, 0);
+
+  bitWrite(iConfigReg, ADS1115_CMP_QUE1, b1);
+  bitWrite(iConfigReg, ADS1115_CMP_QUE0, b0);
+
+  write16(ADS1115_CONFIG_REG, iConfigReg);
+}
+
+
+byte ADS1115::getQueueMode() {
+  return (read16(ADS1115_CONFIG_REG) & (0b11));
+}
+
 
 void ADS1115::startSingleMeas() {
   if (getMode() != ADS1115_MODE_SINGLESHOT) setMode(ADS1115_MODE_SINGLESHOT);
-  configReg = read16(ADS1115_CONFIG_REG) | (1 << ADS1115_OS);
-  write16(ADS1115_CONFIG_REG, configReg);
+  iConfigReg = read16(ADS1115_CONFIG_REG) | (1 << ADS1115_OS);
+  write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
 bool ADS1115::conversionReady() {
   bool convReady;
 
-  configReg = read16(ADS1115_CONFIG_REG);
-  convReady = (configReg >> ADS1115_OS);
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  convReady = (iConfigReg >> ADS1115_OS);
   if (convReady) return true;
   else return false;
 }
@@ -224,8 +229,8 @@ float ADS1115::readVoltage() {
 
 void ADS1115::printConfigReg() {
   Serial.print("Conf.Reg.: ");
-  configReg = read16(ADS1115_CONFIG_REG);
-  Serial.println(configReg, BIN);
+  iConfigReg = read16(ADS1115_CONFIG_REG);
+  Serial.println(iConfigReg, BIN);
 }
 
 

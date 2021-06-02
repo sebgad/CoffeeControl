@@ -30,6 +30,7 @@
 // I2C pins
 #define SDA_0 23
 #define SCL_0 22
+#define CONV_RDY_PIN 14
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true

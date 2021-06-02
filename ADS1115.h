@@ -78,14 +78,14 @@
 #define ADS1115_CMP_POL_ACTIVE_HIGH 0b001
 
 // Latching comparator
-#define ADS1115_CMP_LAT_NON 0b000 // default
+#define ADS1115_CMP_LAT_NON_ACTIVE 0b000 // default
 #define ADS1115_CMP_LAT_ACTIVE 0b001
 
 // Comparator QUEUE
 #define ADS1115_CMP_QUE_ASSERT_1_CONV 0b000
 #define ADS1115_CMP_QUE_ASSERT_2_CONV 0b001
 #define ADS1115_CMP_QUE_ASSERT_4_CONV 0b010
-#define ADS1115_CMP_QUE_ASSERT_4_CONV 0b011 // default
+#define ADS1115_CMP_DISABLE 0b011 // default
 
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
@@ -110,6 +110,10 @@ class ADS1115
     byte getMode(void);
     void setPolarity(bool);
     byte getPolarity(void);
+    void setLatchingMode(bool);
+    byte getLatchingMode(void);
+    void setQueueMode(byte);
+    byte getQueueMode(void);
     void startSingleMeas(void);
     bool conversionReady(void);
     int readConversion(void);
@@ -125,7 +129,7 @@ class ADS1115
     uint8_t _iI2cAddress;
     TwoWire * _objI2C;
     float bitNumbering;
-    unsigned int configReg;
+    unsigned int iConfigReg;
 };
 
 #endif
