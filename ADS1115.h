@@ -14,6 +14,8 @@
 //ADS1115 register
 #define ADS1115_CONVERSION_REG 0x00 // measurement is stored in this register
 #define ADS1115_CONFIG_REG 0x01 // configuration register of the ADS1115
+#define ADS1115_LOW_THRESH_REG 0x02 // Low threshold register of the ADS1115
+#define ADS1115_HIGH_THRESH_REG 0x03 // High threshold register of the ADS1115
 
 // bit number of ADS1115_CONFIG_REG 
 #define ADS1115_CMP_QUE0 0x00
@@ -119,6 +121,8 @@ class ADS1115
     int readConversion(void);
     float readVoltage(void);
     void printConfigReg(void);
+    void setPinRdyMode(bool);
+    bool getPinRdyMode(void);
         
   private:
     unsigned int read16(byte);
@@ -130,6 +134,8 @@ class ADS1115
     TwoWire * _objI2C;
     float bitNumbering;
     unsigned int iConfigReg;
+    unsigned int iLowThreshReg;
+    unsigned int iHighThreshReg;
 };
 
 #endif

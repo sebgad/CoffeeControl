@@ -195,6 +195,33 @@ void ADS1115::setQueueMode(byte b_mode) {
 }
 
 
+void ADS1115::setPinRdyMode(bool b_activate){
+  iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
+  iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
+
+  if (b_activate){
+    // MSB to 1 if PinReadyMode is activated
+    bitWrite(iLowThreshReg, 15, 0);
+    bitWrite(iHighThreshReg, 15, 1);
+  } else {
+    bitWrite(iLowThreshReg, 15, 1);
+    bitWrite(iHighThreshReg, 15, 0);
+  }
+  write16(ADS1115_LOW_THRESH_REG, iLowThreshReg);
+  write16(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
+}
+
+bool ADS1115::getPinRdyMode() {
+  iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
+  iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
+
+  if (~bitRead(iLowThreshReg, 15) && bitRead(iHighThreshReg, 15)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 byte ADS1115::getQueueMode() {
   return (read16(ADS1115_CONFIG_REG) & (0b11));
 }
