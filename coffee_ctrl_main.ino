@@ -184,20 +184,17 @@ void setup(){
     while(1);
   } 
 
-  // Initialize ADS1115
-  objAds1115.init();
-
   // set differential voltage: A0-A1
   objAds1115.setMux(ADS1115_MUX_AIN0_AIN1);
 
   // set data rate (samples per second)
-  objAds1115.setRate(ADS1115_RATE_32);
+  objAds1115.setRate(ADS1115_RATE_8);
 
   // set to continues conversion method
-  objAds1115.setMode(ADS1115_MODE_CONTINUOUS);
+  objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
   // set gain amplifier
-  objAds1115.setGain(ADS1115_PGA_1P024);
+  objAds1115.setPGA(ADS1115_PGA_1P024);
 
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){

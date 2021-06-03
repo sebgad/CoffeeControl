@@ -75,12 +75,17 @@
 #define ADS1115_LSB_0P512  0.015625
 #define ADS1115_LSB_0P256  0.007813
 
+// Comparator mode
+#define ADS1115_CMP_MODE_TRADITIONAL  0b000 // default
+#define ADS1115_CMP_MODE_WINDOW       0b000 
+
+
 // Comparator polarity
 #define ADS1115_CMP_POL_ACTIVE_LOW  0b000 // default
 #define ADS1115_CMP_POL_ACTIVE_HIGH 0b001
 
 // Latching comparator
-#define ADS1115_CMP_LAT_NON_ACTIVE 0b000 // default
+#define ADS1115_CMP_LAT_NOT_ACTIVE 0b000 // default
 #define ADS1115_CMP_LAT_ACTIVE 0b001
 
 // Comparator QUEUE
@@ -88,6 +93,10 @@
 #define ADS1115_CMP_QUE_ASSERT_2_CONV 0b001
 #define ADS1115_CMP_QUE_ASSERT_4_CONV 0b010
 #define ADS1115_CMP_DISABLE 0b011 // default
+
+// Conversion Ready PIN
+#define ADS1115_CONV_READY_NOT_ACTIVE 0b000
+#define ADS1115_CONV_READY_ACTIVE 0b001
 
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
@@ -101,33 +110,39 @@ class ADS1115
     bool begin(uint8_t);
     bool begin(int, int);
     bool begin(int, int, uint8_t);
-    void init(void);
-    void setGain(byte);
-    byte getGain(void);
+    void setDefault(void);
+    void startSingleShotMeas(bool);
+    bool getOpStatus(void);
     void setMux(byte);
     byte getMux(void);
+    void setPGA(byte);
+    byte getPGA(void);
+    void setOpMode(bool);
+    byte getOpMode(void);
     void setRate(byte);
     byte getRate(void);
-    void setMode(bool);
-    byte getMode(void);
-    void setPolarity(bool);
-    byte getPolarity(void);
-    void setLatchingMode(bool);
-    byte getLatchingMode(void);
-    void setQueueMode(byte);
-    byte getQueueMode(void);
-    void startSingleMeas(void);
+    void setCompMode(bool);
+    byte getCompMode(void);
+    void setCompPolarity(bool);
+    byte getCompPolarity(void);
+    void setCompLatchingMode(bool);
+    byte getCompLatchingMode(void);
+    void setCompQueueMode(byte);
+    byte getCompQueueMode(void);
+    void setCompLowThreshBit(bool, int);
+    byte getCompLowThreshBit(int);
+    void setCompHighThreshBit(bool, int);
+    byte getCompHighThreshBit(int);
+    void setPinRdyMode(bool, byte);
+    bool getPinRdyMode(void);
     bool conversionReady(void);
     int readConversion(void);
     float readVoltage(void);
     void printConfigReg(void);
-    void setPinRdyMode(bool);
-    bool getPinRdyMode(void);
         
   private:
     unsigned int read16(byte);
     void write16(byte, unsigned int);
-
     int _iSdaPin;
     int _iSclPin;
     uint8_t _iI2cAddress;
