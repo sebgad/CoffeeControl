@@ -202,6 +202,8 @@ void setup(){
   // assert after one conversion
   objAds1115.setPinRdyMode(true, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
+  objAds1115.setPhysicalConversion()
+
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       // Initialization of SPIFFS failed, restart it

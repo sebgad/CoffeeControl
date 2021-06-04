@@ -138,7 +138,11 @@ class ADS1115
     bool conversionReady(void);
     int readConversion(void);
     float readVoltage(void);
+    float readPhysical(void);
     void printConfigReg(void);
+    void setPhysicalConversion(float, float);
+    float fOffset;
+    float fGradient;
         
   private:
     unsigned int read16(byte);
