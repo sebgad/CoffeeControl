@@ -60,14 +60,14 @@ void ADS1115::setDefault() {
   /**
    * Bring ADS1115 back to default settings
   */
-  ADS1115::setMux(ADS1115_MUX_AIN0_AIN1);
-  ADS1115::setPGA(ADS1115_LSB_2P048);
-  ADS1115::setOpMode(ADS1115_MODE_SINGLESHOT);
-  ADS1115::setRate(ADS1115_RATE_128);
-  ADS1115::setCompMode(ADS1115_CMP_MODE_TRADITIONAL);
-  ADS1115::setCompPolarity(ADS1115_CMP_POL_ACTIVE_LOW);
-  ADS1115::setCompLatchingMode(ADS1115_CMP_LAT_NOT_ACTIVE);
-  ADS1115::setCompQueueMode(ADS1115_CMP_DISABLE);
+  setMux(ADS1115_MUX_AIN0_AIN1);
+  setPGA(ADS1115_LSB_2P048);
+  setOpMode(ADS1115_MODE_SINGLESHOT);
+  setRate(ADS1115_RATE_128);
+  setCompMode(ADS1115_CMP_MODE_TRADITIONAL);
+  setCompPolarity(ADS1115_CMP_POL_ACTIVE_LOW);
+  setCompLatchingMode(ADS1115_CMP_LAT_NOT_ACTIVE);
+  setCompQueueMode(ADS1115_CMP_DISABLE);
 }
 
 
@@ -190,12 +190,12 @@ byte ADS1115::getPGA() {
   /**
    * Get the FSR of the programmable gain amplifier
    * @return:
-   *    000 : FSR = +-6.144V
-   *    001 : FSR = +-4.096V
-   *    010 : FSR = +-2.048V
-   *    011 : FSR = +-1.024V
-   *    100 : FSR = +-0.512V
-   *    101 : FSR = +-0.256V
+   *    0b000 : FSR = +-6.144V
+   *    0b001 : FSR = +-4.096V
+   *    0b010 : FSR = +-2.048V
+   *    0b011 : FSR = +-1.024V
+   *    0b100 : FSR = +-0.512V
+   *    0b101 : FSR = +-0.256V
   */
   return (read16(ADS1115_CONFIG_REG) & 0b111<<ADS1115_PGA0) >> ADS1115_PGA0;
 }
@@ -441,10 +441,10 @@ void ADS1115::setPinRdyMode(bool b_activate, byte b_comp_queue_mode){
    *    ADS1115_CONV_READY_ACTIVE     : pin ready mode is activated
    *    ADS1115_CONV_READY_NOT_ACTIVE : pin ready mode is deactivated
   */
-  ADS1115::setCompLowThreshBit(0, 15);
-  ADS1115::setCompHighThreshBit(1, 15);
+  setCompLowThreshBit(0, 15);
+  setCompHighThreshBit(1, 15);
 
-  ADS1115::setCompQueueMode(b_comp_queue_mode);
+  setCompQueueMode(b_comp_queue_mode);
 }
 
 
@@ -456,7 +456,7 @@ bool ADS1115::getPinRdyMode() {
    *    true     : pin ready mode is activated
    *    false    : pin ready mode is deactivated
   */
-  byte b_cmp_queue_mode = ADS1115::getCompQueueMode();
+  byte b_cmp_queue_mode = getCompQueueMode();
 
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);

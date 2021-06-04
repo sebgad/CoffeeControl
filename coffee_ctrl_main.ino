@@ -30,7 +30,7 @@
 // I2C pins
 #define SDA_0 23
 #define SCL_0 22
-#define CONV_RDY_PIN 14
+#define CONV_RDY_PIN 13
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
@@ -194,7 +194,13 @@ void setup(){
   objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
   // set gain amplifier
-  objAds1115.setPGA(ADS1115_PGA_1P024);
+  objAds1115.setPGA(ADS1115_PGA_4P096);
+
+  // set latching mode
+  objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
+
+  // assert after one conversion
+  objAds1115.setPinRdyMode(true, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
@@ -295,15 +301,17 @@ void setup(){
   objTimerLong = timerBegin(1, 80, true);
 
   // Attach ISR function to timer
-  timerAttachInterrupt(objTimerShort, &onTimerShort, true);
+  // timerAttachInterrupt(objTimerShort, &onTimerShort, true);
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
+  pinMode(CONV_RDY_PIN, INPUT);
+  attachInterrupt(CONV_RDY_PIN, &onTimerShort, HIGH);
   
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
-  timerAlarmWrite(objTimerShort, iInterruptShortIntervalMicros, true);
+  // timerAlarmWrite(objTimerShort, iInterruptShortIntervalMicros, true);
   timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
-  timerAlarmEnable(objTimerShort);
+  // timerAlarmEnable(objTimerShort);
   timerAlarmEnable(objTimerLong);
 }
 
@@ -314,7 +322,7 @@ boolean readSensors(){
     // read out temperature sensor from ADS_1115
 
     
-    fTemp = fTemp + 0.1;
+    fTemp = objAds1115.readVoltage();
     fPressure = fPressure + 0.1;
     iHeatingStatus = 1;
     iPumpStatus = 1;
