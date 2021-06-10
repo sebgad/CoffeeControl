@@ -483,11 +483,11 @@ float ADS1115::readVoltage() {
    * read voltage level, based on the adc value of the ADS1115
    * @return measured voltage
   */ 
-  return (int)read16(ADS1115_CONVERSION_REG) * bitNumbering;
+  return (float)read16(ADS1115_CONVERSION_REG) * bitNumbering;
 }
 
 
-float ADS1115::setPhysicalConversion(float fgradient, float f_offset) {
+void ADS1115::setPhysicalConversion(float fgradient, float f_offset) {
   /**
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
@@ -503,7 +503,7 @@ float ADS1115::readPhysical(void){
    * read physical value
    * @return: physical value based on voltage read out
   */
-  return readVoltage() * fGradient + fOffset);
+  return readVoltage() * fGradient + fOffset;
 }
 
 

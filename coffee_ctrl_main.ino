@@ -30,7 +30,7 @@
 // I2C pins
 #define SDA_0 23
 #define SCL_0 22
-#define CONV_RDY_PIN 13
+#define CONV_RDY_PIN 14
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
@@ -194,7 +194,7 @@ void setup(){
   objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
   // set gain amplifier
-  objAds1115.setPGA(ADS1115_PGA_4P096);
+  objAds1115.setPGA(ADS1115_LSB_1P024);
 
   // set latching mode
   objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
@@ -202,7 +202,8 @@ void setup(){
   // assert after one conversion
   objAds1115.setPinRdyMode(true, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
-  objAds1115.setPhysicalConversion()
+  // regression 1d curve between 80C and 120C
+  objAds1115.setPhysicalConversion(-442.72467468, 77.05799063);
 
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
@@ -324,7 +325,7 @@ boolean readSensors(){
     // read out temperature sensor from ADS_1115
 
     
-    fTemp = objAds1115.readVoltage();
+    fTemp = objAds1115.readPhysical();
     fPressure = fPressure + 0.1;
     iHeatingStatus = 1;
     iPumpStatus = 1;
@@ -362,9 +363,9 @@ void writeMeasFile(){
     unsigned long i_time = millis();
     obj_meas_file.print(i_time);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_pressure_local);
+    obj_meas_file.print(f_temp_local, 4);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_local);
+    obj_meas_file.print(f_pressure_local);
     obj_meas_file.print(",");
     obj_meas_file.print(i_pump_status_local);
     obj_meas_file.print(",");
