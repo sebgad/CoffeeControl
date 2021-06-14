@@ -100,6 +100,10 @@
 
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
+// CONVERSION METHOD
+#define ADS1115_CONV_METHOD_SINGLE 0b001
+#define ADS1115_CONV_METHOD_TABLE 0b010
+
 #include "Arduino.h"
 
 class ADS1115
@@ -141,20 +145,25 @@ class ADS1115
     float readPhysical(void);
     void printConfigReg(void);
     void setPhysicalConversion(float, float);
-    float fOffset;
-    float fGradient;
+    void setPhysicalConversion(float[][2], size_t);
         
   private:
-    unsigned int read16(byte);
-    void write16(byte, unsigned int);
+    int16_t read16(byte);
+    void write16(byte, uint16_t);
+    void _initConvTable(size_t);
     int _iSdaPin;
     int _iSclPin;
     uint8_t _iI2cAddress;
     TwoWire * _objI2C;
+    float _fOffset;
+    float _fGradient;
+    float ** _ptrConvTable;
+    size_t _iSizeConvTable;
+    int _iConvMethod;
     float bitNumbering;
-    unsigned int iConfigReg;
-    unsigned int iLowThreshReg;
-    unsigned int iHighThreshReg;
+    uint16_t iConfigReg;
+    uint16_t iLowThreshReg;
+    uint16_t iHighThreshReg;
 };
 
 #endif

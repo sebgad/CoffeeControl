@@ -474,7 +474,7 @@ int ADS1115::readConversion() {
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
    * @return int in range (0...2^16-1)
   */ 
-  return (int)read16(ADS1115_CONVERSION_REG);
+  return read16(ADS1115_CONVERSION_REG);
 }
 
 
@@ -483,7 +483,11 @@ float ADS1115::readVoltage() {
    * read voltage level, based on the adc value of the ADS1115
    * @return measured voltage
   */ 
-  return (float)read16(ADS1115_CONVERSION_REG) * bitNumbering;
+  int16_t meas;
+  float meas_f;
+  meas = read16(ADS1115_CONVERSION_REG);
+  meas_f = meas * bitNumbering;  
+  return meas_f;
 }
 
 
@@ -493,8 +497,45 @@ void ADS1115::setPhysicalConversion(float fgradient, float f_offset) {
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
   */ 
-  fGradient = fgradient;
-  fOffset = f_offset;
+  _fGradient = fgradient;
+  _fOffset = f_offset;
+  _iConvMethod = ADS1115_CONV_METHOD_SINGLE;
+}
+
+void ADS1115::_initConvTable(size_t i_size_conv) {
+  /**
+   * Initialize pointer for conversion table
+   * @param i_size_conv: row of the conversion table
+  */
+  
+  // Make (row) size of conversion table in class available
+  _iSizeConvTable=i_size_conv;
+  // assign memory to the pointer, pointer in pointer element
+  _ptrConvTable = new float*[i_size_conv];
+  
+  // assign second pointer in pointer to get a 2dim field
+  for(int i_row=0;i_row<i_size_conv;i_row++) {
+    _ptrConvTable[i_row]=new float[2];
+  }
+}
+
+void ADS1115::setPhysicalConversion(float arr_conv_table[][2], size_t i_size_conv) {
+  /**
+   * set factors for conversion from voltage to physical value
+   * @param arr_conv_table: table for conversion, 1st dim is x value, 2nd dim is y value
+   * @param i_size_conv: (row) size of conversion table
+  */
+
+  // Initialize member _ptrConvTable
+  _initConvTable(i_size_conv);
+  
+  // copy array entries to member _ptrConvTable
+  for (int i_row=0; i_row<i_size_conv; i_row++){
+    for (int i_col=0; i_col<2; i_col++){
+      _ptrConvTable[i_row][i_col] = arr_conv_table[i_row][i_col];
+    }
+  }
+  _iConvMethod = ADS1115_CONV_METHOD_TABLE;
 }
 
 
@@ -503,7 +544,39 @@ float ADS1115::readPhysical(void){
    * read physical value
    * @return: physical value based on voltage read out
   */
-  return readVoltage() * fGradient + fOffset;
+ float f_voltage = readVoltage();
+
+ if (_iConvMethod == ADS1115_CONV_METHOD_SINGLE) {
+   return f_voltage * _fGradient + _fOffset;
+ } else if (_iConvMethod == ADS1115_CONV_METHOD_TABLE) {
+    float f_prev_x;
+    float f_act_x;
+    float f_prev_y;
+    float f_act_y;
+    
+    // TODO: define behaviour when it is outside the defined range.
+    if (f_voltage < _ptrConvTable[0][0]) {
+      // left outside
+
+    } else if (f_voltage > _ptrConvTable[_iSizeConvTable - 1][0]) {
+      // right outside
+
+    }
+
+    for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {
+      f_prev_x = _ptrConvTable[i_idx-1][0];
+      f_act_x = _ptrConvTable[i_idx][0];
+      f_prev_y = _ptrConvTable[i_idx-1][1];
+      f_act_y = _ptrConvTable[i_idx][1];
+      
+      if( (f_voltage >= f_prev_x) && (f_voltage < f_act_x) ) {
+        // inside interval
+        float f_gradient = (f_act_y-f_prev_y)/(f_act_x-f_prev_x);
+        float f_val = f_gradient * ( f_voltage - f_prev_x) + f_prev_y;
+        return  f_val;
+      } 
+    }
+ }
 }
 
 
@@ -517,21 +590,22 @@ void ADS1115::printConfigReg() {
 }
 
 
-void ADS1115::write16(byte reg, unsigned int val) {
+void ADS1115::write16(byte reg, uint16_t val) {
   byte _reg = reg;
-  unsigned int _val = val;
 
   _objI2C->beginTransmission(_iI2cAddress);
   _objI2C->write(_reg);
-  _objI2C->write((byte)highByte(_val));
-  _objI2C->write((byte)lowByte(_val));
+  _objI2C->write((byte)highByte(val));
+  _objI2C->write((byte)lowByte(val));
   _objI2C->endTransmission();
 }
 
 
-unsigned int ADS1115::read16(byte reg) {
+int16_t ADS1115::read16(byte reg) {
   byte _reg = reg;
   byte hByte, lByte;
+  int16_t i_conv;
+  String str_conv;
 
   _objI2C->beginTransmission(_iI2cAddress);
   _objI2C->write(_reg);
@@ -542,6 +616,8 @@ unsigned int ADS1115::read16(byte reg) {
   {
     hByte = _objI2C->read();
     lByte = _objI2C->read();
+
+    i_conv = (hByte << 8) | lByte;
   }
-  return ((int)(hByte << 8) + lByte);
+  return i_conv;
 }

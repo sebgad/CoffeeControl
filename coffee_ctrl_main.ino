@@ -26,6 +26,7 @@
 #include "ADS1115.h"
 #include <Wire.h>
 
+
 // Hardware definitions for i2c
 // I2C pins
 #define SDA_0 23
@@ -44,6 +45,12 @@ float fPressure = 0;
 int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
 
+// 2D Field for Temperature Value, 1dim:Temperature, 2dim: voltage in V^
+float arr1dMapConversionTemp[22][2] =  {
+                                        {-0.221429, 0.0},
+                                        {-0.025127, 70.0},
+                                        {0.150572, 150.0},
+                                       };
 // PID controler output variable
 float fPidOut = 0;
 
@@ -203,7 +210,12 @@ void setup(){
   objAds1115.setPinRdyMode(true, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
   // regression 1d curve between 80C and 120C
-  objAds1115.setPhysicalConversion(-442.72467468, 77.05799063);
+  size_t size_1d_map = sizeof(arr1dMapConversionTemp) / sizeof(arr1dMapConversionTemp[0]);
+  Serial.print("Array size of Conversion Table is: ");
+  Serial.println(size_1d_map);
+  objAds1115.setPhysicalConversion(arr1dMapConversionTemp, size_1d_map);
+
+  objAds1115.printConfigReg();
 
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
