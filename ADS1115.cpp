@@ -160,7 +160,6 @@ void ADS1115::setPGA(byte b_gain) {
   writeBitIn2Byte(iConfigReg, b2, ADS1115_PGA2);
   writeBitIn2Byte(iConfigReg, b1, ADS1115_PGA1);
   writeBitIn2Byte(iConfigReg, b0, ADS1115_PGA0);
-
   write16(ADS1115_CONFIG_REG, iConfigReg);
 
   switch (b_gain) {
@@ -469,11 +468,11 @@ bool ADS1115::getPinRdyMode() {
   }
 }
 
-void ADS1115::writeBitIn2Byte(uint16_t &i_register, int i_pos, bool b_value){
+void ADS1115::writeBitIn2Byte(uint16_t &i_register, bool b_value, int i_pos){
   /** Write a bit in a uint16_t number at a given position
    * @param i_register: uint16_t register as reference
-   * @param i_pos: position of the bit
    * @param b_value: value of the bit, 0 or 1
+   * @param i_pos: position of the bit
   */
  if (b_value) {
    i_register |= (1<<i_pos);

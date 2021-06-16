@@ -164,7 +164,7 @@ class ADS1115
     uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
-    void writeBitIn2Byte(uint16_t &, int, bool);
+    void writeBitIn2Byte(uint16_t &, bool, int);
     bool readBitIn2Byte(uint16_t, int);
 };
 

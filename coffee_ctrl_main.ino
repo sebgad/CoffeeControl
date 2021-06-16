@@ -45,11 +45,13 @@ float fPressure = 0;
 int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
 
-// 2D Field for Temperature Value, 1dim:Temperature, 2dim: voltage in V^
-float arr1dMapConversionTemp[22][2] =  {
-                                        {-0.221429, 0.0},
-                                        {-0.025127, 70.0},
-                                        {0.150572, 150.0},
+// 2D Field for Temperature Value, 1dim:Voltage, 2dim: voltage in Temp. Note: 1dim must be ordered ascending
+float arr1dMapConversionTemp[][2] =  {
+                                        {-0.11058, 130.0},
+                                        {0.13143, 30.0},
+                                        {0.16038, 20.0},
+                                        {0.19036, 10.0},
+                                        {0.22143, 0.0},
                                        };
 // PID controler output variable
 float fPidOut = 0;
