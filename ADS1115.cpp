@@ -82,7 +82,7 @@ void ADS1115::startSingleShotMeas(bool b_status) {
   */
   if (b_status) {
     iConfigReg = read16(ADS1115_CONFIG_REG);
-    writeBitIn2Byte(iConfigReg, ADS1115_OS, b_status);
+    bitWrite(iConfigReg, ADS1115_OS, b_status);
     write16(ADS1115_CONFIG_REG, iConfigReg);
   }
   
@@ -111,13 +111,13 @@ void ADS1115::setMux(byte b_mux) {
    *    ADS1115_MUX_AIN3_GND AINp = AIN3 and AINn = GND
   */ 
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b2 = readBitIn2Byte(b_mux, 2);
-  bool b1 = readBitIn2Byte(b_mux, 1);
-  bool b0 = readBitIn2Byte(b_mux, 0);
+  bool b2 = readBit(b_mux, 2);
+  bool b1 = readBit(b_mux, 1);
+  bool b0 = readBit(b_mux, 0);
 
-  writeBitIn2Byte(iConfigReg, ADS1115_MUX2, b2);
-  writeBitIn2Byte(iConfigReg, ADS1115_MUX1, b1);
-  writeBitIn2Byte(iConfigReg, ADS1115_MUX0, b0);
+  writeBit(iConfigReg, ADS1115_MUX2, b2);
+  writeBit(iConfigReg, ADS1115_MUX1, b1);
+  writeBit(iConfigReg, ADS1115_MUX0, b0);
 
   write16(ADS1115_CONFIG_REG, iConfigReg);
   delay(ADS1115_DELAY_AFTER_MUX_CHANGE);
@@ -153,13 +153,13 @@ void ADS1115::setPGA(byte b_gain) {
    *    ADS1115_PGA_0P256 : FSR = +-0.256V
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b2 = readBitIn2Byte(b_gain, 2);
-  bool b1 = readBitIn2Byte(b_gain, 1);
-  bool b0 = readBitIn2Byte(b_gain, 0);
+  bool b2 = readBit(b_gain, 2);
+  bool b1 = readBit(b_gain, 1);
+  bool b0 = readBit(b_gain, 0);
 
-  writeBitIn2Byte(iConfigReg, b2, ADS1115_PGA2);
-  writeBitIn2Byte(iConfigReg, b1, ADS1115_PGA1);
-  writeBitIn2Byte(iConfigReg, b0, ADS1115_PGA0);
+  writeBit(iConfigReg, ADS1115_PGA2, b2);
+  writeBit(iConfigReg, ADS1115_PGA1, b1);
+  writeBit(iConfigReg, ADS1115_PGA0, b0);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 
   switch (b_gain) {
@@ -209,7 +209,7 @@ void ADS1115::setOpMode(bool b_mode) {
    *    ADS1115_MODE_SINGLESHOT : Single-shot mode or power-down state (default)
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  writeBitIn2Byte(iConfigReg, ADS1115_MODE, b_mode);
+  writeBit(iConfigReg, ADS1115_MODE, b_mode);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -238,13 +238,13 @@ void ADS1115::setRate(byte b_rate) {
    *    ADS1115_RATE_860  : 860 SPS
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b2 = readBitIn2Byte(b_rate, 2);
-  bool b1 = readBitIn2Byte(b_rate, 1);
-  bool b0 = readBitIn2Byte(b_rate, 0);
+  bool b2 = readBit(b_rate, 2);
+  bool b1 = readBit(b_rate, 1);
+  bool b0 = readBit(b_rate, 0);
 
-  writeBitIn2Byte(iConfigReg, ADS1115_DR2, b2);
-  writeBitIn2Byte(iConfigReg, ADS1115_DR1, b1);
-  writeBitIn2Byte(iConfigReg, ADS1115_DR0, b0);
+  writeBit(iConfigReg, ADS1115_DR2, b2);
+  writeBit(iConfigReg, ADS1115_DR1, b1);
+  writeBit(iConfigReg, ADS1115_DR0, b0);
 
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
@@ -275,7 +275,7 @@ void ADS1115::setCompMode(bool b_mode) {
    *    ADS1115_CMP_MODE_WINDOW       : Window comparator
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  writeBitIn2Byte(iConfigReg, ADS1115_CMP_MDE, b_mode);
+  writeBit(iConfigReg, ADS1115_CMP_MDE, b_mode);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -299,7 +299,7 @@ void ADS1115::setCompPolarity(bool b_polarity) {
    *    ADS1115_CMP_POL_ACTIVE_HIGH : Active high
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  writeBitIn2Byte(iConfigReg, ADS1115_CMP_POL, b_polarity);
+  writeBit(iConfigReg, ADS1115_CMP_POL, b_polarity);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -326,7 +326,7 @@ void ADS1115::setCompLatchingMode(bool b_mode) {
    *                                 ALERT/RDY bus line.
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  writeBitIn2Byte(iConfigReg, ADS1115_CMP_LAT, b_mode);
+  writeBit(iConfigReg, ADS1115_CMP_LAT, b_mode);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -358,11 +358,11 @@ void ADS1115::setCompQueueMode(byte b_mode) {
    *    ADS1115_CMP_DISABLE           : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b1 = readBitIn2Byte(b_mode, 1);
-  bool b0 = readBitIn2Byte(b_mode, 0);
+  bool b1 = readBit(b_mode, 1);
+  bool b0 = readBit(b_mode, 0);
 
-  writeBitIn2Byte(iConfigReg, ADS1115_CMP_QUE1, b1);
-  writeBitIn2Byte(iConfigReg, ADS1115_CMP_QUE0, b0);
+  writeBit(iConfigReg, ADS1115_CMP_QUE1, b1);
+  writeBit(iConfigReg, ADS1115_CMP_QUE0, b0);
 
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
@@ -391,7 +391,7 @@ void ADS1115::setCompLowThreshBit(bool b_value, int i_bit_num){
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
-  writeBitIn2Byte(iLowThreshReg, i_bit_num, b_value);
+  writeBit(iLowThreshReg, i_bit_num, b_value);
   write16(ADS1115_LOW_THRESH_REG, iLowThreshReg);
 }
 
@@ -403,7 +403,7 @@ byte ADS1115::getCompLowThreshBit(int i_bit_num){
    * @return bit value on i_bit_num
   */
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
-  readBitIn2Byte(iLowThreshReg, i_bit_num);
+  readBit(iLowThreshReg, i_bit_num);
   return iLowThreshReg;
 }
 
@@ -416,7 +416,7 @@ void ADS1115::setCompHighThreshBit(bool b_value, int i_bit_num){
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
-  writeBitIn2Byte(iHighThreshReg, i_bit_num, b_value);
+  writeBit(iHighThreshReg, i_bit_num, b_value);
   write16(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
 }
 
@@ -428,7 +428,7 @@ byte ADS1115::getCompHighThreshBit(int i_bit_num){
    * @return bit value on i_bit_num
   */
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
-  readBitIn2Byte(iHighThreshReg, i_bit_num);
+  readBit(iHighThreshReg, i_bit_num);
   return iHighThreshReg;
 }
 
@@ -461,18 +461,18 @@ bool ADS1115::getPinRdyMode() {
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
 
-  if (~readBitIn2Byte(iLowThreshReg, 15) && readBitIn2Byte(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
+  if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
     return true;
   } else {
     return false;
   }
 }
 
-void ADS1115::writeBitIn2Byte(uint16_t &i_register, bool b_value, int i_pos){
+void ADS1115::writeBit(uint16_t &i_register, int i_pos, bool b_value){
   /** Write a bit in a uint16_t number at a given position
    * @param i_register: uint16_t register as reference
-   * @param b_value: value of the bit, 0 or 1
    * @param i_pos: position of the bit
+   * @param b_value: value of the bit, 0 or 1
   */
  if (b_value) {
    i_register |= (1<<i_pos);
@@ -481,7 +481,7 @@ void ADS1115::writeBitIn2Byte(uint16_t &i_register, bool b_value, int i_pos){
  }
 }
 
-bool ADS1115::readBitIn2Byte(uint16_t i_register, int i_pos){
+bool ADS1115::readBit(uint16_t i_register, int i_pos){
   /** 
    * read bit in uint16_t number at a given position
    * @param: i_register: number where to read out the bit
