@@ -513,32 +513,17 @@ float ADS1115::readVoltage() {
 }
 
 
-void ADS1115::setPhysicalConversion(float fgradient, float f_offset) {
+void ADS1115::setPhysicalConversion(float f_gradient, float f_offset) {
   /**
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
   */ 
-  _fGradient = fgradient;
-  _fOffset = f_offset;
-  _iConvMethod = ADS1115_CONV_METHOD_SINGLE;
-}
+  initConvTable(1);
+  _ptrConvTable[0][0] = NULL;
+  _ptrConvTable[0][1] = f_gradient;
+  _ptrConvTable[0][2] = f_offset;
 
-void ADS1115::_initConvTable(size_t i_size_conv) {
-  /**
-   * Initialize pointer for conversion table
-   * @param i_size_conv: row of the conversion table
-  */
-  
-  // Make (row) size of conversion table in class available
-  _iSizeConvTable=i_size_conv;
-  // assign memory to the pointer, pointer in pointer element
-  _ptrConvTable = new float*[i_size_conv];
-  
-  // assign second pointer in pointer to get a 2dim field
-  for(int i_row=0;i_row<i_size_conv;i_row++) {
-    _ptrConvTable[i_row]=new float[2];
-  }
 }
 
 void ADS1115::setPhysicalConversion(float arr_conv_table[][2], size_t i_size_conv) {
@@ -548,16 +533,28 @@ void ADS1115::setPhysicalConversion(float arr_conv_table[][2], size_t i_size_con
    * @param i_size_conv: (row) size of conversion table
   */
 
+  float f_prev_x;
+  float f_act_x;
+  float f_prev_y;
+  float f_act_y;
+
   // Initialize member _ptrConvTable
-  _initConvTable(i_size_conv);
+  initConvTable(i_size_conv);
   
-  // copy array entries to member _ptrConvTable
-  for (int i_row=0; i_row<i_size_conv; i_row++){
-    for (int i_col=0; i_col<2; i_col++){
-      _ptrConvTable[i_row][i_col] = arr_conv_table[i_row][i_col];
-    }
+  // calculate gradient and offset and write it to array
+  for (int i_row=1; i_row<i_size_conv; i_row++){
+    f_prev_x = arr_conv_table[i_row-1][0];
+    f_act_x = arr_conv_table[i_row][0];
+    f_prev_y = arr_conv_table[i_row-1][1];
+    f_act_y = arr_conv_table[i_row][1];
+    
+    // start range
+    _ptrConvTable[i_row-1][0] = f_prev_x;
+    // gradient
+    _ptrConvTable[i_row-1][1] = (f_act_y-f_prev_y)/(f_act_x-f_prev_x);
+    // offset
+    _ptrConvTable[i_row-1][2] = f_prev_y - _ptrConvTable[i_row-1][1]*f_prev_x;
   }
-  _iConvMethod = ADS1115_CONV_METHOD_TABLE;
 }
 
 
@@ -566,39 +563,27 @@ float ADS1115::readPhysical(void){
    * read physical value
    * @return: physical value based on voltage read out
   */
- float f_voltage = readVoltage();
+  
+  float f_voltage = readVoltage();
+  int i_index = 0;
 
- if (_iConvMethod == ADS1115_CONV_METHOD_SINGLE) {
-   return f_voltage * _fGradient + _fOffset;
- } else if (_iConvMethod == ADS1115_CONV_METHOD_TABLE) {
-    float f_prev_x;
-    float f_act_x;
-    float f_prev_y;
-    float f_act_y;
-    
-    // TODO: define behaviour when it is outside the defined range.
-    if (f_voltage < _ptrConvTable[0][0]) {
-      // left outside
+  if (_ptrConvTable[0][0] == NULL) {
+    // only one gradient is given
+    i_index = 0;
+  
+  } else if (f_voltage < _ptrConvTable[0][0]) {
+    // left outside
 
-    } else if (f_voltage > _ptrConvTable[_iSizeConvTable - 1][0]) {
-      // right outside
-
-    }
-
-    for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {
-      f_prev_x = _ptrConvTable[i_idx-1][0];
-      f_act_x = _ptrConvTable[i_idx][0];
-      f_prev_y = _ptrConvTable[i_idx-1][1];
-      f_act_y = _ptrConvTable[i_idx][1];
-      
-      if( (f_voltage >= f_prev_x) && (f_voltage < f_act_x) ) {
-        // inside interval
-        float f_gradient = (f_act_y-f_prev_y)/(f_act_x-f_prev_x);
-        float f_val = f_gradient * ( f_voltage - f_prev_x) + f_prev_y;
-        return  f_val;
+  } else {
+    // array is given
+    for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {    
+      if( (f_voltage >= _ptrConvTable[i_idx-1][0]) && (f_voltage < _ptrConvTable[i_idx][0]) ) {
+        i_index = i_idx-1;
+        break;
       } 
     }
- }
+  }
+  return f_voltage * _ptrConvTable[i_index][1] + _ptrConvTable[i_index][2];
 }
 
 
@@ -642,4 +627,22 @@ int16_t ADS1115::read16(byte reg) {
     i_conv = (hByte << 8) | lByte;
   }
   return i_conv;
+}
+
+
+void ADS1115::initConvTable(size_t i_size_conv) {
+  /**
+   * Initialize pointer for conversion table
+   * @param i_size_conv: row of the conversion table
+  */
+  
+  // Make (row) size of conversion table in class available
+  _iSizeConvTable=i_size_conv-1;
+  // assign memory to the pointer, pointer in pointer element
+  _ptrConvTable = new float*[_iSizeConvTable];
+  
+  // assign second pointer in pointer to get a 2dim field
+  for(int i_row=0;i_row<_iSizeConvTable;i_row++) {
+    _ptrConvTable[i_row]=new float[3];
+  }
 }
