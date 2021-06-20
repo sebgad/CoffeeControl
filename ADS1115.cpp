@@ -111,13 +111,13 @@ void ADS1115::setMux(byte b_mux) {
    *    ADS1115_MUX_AIN3_GND AINp = AIN3 and AINn = GND
   */ 
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b2 = bitRead(b_mux, 2);
-  bool b1 = bitRead(b_mux, 1);
-  bool b0 = bitRead(b_mux, 0);
+  bool b2 = readBit(b_mux, 2);
+  bool b1 = readBit(b_mux, 1);
+  bool b0 = readBit(b_mux, 0);
 
-  bitWrite(iConfigReg, ADS1115_MUX2, b2);
-  bitWrite(iConfigReg, ADS1115_MUX1, b1);
-  bitWrite(iConfigReg, ADS1115_MUX0, b0);
+  writeBit(iConfigReg, ADS1115_MUX2, b2);
+  writeBit(iConfigReg, ADS1115_MUX1, b1);
+  writeBit(iConfigReg, ADS1115_MUX0, b0);
 
   write16(ADS1115_CONFIG_REG, iConfigReg);
   delay(ADS1115_DELAY_AFTER_MUX_CHANGE);
@@ -153,14 +153,13 @@ void ADS1115::setPGA(byte b_gain) {
    *    ADS1115_PGA_0P256 : FSR = +-0.256V
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b2 = bitRead(b_gain, 2);
-  bool b1 = bitRead(b_gain, 1);
-  bool b0 = bitRead(b_gain, 0);
+  bool b2 = readBit(b_gain, 2);
+  bool b1 = readBit(b_gain, 1);
+  bool b0 = readBit(b_gain, 0);
 
-  bitWrite(iConfigReg, ADS1115_PGA2, b2);
-  bitWrite(iConfigReg, ADS1115_PGA1, b1);
-  bitWrite(iConfigReg, ADS1115_PGA0, b0);
-
+  writeBit(iConfigReg, ADS1115_PGA2, b2);
+  writeBit(iConfigReg, ADS1115_PGA1, b1);
+  writeBit(iConfigReg, ADS1115_PGA0, b0);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 
   switch (b_gain) {
@@ -186,6 +185,7 @@ void ADS1115::setPGA(byte b_gain) {
 }
 
 
+
 byte ADS1115::getPGA() { 
   /**
    * Get the FSR of the programmable gain amplifier
@@ -209,7 +209,7 @@ void ADS1115::setOpMode(bool b_mode) {
    *    ADS1115_MODE_SINGLESHOT : Single-shot mode or power-down state (default)
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bitWrite(iConfigReg, ADS1115_MODE, b_mode);
+  writeBit(iConfigReg, ADS1115_MODE, b_mode);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -238,13 +238,13 @@ void ADS1115::setRate(byte b_rate) {
    *    ADS1115_RATE_860  : 860 SPS
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b2 = bitRead(b_rate, 2);
-  bool b1 = bitRead(b_rate, 1);
-  bool b0 = bitRead(b_rate, 0);
+  bool b2 = readBit(b_rate, 2);
+  bool b1 = readBit(b_rate, 1);
+  bool b0 = readBit(b_rate, 0);
 
-  bitWrite(iConfigReg, ADS1115_DR2, b2);
-  bitWrite(iConfigReg, ADS1115_DR1, b1);
-  bitWrite(iConfigReg, ADS1115_DR0, b0);
+  writeBit(iConfigReg, ADS1115_DR2, b2);
+  writeBit(iConfigReg, ADS1115_DR1, b1);
+  writeBit(iConfigReg, ADS1115_DR0, b0);
 
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
@@ -275,7 +275,7 @@ void ADS1115::setCompMode(bool b_mode) {
    *    ADS1115_CMP_MODE_WINDOW       : Window comparator
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bitWrite(iConfigReg, ADS1115_CMP_MDE, b_mode);
+  writeBit(iConfigReg, ADS1115_CMP_MDE, b_mode);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -299,7 +299,7 @@ void ADS1115::setCompPolarity(bool b_polarity) {
    *    ADS1115_CMP_POL_ACTIVE_HIGH : Active high
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bitWrite(iConfigReg, ADS1115_CMP_POL, b_polarity);
+  writeBit(iConfigReg, ADS1115_CMP_POL, b_polarity);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -326,7 +326,7 @@ void ADS1115::setCompLatchingMode(bool b_mode) {
    *                                 ALERT/RDY bus line.
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bitWrite(iConfigReg, ADS1115_CMP_LAT, b_mode);
+  writeBit(iConfigReg, ADS1115_CMP_LAT, b_mode);
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
 
@@ -358,11 +358,11 @@ void ADS1115::setCompQueueMode(byte b_mode) {
    *    ADS1115_CMP_DISABLE           : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
   iConfigReg = read16(ADS1115_CONFIG_REG);
-  bool b1 = bitRead(b_mode, 1);
-  bool b0 = bitRead(b_mode, 0);
+  bool b1 = readBit(b_mode, 1);
+  bool b0 = readBit(b_mode, 0);
 
-  bitWrite(iConfigReg, ADS1115_CMP_QUE1, b1);
-  bitWrite(iConfigReg, ADS1115_CMP_QUE0, b0);
+  writeBit(iConfigReg, ADS1115_CMP_QUE1, b1);
+  writeBit(iConfigReg, ADS1115_CMP_QUE0, b0);
 
   write16(ADS1115_CONFIG_REG, iConfigReg);
 }
@@ -391,7 +391,7 @@ void ADS1115::setCompLowThreshBit(bool b_value, int i_bit_num){
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
-  bitWrite(iLowThreshReg, i_bit_num, b_value);
+  writeBit(iLowThreshReg, i_bit_num, b_value);
   write16(ADS1115_LOW_THRESH_REG, iLowThreshReg);
 }
 
@@ -403,7 +403,7 @@ byte ADS1115::getCompLowThreshBit(int i_bit_num){
    * @return bit value on i_bit_num
   */
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
-  bitRead(iLowThreshReg, i_bit_num);
+  readBit(iLowThreshReg, i_bit_num);
   return iLowThreshReg;
 }
 
@@ -416,7 +416,7 @@ void ADS1115::setCompHighThreshBit(bool b_value, int i_bit_num){
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
-  bitWrite(iHighThreshReg, i_bit_num, b_value);
+  writeBit(iHighThreshReg, i_bit_num, b_value);
   write16(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
 }
 
@@ -428,7 +428,7 @@ byte ADS1115::getCompHighThreshBit(int i_bit_num){
    * @return bit value on i_bit_num
   */
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
-  bitRead(iHighThreshReg, i_bit_num);
+  readBit(iHighThreshReg, i_bit_num);
   return iHighThreshReg;
 }
 
@@ -461,20 +461,42 @@ bool ADS1115::getPinRdyMode() {
   iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
   iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
 
-  if (~bitRead(iLowThreshReg, 15) && bitRead(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
+  if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
     return true;
   } else {
     return false;
   }
 }
 
+void ADS1115::writeBit(uint16_t &i_register, int i_pos, bool b_value){
+  /** Write a bit in a uint16_t number at a given position
+   * @param i_register: uint16_t register as reference
+   * @param i_pos: position of the bit
+   * @param b_value: value of the bit, 0 or 1
+  */
+ if (b_value) {
+   i_register |= (1<<i_pos);
+ } else {
+   i_register &= ~(1<<i_pos);
+ }
+}
+
+bool ADS1115::readBit(uint16_t i_register, int i_pos){
+  /** 
+   * read bit in uint16_t number at a given position
+   * @param: i_register: number where to read out the bit
+   * @param i_pos: bit position which should be read out
+   * @return: bit value of given position
+  */
+  return ((i_register & (1<<i_pos)) >> i_pos);
+}
 
 int ADS1115::readConversion() {
   /**
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
    * @return int in range (0...2^16-1)
   */ 
-  return (int)read16(ADS1115_CONVERSION_REG);
+  return read16(ADS1115_CONVERSION_REG);
 }
 
 
@@ -483,18 +505,56 @@ float ADS1115::readVoltage() {
    * read voltage level, based on the adc value of the ADS1115
    * @return measured voltage
   */ 
-  return (float)read16(ADS1115_CONVERSION_REG) * bitNumbering;
+  int16_t meas;
+  float meas_f;
+  meas = read16(ADS1115_CONVERSION_REG);
+  meas_f = meas * bitNumbering;  
+  return meas_f;
 }
 
 
-void ADS1115::setPhysicalConversion(float fgradient, float f_offset) {
+void ADS1115::setPhysicalConversion(float f_gradient, float f_offset) {
   /**
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
   */ 
-  fGradient = fgradient;
-  fOffset = f_offset;
+  initConvTable(1);
+  _ptrConvTable[0][0] = NULL;
+  _ptrConvTable[0][1] = f_gradient;
+  _ptrConvTable[0][2] = f_offset;
+
+}
+
+void ADS1115::setPhysicalConversion(float arr_conv_table[][2], size_t i_size_conv) {
+  /**
+   * set factors for conversion from voltage to physical value
+   * @param arr_conv_table: table for conversion, 1st dim is x value, 2nd dim is y value
+   * @param i_size_conv: (row) size of conversion table
+  */
+
+  float f_prev_x;
+  float f_act_x;
+  float f_prev_y;
+  float f_act_y;
+
+  // Initialize member _ptrConvTable
+  initConvTable(i_size_conv);
+  
+  // calculate gradient and offset and write it to array
+  for (int i_row=1; i_row<i_size_conv; i_row++){
+    f_prev_x = arr_conv_table[i_row-1][0];
+    f_act_x = arr_conv_table[i_row][0];
+    f_prev_y = arr_conv_table[i_row-1][1];
+    f_act_y = arr_conv_table[i_row][1];
+    
+    // start range
+    _ptrConvTable[i_row-1][0] = f_prev_x;
+    // gradient
+    _ptrConvTable[i_row-1][1] = (f_act_y-f_prev_y)/(f_act_x-f_prev_x);
+    // offset
+    _ptrConvTable[i_row-1][2] = f_prev_y - _ptrConvTable[i_row-1][1]*f_prev_x;
+  }
 }
 
 
@@ -503,7 +563,27 @@ float ADS1115::readPhysical(void){
    * read physical value
    * @return: physical value based on voltage read out
   */
-  return readVoltage() * fGradient + fOffset;
+  
+  float f_voltage = readVoltage();
+  int i_index = 0;
+
+  if (_ptrConvTable[0][0] == NULL) {
+    // only one gradient is given
+    i_index = 0;
+  
+  } else if (f_voltage < _ptrConvTable[0][0]) {
+    // left outside
+
+  } else {
+    // array is given
+    for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {    
+      if( (f_voltage >= _ptrConvTable[i_idx-1][0]) && (f_voltage < _ptrConvTable[i_idx][0]) ) {
+        i_index = i_idx-1;
+        break;
+      } 
+    }
+  }
+  return f_voltage * _ptrConvTable[i_index][1] + _ptrConvTable[i_index][2];
 }
 
 
@@ -511,27 +591,28 @@ void ADS1115::printConfigReg() {
   /**
    * Dump Config register to Serial output
   */
-  Serial.print("Conf.Reg.: ");
+  Serial.print("ADS1115 Conf.Reg.: ");
   iConfigReg = read16(ADS1115_CONFIG_REG);
   Serial.println(iConfigReg, BIN);
 }
 
 
-void ADS1115::write16(byte reg, unsigned int val) {
+void ADS1115::write16(byte reg, uint16_t val) {
   byte _reg = reg;
-  unsigned int _val = val;
 
   _objI2C->beginTransmission(_iI2cAddress);
   _objI2C->write(_reg);
-  _objI2C->write((byte)highByte(_val));
-  _objI2C->write((byte)lowByte(_val));
+  _objI2C->write((byte)highByte(val));
+  _objI2C->write((byte)lowByte(val));
   _objI2C->endTransmission();
 }
 
 
-unsigned int ADS1115::read16(byte reg) {
+int16_t ADS1115::read16(byte reg) {
   byte _reg = reg;
   byte hByte, lByte;
+  int16_t i_conv;
+  String str_conv;
 
   _objI2C->beginTransmission(_iI2cAddress);
   _objI2C->write(_reg);
@@ -542,6 +623,26 @@ unsigned int ADS1115::read16(byte reg) {
   {
     hByte = _objI2C->read();
     lByte = _objI2C->read();
+
+    i_conv = (hByte << 8) | lByte;
   }
-  return ((int)(hByte << 8) + lByte);
+  return i_conv;
+}
+
+
+void ADS1115::initConvTable(size_t i_size_conv) {
+  /**
+   * Initialize pointer for conversion table
+   * @param i_size_conv: row of the conversion table
+  */
+  
+  // Make (row) size of conversion table in class available
+  _iSizeConvTable=i_size_conv-1;
+  // assign memory to the pointer, pointer in pointer element
+  _ptrConvTable = new float*[_iSizeConvTable];
+  
+  // assign second pointer in pointer to get a 2dim field
+  for(int i_row=0;i_row<_iSizeConvTable;i_row++) {
+    _ptrConvTable[i_row]=new float[3];
+  }
 }

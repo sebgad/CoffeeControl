@@ -26,6 +26,7 @@
 #include "ADS1115.h"
 #include <Wire.h>
 
+
 // Hardware definitions for i2c
 // I2C pins
 #define SDA_0 23
@@ -44,6 +45,15 @@ float fPressure = 0;
 int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
 
+// 2D Field for Temperature Value, 1dim:Voltage, 2dim: voltage in Temp. Note: 1dim must be ordered ascending
+float arr1dMapConversionTemp[][2] =  {
+                                        {-0.11814, 130.0},
+                                        {0.12388, 30.0},
+                                        {0.13818, 25.0},
+                                        {0.15285, 20.0},
+                                        {0.18286, 10.0},
+                                        {0.21397, 0.0},
+                                       };
 // PID controler output variable
 float fPidOut = 0;
 
@@ -102,6 +112,8 @@ void IRAM_ATTR onTimerShort(){
       if (iStatusCtrl == IDLE) {
         // Only change Status when idle to measurement running
         iStatusCtrl = MEASURE;
+        // read out temperature sensor from ADS_1115
+        // fTemp = objAds1115.readPhysical();
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
@@ -194,16 +206,21 @@ void setup(){
   objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
   // set gain amplifier
-  objAds1115.setPGA(ADS1115_LSB_1P024);
+  objAds1115.setPGA(ADS1115_PGA_1P024);
 
   // set latching mode
   objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
 
   // assert after one conversion
-  objAds1115.setPinRdyMode(true, ADS1115_CMP_QUE_ASSERT_1_CONV);
+  objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
   // regression 1d curve between 80C and 120C
-  objAds1115.setPhysicalConversion(-442.72467468, 77.05799063);
+  size_t size_1d_map = sizeof(arr1dMapConversionTemp) / sizeof(arr1dMapConversionTemp[0]);
+  Serial.print("Array size of Conversion Table is: ");
+  Serial.println(size_1d_map);
+  objAds1115.setPhysicalConversion(arr1dMapConversionTemp, size_1d_map);
+
+  objAds1115.printConfigReg();
 
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
@@ -321,16 +338,11 @@ void setup(){
 boolean readSensors(){
   // Read out Sensor values
     bool b_result = false;
-
-    // read out temperature sensor from ADS_1115
-
-    
     fTemp = objAds1115.readPhysical();
-    fPressure = fPressure + 0.1;
+    fPressure = random(0,10);
     iHeatingStatus = 1;
     iPumpStatus = 1;
     b_result = true;
-
     return b_result;
 }
 
@@ -363,7 +375,7 @@ void writeMeasFile(){
     unsigned long i_time = millis();
     obj_meas_file.print(i_time);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_local, 4);
+    obj_meas_file.print(f_temp_local);
     obj_meas_file.print(",");
     obj_meas_file.print(f_pressure_local);
     obj_meas_file.print(",");

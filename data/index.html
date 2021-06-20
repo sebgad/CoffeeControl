@@ -7,22 +7,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  <script type="text/javascript" src="https://www.google.com/jsapi"></script>
   <script type="text/javascript" src="table.js"></script>
 
   <script type="text/javascript">
-   google.charts.load('current', {'packages':['gauge']});
+   google.charts.load('current', {'packages':['gauge', 'corechart']});
    google.charts.setOnLoadCallback(drawChart);
 
-   function drawChart() {
-
-     var dataTemp = google.visualization.arrayToDataTable([
+  function drawChart() {
+      var dataTemp = google.visualization.arrayToDataTable([
        ['Label', 'Value'],
-       ['Temp', 80],
+       ['Temp', 0.0],
      ]);
 
      var dataPress= google.visualization.arrayToDataTable([
        ['Label', 'Value'],
-       ['Pressure', 5.5],
+       ['Pressure', 0.0],
      ]);
 
      var optionsTemp = {
@@ -62,15 +62,25 @@
      chartPress.draw(dataPress, optionsPressure);
 
      setInterval(function() {
-       dataTemp.setValue(0, 1, 40 + Math.round(40 * Math.random()));
-       formatterTemp.format(dataTemp, 1);
-       chartTemp.draw(dataTemp, optionsTemp);
-     }, 13000);
-     setInterval(function() {
-       dataPress.setValue(0, 1, 4 + Math.round(4.5 * Math.random(), 2));
-       formatterPress.format(dataPress, 1);
-       chartPress.draw(dataPress, optionsPressure);
-     }, 5000);
+      var xhr=new XMLHttpRequest();
+      xhr.open("GET","data.csv");
+      var data;
+      xhr.onload= function() {
+        var str_buf = xhr.responseText;
+        data = str_buf.split(/\r?\n/g);
+        var temp = parseFloat(data[data.length-2].split(",")[1]);
+        var press  = parseFloat(data[data.length-2].split(",")[2]);
+        
+        dataTemp.setValue(0, 1, temp);
+        formatterTemp.format(dataTemp, 1);
+        chartTemp.draw(dataTemp, optionsTemp);
+        
+        dataPress.setValue(0, 1, press, 2);
+        formatterPress.format(dataPress, 1);
+        chartPress.draw(dataPress, optionsPressure);
+      }
+      xhr.send();
+    }, 3000);
    }
  </script> 
 </head>

@@ -1,4 +1,4 @@
-// Code based on Retian (version 1.0), Implementation extended and comments translated into english
+// Code based on Retian (version 1.0), Implementation changed and comments translated into english
 // https://arduino-projekte.webnode.at/meine-libraries/adc-ads1115/
 
 #ifndef ADS1115_h
@@ -79,7 +79,6 @@
 #define ADS1115_CMP_MODE_TRADITIONAL  0b000 // default
 #define ADS1115_CMP_MODE_WINDOW       0b000 
 
-
 // Comparator polarity
 #define ADS1115_CMP_POL_ACTIVE_LOW  0b000 // default
 #define ADS1115_CMP_POL_ACTIVE_HIGH 0b001
@@ -141,20 +140,25 @@ class ADS1115
     float readPhysical(void);
     void printConfigReg(void);
     void setPhysicalConversion(float, float);
-    float fOffset;
-    float fGradient;
+    void setPhysicalConversion(float[][2], size_t);
         
   private:
-    unsigned int read16(byte);
-    void write16(byte, unsigned int);
     int _iSdaPin;
     int _iSclPin;
     uint8_t _iI2cAddress;
     TwoWire * _objI2C;
+    float ** _ptrConvTable;
+    size_t _iSizeConvTable;
+    int _iConvMethod;
     float bitNumbering;
-    unsigned int iConfigReg;
-    unsigned int iLowThreshReg;
-    unsigned int iHighThreshReg;
+    uint16_t iConfigReg;
+    uint16_t iLowThreshReg;
+    uint16_t iHighThreshReg;
+    int16_t read16(byte);
+    void write16(byte, uint16_t);
+    void initConvTable(size_t);
+    void writeBit(uint16_t &, int, bool);
+    bool readBit(uint16_t, int);
 };
 
 #endif
