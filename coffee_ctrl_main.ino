@@ -339,7 +339,7 @@ boolean readSensors(){
   // Read out Sensor values
     bool b_result = false;
     fTemp = objAds1115.readPhysical();
-    fPressure = fPressure + 0.1;
+    fPressure = random(0,10);
     iHeatingStatus = 1;
     iPumpStatus = 1;
     b_result = true;
