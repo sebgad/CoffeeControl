@@ -12,6 +12,7 @@
  *      - temperatur as input, SSR control as output
  *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
  *      - Implement both ideas and switching regulation over web interface, e.g. config page?
+ *      - make Tuning Parameters editeable via webserver
  *  - Implement config web page and define parameters which can be set dynamically (pid control parameters, etc.)
  *  - Make it look nice, maybe?
  *  - Make coffe.local address also available for wifi clients
@@ -25,6 +26,7 @@
 #include "WifiAccess.h"
 #include "ADS1115.h"
 #include <Wire.h>
+#include <PID_v1.h> // https://playground.arduino.cc/Code/PIDLibrary/
 
 
 // Hardware definitions for i2c
@@ -39,8 +41,21 @@
 const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000;
 
+// PWM defines
+#define P_SSR_PWM 12
+
+const uint32_t iSsrFreq = 200; // Hz - PWM frequency
+const uint32_t iPwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
+const uint32_t iPwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
+
+//Define the aggressive and conservative Tuning Parameters
+// TODO: make Tuning Parameters editeable via webserver
+double fAggKp=4.0, fAggKi=0.2, fAggKd=1;
+double fConsKp=1, fConsKi=0.05, fConsKd=0.25;
+
+
 // Sensor variables
-float fTemp = 0;
+double fTemp = 0; // TODO -  need to use double for PID lib
 float fPressure = 0;
 int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
@@ -55,7 +70,10 @@ float arr1dMapConversionTemp[][2] =  {
                                         {0.21397, 0.0},
                                        };
 // PID controler output variable
-float fPidOut = 0;
+double fTarPwm = 0;
+double fTempTar = 90.0; // TODO for room temp
+double fTempError = 0; // used to check if we are close to the value
+
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -69,6 +87,11 @@ const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 // Initialize ADS1115 I2C connection
 TwoWire objI2cBus = TwoWire(0);
 ADS1115 objAds1115(&objI2cBus);
+
+//Specify the links and initial tuning parameters
+PID objPid(&fTemp, &fTarPwm, &fTempTar,  // IO
+           fConsKp, fConsKi, fConsKd, // parameter
+           DIRECT); // positive change in outpull will result in positive change in input
 
 // timer object for ISR
 // Short for Sensor Read Out and PID control
@@ -113,7 +136,7 @@ void IRAM_ATTR onTimerShort(){
         // Only change Status when idle to measurement running
         iStatusCtrl = MEASURE;
         // read out temperature sensor from ADS_1115
-        // fTemp = objAds1115.readPhysical();
+        // fTemp = (double) objAds1115.readPhysical();
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
@@ -181,14 +204,16 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   }
 
   return b_successful;
-}
+} // connectWiFi
 
 
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(115200);
   delay(500);
+  Serial.println("Starting setup.");
   
+  // Setup ADS1115 =========================================================================================================
   // Initialize I2c on defined pins with default adress
   if (!objAds1115.begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
     Serial.println("Failed to initialize I2C sensor connection, stop working.");
@@ -221,6 +246,8 @@ void setup(){
   objAds1115.setPhysicalConversion(arr1dMapConversionTemp, size_1d_map);
 
   objAds1115.printConfigReg();
+
+  // Setup Webserver =========================================================================================================
 
   // Initialize SPIFFS
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
@@ -311,7 +338,7 @@ void setup(){
   obj_meas_file.print("Measurement File created on ");
   obj_meas_file.println(char_timestamp);
   obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,Pressure,HeatOn,PumpOn");
+  obj_meas_file.println("Time,Temperature,Pressure,HeatOn,PumpOn,TarPwm");
   obj_meas_file.close();
 
   // Initialize Timer 
@@ -333,30 +360,54 @@ void setup(){
   timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
   // timerAlarmEnable(objTimerShort);
   timerAlarmEnable(objTimerLong);
-}
+
+  // Setup PID =========================================================================================================
+  // configure PWM functionalitites
+  ledcSetup(iPwmSsrChannel, iSsrFreq, iPwmSsrResolution);
+  
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(P_SSR_PWM, iPwmSsrChannel);
+
+  //turn the PID on
+  objPid.SetMode(AUTOMATIC);
+  objPid.SetOutputLimits(0, (1<<iPwmSsrResolution)-1);
+
+  
+
+}// Setup
 
 boolean readSensors(){
   // Read out Sensor values
     bool b_result = false;
-    fTemp = objAds1115.readPhysical();
+    fTemp = (double) objAds1115.readPhysical();
     fPressure = random(0,10);
     iHeatingStatus = 1;
     iPumpStatus = 1;
     b_result = true;
     return b_result;
-}
+} //readSensors
 
 bool controlHeating(){
   /** PID regulator function for controling heating device
    *
    */
   bool b_result = false;
+
+  fTemp = (double) objAds1115.readPhysical(); // TODO added here for minimal latency
+
+  fTempError = abs(fTempTar-fTemp); //distance away from setpoint
+  if(fTempError<10.0){  //we're close to setpoint, use conservative tuning parameters
+    objPid.SetTunings(fConsKp, fConsKi, fConsKd);}
+  else{//we're far from setpoint, use aggressive tuning parameters
+    objPid.SetTunings(fAggKp, fAggKi, fAggKd);}
+
+  objPid.Compute(); // calc output 
+  ledcWrite(iPwmSsrChannel, fTarPwm); // set the output
   
-  fPidOut = 99;
-  b_result = true;
+  b_result = true; // TODO ... maybe read if correct value was set?
   
   return b_result;
-}
+} // controlHeating
 
 void writeMeasFile(){
   /** Function to store the data in measurement file
@@ -364,10 +415,11 @@ void writeMeasFile(){
    */
 
   portENTER_CRITICAL_ISR(&objTimerMux);
-    float f_pressure_local = fPressure;
-    float f_temp_local = fTemp;
+    float f_pressure_local = fPressure; // TODO _loacl not needed?? already  snake_case?
+    float f_temp_local = (float) fTemp;
     int i_pump_status_local = iPumpStatus;
     int f_heating_status_local = iHeatingStatus;
+    float f_tar_pwm = (float) fTarPwm;
   portEXIT_CRITICAL_ISR(&objTimerMux);
 
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
@@ -381,14 +433,16 @@ void writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(i_pump_status_local);
     obj_meas_file.print(",");
-    obj_meas_file.println(f_heating_status_local);
+    obj_meas_file.print(f_heating_status_local);
+    obj_meas_file.print(",");
+    obj_meas_file.println(f_tar_pwm);
     obj_meas_file.close();
   } else {
     Serial.println("Data file size exceeded, delete it.");
     obj_meas_file.close();
     SPIFFS.remove(strMeasFilePath);
   }
-}
+}// writeMeasFile
 
 void loop(){
   switch (iStatusCtrl) {
@@ -423,4 +477,4 @@ void loop(){
       portEXIT_CRITICAL_ISR(&objTimerMux);
   }
     
-}
+}// loop
