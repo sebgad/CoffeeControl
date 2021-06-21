@@ -42,7 +42,7 @@ const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000;
 
 // PWM defines
-#define P_SSR_PWM 12
+#define P_SSR_PWM 21
 
 const uint32_t iSsrFreq = 200; // Hz - PWM frequency
 const uint32_t iPwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
@@ -61,19 +61,26 @@ int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
 
 // 2D Field for Temperature Value, 1dim:Voltage, 2dim: voltage in Temp. Note: 1dim must be ordered ascending
-float arr1dMapConversionTemp[][2] =  {
+/*float arr1dMapConversionTemp[][2] =  {
                                         {-0.11814, 130.0},
                                         {0.12388, 30.0},
                                         {0.13818, 25.0},
                                         {0.15285, 20.0},
                                         {0.18286, 10.0},
                                         {0.21397, 0.0},
-                                       };
+                                       };*/// 1300 ohm
+float arr1dMapConversionTemp[][2] =  {
+                                        {-0.11058, 130.0},
+                                        {0.13143, 30.0},
+                                        {0.14571, 25.0},
+                                        {0.16038, 20.0},
+                                        {0.19036, 10.0},
+                                        {0.22143, 0.0},
+                                       };/// 1310 ohm
 // PID controler output variable
 double fTarPwm = 0;
-double fTempTar = 90.0; // TODO for room temp
+double fTempTar = 35.0; // TODO for room temp
 double fTempError = 0; // used to check if we are close to the value
-
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -125,6 +132,10 @@ const unsigned long iInterruptLongIntervalMicros = 450000; //microseconds
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
+// debugging ===========================================================================================================
+float fTempVoltage=0;
+
+// timers ==============================================================================================================
 void IRAM_ATTR onTimerShort(){
   /** Interrupt Service Routine for sensor read outs
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
@@ -331,6 +342,7 @@ void setup(){
 
   // generate header in file
   Serial.print("Create File ");
+  Serial.print(WiFi.localIP());
   Serial.println(strMeasFilePath);
   
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
@@ -338,7 +350,7 @@ void setup(){
   obj_meas_file.print("Measurement File created on ");
   obj_meas_file.println(char_timestamp);
   obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,Pressure,HeatOn,PumpOn,TarPwm");
+  obj_meas_file.println("Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm");
   obj_meas_file.close();
 
   // Initialize Timer 
@@ -369,8 +381,8 @@ void setup(){
   ledcAttachPin(P_SSR_PWM, iPwmSsrChannel);
 
   //turn the PID on
-  objPid.SetMode(AUTOMATIC);
   objPid.SetOutputLimits(0, (1<<iPwmSsrResolution)-1);
+  objPid.SetMode(AUTOMATIC);
 
   
 
@@ -395,6 +407,8 @@ bool controlHeating(){
 
   fTemp = (double) objAds1115.readPhysical(); // TODO added here for minimal latency
 
+  fTempVoltage = objAds1115.readVoltage();
+
   fTempError = abs(fTempTar-fTemp); //distance away from setpoint
   if(fTempError<10.0){  //we're close to setpoint, use conservative tuning parameters
     objPid.SetTunings(fConsKp, fConsKi, fConsKd);}
@@ -417,6 +431,7 @@ void writeMeasFile(){
   portENTER_CRITICAL_ISR(&objTimerMux);
     float f_pressure_local = fPressure; // TODO _loacl not needed?? already  snake_case?
     float f_temp_local = (float) fTemp;
+    float f_temp_voltage = fTempVoltage;
     int i_pump_status_local = iPumpStatus;
     int f_heating_status_local = iHeatingStatus;
     float f_tar_pwm = (float) fTarPwm;
@@ -429,11 +444,13 @@ void writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_pressure_local);
+    obj_meas_file.print(f_temp_voltage*100.0);
     obj_meas_file.print(",");
-    obj_meas_file.print(i_pump_status_local);
+    //obj_meas_file.print(f_pressure_local);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_heating_status_local);
+    //obj_meas_file.print(i_pump_status_local);
+    obj_meas_file.print(",");
+    //obj_meas_file.print(f_heating_status_local);
     obj_meas_file.print(",");
     obj_meas_file.println(f_tar_pwm);
     obj_meas_file.close();
