@@ -136,7 +136,7 @@ AsyncWebServer server(80);
 float fTempVoltage=0;
 
 // timers ==============================================================================================================
-void IRAM_ATTR onTimerShort(){
+void IRAM_ATTR onAlertRdy(){
   /** Interrupt Service Routine for sensor read outs
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
   **/
@@ -356,21 +356,18 @@ void setup(){
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
   // true: increasing counter
-  objTimerShort = timerBegin(0, 80, true);
   objTimerLong = timerBegin(1, 80, true);
 
   // Attach ISR function to timer
-  // timerAttachInterrupt(objTimerShort, &onTimerShort, true);
+  // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
-  attachInterrupt(CONV_RDY_PIN, &onTimerShort, HIGH);
+  attachInterrupt(CONV_RDY_PIN, &onAlertRdy, HIGH);
   
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
-  // timerAlarmWrite(objTimerShort, iInterruptShortIntervalMicros, true);
   timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
-  // timerAlarmEnable(objTimerShort);
   timerAlarmEnable(objTimerLong);
 
   // Setup PID =========================================================================================================
@@ -405,7 +402,9 @@ bool controlHeating(){
    */
   bool b_result = false;
 
-  fTemp = (double) objAds1115.readPhysical(); // TODO added here for minimal latency
+  //TODO S: reading physical value from the register of ADS1115 is not in relation with the conversion of the analog temperature signal.
+  //        it will actually increase the latency, since i2c communication also take time. Recommend it to remove it, if it is not necessary for debugging reasons. 
+  fTemp = (double) objAds1115.readPhysical(); // TODO added here for minimal latency 
 
   fTempVoltage = objAds1115.readVoltage();
 
@@ -420,8 +419,9 @@ bool controlHeating(){
   
   b_result = true; // TODO ... maybe read if correct value was set?
   
-  return b_result;
-} // controlHeating
+  return b_result; // TODO S: result of objPid.Compute() is required, otherwise the timing will mess up, because in the loop() it will otherwise only be called once
+                   //         Because it is internally also checking the timing difference, it can totally mess up, and won't do anything.
+} // controlHeating TODO S:?
 
 void writeMeasFile(){
   /** Function to store the data in measurement file
@@ -429,7 +429,7 @@ void writeMeasFile(){
    */
 
   portENTER_CRITICAL_ISR(&objTimerMux);
-    float f_pressure_local = fPressure; // TODO _loacl not needed?? already  snake_case?
+    float f_pressure = fPressure;
     float f_temp_local = (float) fTemp;
     float f_temp_voltage = fTempVoltage;
     int i_pump_status_local = iPumpStatus;
@@ -444,9 +444,9 @@ void writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_voltage*100.0);
+    obj_meas_file.print(f_temp_voltage*100.0); // TODO S: you can also give a number as second parameter in Serial.print() for rounding decimal
     obj_meas_file.print(",");
-    //obj_meas_file.print(f_pressure_local);
+    //obj_meas_file.print(f_pressure);
     obj_meas_file.print(",");
     //obj_meas_file.print(i_pump_status_local);
     obj_meas_file.print(",");
@@ -494,4 +494,4 @@ void loop(){
       portEXIT_CRITICAL_ISR(&objTimerMux);
   }
     
-}// loop
+}// loop TODO S: ?
