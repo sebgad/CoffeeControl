@@ -24,6 +24,7 @@
 #include <SPIFFS.h>
 #include <time.h>
 #include "WifiAccess.h"
+#include "Pt1000.h"
 #include "ADS1115.h"
 #include <Wire.h>
 #include <PID_v1.h> // https://playground.arduino.cc/Code/PIDLibrary/
@@ -61,23 +62,6 @@ float fPressure = 0;
 int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
 
-// 2D Field for Temperature Value, 1dim:Voltage, 2dim: voltage in Temp. Note: 1dim must be ordered ascending
-/*float arr1dMapConversionTemp[][2] =  {
-                                        {-0.11814, 130.0},
-                                        {0.12388, 30.0},
-                                        {0.13818, 25.0},
-                                        {0.15285, 20.0},
-                                        {0.18286, 10.0},
-                                        {0.21397, 0.0},
-                                       };*/// 1300 ohm
-float arr1dMapConversionTemp[][2] =  {
-                                        {-0.11058, 130.0},
-                                        {0.13143, 30.0},
-                                        {0.14571, 25.0},
-                                        {0.16038, 20.0},
-                                        {0.19036, 10.0},
-                                        {0.22143, 0.0},
-                                       };/// 1310 ohm
 // PID controler output variable
 double fTarPwm = 0;
 double fTempTar = 35.0; // TODO for room temp
@@ -252,10 +236,10 @@ void setup(){
   objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
   // regression 1d curve between 80C and 120C
-  size_t size_1d_map = sizeof(arr1dMapConversionTemp) / sizeof(arr1dMapConversionTemp[0]);
+  size_t size_1d_map = sizeof(arrPt1000Conv) / sizeof(arrPt1000Conv[0]);
   Serial.print("Array size of Conversion Table is: ");
   Serial.println(size_1d_map);
-  objAds1115.setPhysicalConversion(arr1dMapConversionTemp, size_1d_map);
+  objAds1115.setPhysicalConversion(arrPt1000Conv, size_1d_map);
 
   objAds1115.printConfigReg();
 

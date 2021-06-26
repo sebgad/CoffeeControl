@@ -526,7 +526,7 @@ void ADS1115::setPhysicalConversion(float f_gradient, float f_offset) {
 
 }
 
-void ADS1115::setPhysicalConversion(float arr_conv_table[][2], size_t i_size_conv) {
+void ADS1115::setPhysicalConversion(const float arr_conv_table[][2], size_t i_size_conv) {
   /**
    * set factors for conversion from voltage to physical value
    * @param arr_conv_table: table for conversion, 1st dim is x value, 2nd dim is y value
