@@ -431,7 +431,7 @@ void writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
     obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_voltage*100.0); // TODO S: you can also give a number as second parameter in Serial.print() for rounding decimal
+    obj_meas_file.print(f_temp_voltage, 5);
     obj_meas_file.print(",");
     //obj_meas_file.print(f_pressure);
     obj_meas_file.print(",");
