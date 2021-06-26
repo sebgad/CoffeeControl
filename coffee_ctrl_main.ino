@@ -40,6 +40,7 @@
 
 const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000;
+unsigned long iTimeStart = 0;
 
 // PWM defines
 #define P_SSR_PWM 21
@@ -369,6 +370,7 @@ void setup(){
   // true: Alarm will be reseted automatically
   timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
   timerAlarmEnable(objTimerLong);
+  iTimeStart = millis();
 
   // Setup PID =========================================================================================================
   // configure PWM functionalitites
@@ -439,8 +441,8 @@ void writeMeasFile(){
 
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
   if (obj_meas_file.size() < iMaxBytes) {
-    unsigned long i_time = millis();
-    obj_meas_file.print(i_time);
+    float f_time = (float)(millis() - iTimeStart) / 1000.0;
+    obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
     obj_meas_file.print(",");
