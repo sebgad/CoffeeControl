@@ -236,10 +236,11 @@ void setup(){
   objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
   // regression 1d curve between 80C and 120C
-  size_t size_1d_map = sizeof(arrPt1000Conv) / sizeof(arrPt1000Conv[0]);
-  Serial.print("Array size of Conversion Table is: ");
-  Serial.println(size_1d_map);
-  objAds1115.setPhysicalConversion(arrPt1000Conv, size_1d_map);
+  // size_t size_1d_map = sizeof(arrPt1000Conv) / sizeof(arrPt1000Conv[0]);
+  // Serial.print("Array size of Conversion Table is: ");
+  // Serial.println(size_1d_map);
+  // objAds1115.setPhysicalConversion(arrPt1000Conv, size_1d_map);
+  objAds1115.setPhysicalConversion(fPt1000CoeffX2, fPt1000CoeffX1, fPt1000CoeffX0);
 
   objAds1115.printConfigReg();
 

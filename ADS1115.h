@@ -140,6 +140,7 @@ class ADS1115
     float readPhysical(void);
     void printConfigReg(void);
     void setPhysicalConversion(float, float);
+    void setPhysicalConversion(const float, const float, const float);
     void setPhysicalConversion(const float[][2], size_t);
         
   private:

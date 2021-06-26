@@ -513,17 +513,35 @@ float ADS1115::readVoltage() {
 }
 
 
-void ADS1115::setPhysicalConversion(float f_gradient, float f_offset) {
+void ADS1115::setPhysicalConversion(float f_x_1, float f_0) {
   /**
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
   */ 
-  initConvTable(1);
-  _ptrConvTable[0][0] = NULL;
-  _ptrConvTable[0][1] = f_gradient;
-  _ptrConvTable[0][2] = f_offset;
+  _iSizeConvTable = 1;
+  _ptrConvTable = new float*[1];
+  _ptrConvTable[0]= new float[3];
+  
+  _ptrConvTable[0][0] = 0.0;
+  _ptrConvTable[0][1] = f_x_1;
+  _ptrConvTable[0][2] = f_0;
 
+}
+
+void ADS1115::setPhysicalConversion(const float f_x_2, const float f_x_1, const float f_0) {
+  /**
+   * set factors for conversion from voltage to physical value
+   * @param f_gradient: gradient of the conversion function
+   * @param f_offset: (y-)Offset of the conversion function
+  */ 
+  _iSizeConvTable = 1;
+  _ptrConvTable = new float*[1];
+  _ptrConvTable[0]= new float[3];
+
+  _ptrConvTable[0][0] = f_x_2;
+  _ptrConvTable[0][1] = f_x_1;
+  _ptrConvTable[0][2] = f_0;
 }
 
 void ADS1115::setPhysicalConversion(const float arr_conv_table[][2], size_t i_size_conv) {
@@ -565,25 +583,28 @@ float ADS1115::readPhysical(void){
   */
   
   float f_voltage = readVoltage();
+  float f_physical;
   int i_index = 0;
 
-  if (_ptrConvTable[0][0] == NULL) {
-    // only one gradient is given
-    i_index = 0;
-  
-  } else if (f_voltage < _ptrConvTable[0][0]) {
-    // left outside
-
+  if (_iSizeConvTable==1){
+    // polynom or linear regression
+    f_physical = f_voltage * f_voltage * _ptrConvTable[0][0] + f_voltage * _ptrConvTable[0][1] + _ptrConvTable[0][2];
   } else {
-    // array is given
-    for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {    
-      if( (f_voltage >= _ptrConvTable[i_idx-1][0]) && (f_voltage < _ptrConvTable[i_idx][0]) ) {
-        i_index = i_idx-1;
-        break;
-      } 
+  
+    if (f_voltage < _ptrConvTable[0][0]) {
+      // left outside
+
+    } else {
+      // lookup table is given
+      for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {    
+        if( (f_voltage >= _ptrConvTable[i_idx-1][0]) && (f_voltage < _ptrConvTable[i_idx][0]) ) {
+          f_physical = f_voltage * _ptrConvTable[i_idx-1][1] + _ptrConvTable[i_idx-1][2];
+          break;
+        } 
+      }
     }
   }
-  return f_voltage * _ptrConvTable[i_index][1] + _ptrConvTable[i_index][2];
+  return f_physical;
 }
 
 
