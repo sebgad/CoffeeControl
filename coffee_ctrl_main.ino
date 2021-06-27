@@ -235,12 +235,35 @@ void setup(){
   // assert after one conversion
   objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
-  // regression 1d curve between 80C and 120C
-  // size_t size_1d_map = sizeof(arrPt1000Conv) / sizeof(arrPt1000Conv[0]);
-  // Serial.print("Array size of Conversion Table is: ");
-  // Serial.println(size_1d_map);
-  // objAds1115.setPhysicalConversion(arrPt1000Conv, size_1d_map);
-  objAds1115.setPhysicalConversion(fPt1000CoeffX2, fPt1000CoeffX1, fPt1000CoeffX0);
+  switch (Pt1000_CONV_METHOD)
+  {
+  case Pt1000_CONV_LINEAR:
+    objAds1115.setPhysicalConversion(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
+    Serial.print("Applying linear regression function for Pt1000 conversion: ");
+    Serial.print(fPt1000LinCoeffX1, 4);
+    Serial.print(" * Umess + ");
+    Serial.println(fPt1000LinCoeffX0, 4);
+    break;
+  case Pt1000_CONV_SQUARE:
+    objAds1115.setPhysicalConversion(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
+    Serial.print("Applying square regression function for Pt1000 conversion: ");
+    Serial.print(fPt1000SquareCoeffX2, 4);
+    Serial.print(" * Umess² + ");
+    Serial.print(fPt1000SquareCoeffX1, 4);
+    Serial.print(" * Umess + ");
+    Serial.println(fPt1000SquareCoeffX0);
+    break;
+  case Pt1000_CONV_LOOK_UP_TABLE:
+    const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
+    objAds1115.setPhysicalConversion(arrPt1000LookUpTbl, size_1d_map);
+    Serial.println("Applying Lookuptable for Pt1000 conversion:");
+    for(int i_row=0; i_row<size_1d_map; i_row++){
+      Serial.print(arrPt1000LookUpTbl[i_row][0], 4);
+      Serial.print("   ");
+      Serial.println(arrPt1000LookUpTbl[i_row][1], 4);
+    }
+    break;
+  }
 
   objAds1115.printConfigReg();
 
