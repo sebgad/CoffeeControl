@@ -15,53 +15,59 @@
    google.charts.setOnLoadCallback(drawChart);
 
   function drawChart() {
+    var bPress = false;
+    var bTemp = true;
+
+    if (bPress){
+      var dataPress= google.visualization.arrayToDataTable([
+        ['Label', 'Value'],
+        ['Pressure', 0.0],
+      ]);
+
+      var optionsPressure = {
+        width: 400, height: 120,
+        greenFrom: 8.5, greenTo: 9,
+        redFrom: 9, redTo: 11,
+        yellowFrom:0, yellowTo: 8.5,
+        minorTicks: 10,
+        min:0, max:11,
+      };
+      
+      var formatterPress = new google.visualization.NumberFormat({
+        suffix: 'bar',
+        fractionDigits: 1
+      });
+      
+      formatterPress.format(dataPress, 1);
+      var chartPress = new google.visualization.Gauge(document.getElementById('gauge_Press'));
+      chartPress.draw(dataPress, optionsPressure);
+    }
+
+    if (bTemp){
       var dataTemp = google.visualization.arrayToDataTable([
-       ['Label', 'Value'],
-       ['Temp', 0.0],
-     ]);
+        ['Label', 'Value'],
+        ['Temp', 0.0],
+      ]);
+      
+      var optionsTemp = {
+        width: 400, height: 120,
+        greenFrom: 90, greenTo: 95,
+        redFrom: 95, redTo: 120,
+        yellowFrom:0, yellowTo: 90,
+        minorTicks: 10
+      };
+      
+      var formatterTemp = new google.visualization.NumberFormat({
+        suffix: '°C',
+        fractionDigits: 1,
+      });
+      formatterTemp.format(dataTemp, 1); 
+      
+      var chartTemp = new google.visualization.Gauge(document.getElementById('gauge_Temp'));
+      chartTemp.draw(dataTemp, optionsTemp);
+    }
 
-     var dataPress= google.visualization.arrayToDataTable([
-       ['Label', 'Value'],
-       ['Pressure', 0.0],
-     ]);
-
-     var optionsTemp = {
-       width: 400, height: 120,
-       greenFrom: 90, greenTo: 95,
-       redFrom: 95, redTo: 120,
-       yellowFrom:0, yellowTo: 90,
-       minorTicks: 10
-     };
-
-     var optionsPressure = {
-       width: 400, height: 120,
-       greenFrom: 8.5, greenTo: 9,
-       redFrom: 9, redTo: 11,
-       yellowFrom:0, yellowTo: 8.5,
-       minorTicks: 10,
-       min:0, max:11,
-     };
-
-     var formatterPress = new google.visualization.NumberFormat({
-       suffix: 'bar',
-       fractionDigits: 1
-       });
-
-     formatterPress.format(dataPress, 1);
-
-     var formatterTemp = new google.visualization.NumberFormat({
-       suffix: '°C',
-       fractionDigits: 1,
-       });
-       formatterTemp.format(dataTemp, 1); 
-
-     var chartTemp = new google.visualization.Gauge(document.getElementById('gauge_Temp'));
-     var chartPress = new google.visualization.Gauge(document.getElementById('gauge_Press'));
-     
-     chartTemp.draw(dataTemp, optionsTemp);
-     chartPress.draw(dataPress, optionsPressure);
-
-     setInterval(function() {
+    setInterval(function() {
       var xhr=new XMLHttpRequest();
       xhr.open("GET","data.csv");
       var data;
@@ -71,13 +77,16 @@
         var temp = parseFloat(data[data.length-2].split(",")[1]);
         var press  = parseFloat(data[data.length-2].split(",")[2]);
         
-        dataTemp.setValue(0, 1, temp);
-        formatterTemp.format(dataTemp, 1);
-        chartTemp.draw(dataTemp, optionsTemp);
-        
-        dataPress.setValue(0, 1, press, 2);
-        formatterPress.format(dataPress, 1);
-        chartPress.draw(dataPress, optionsPressure);
+        if (bTemp){
+          dataTemp.setValue(0, 1, temp);
+          formatterTemp.format(dataTemp, 1);
+          chartTemp.draw(dataTemp, optionsTemp);
+        }
+        if (bPress){
+          dataPress.setValue(0, 1, press, 2);
+          formatterPress.format(dataPress, 1);
+          chartPress.draw(dataPress, optionsPressure);
+        }
       }
       xhr.send();
     }, 3000);

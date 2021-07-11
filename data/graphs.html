@@ -5,72 +5,106 @@
   <title>Silvia Control</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
+  
+  <!-- include google charts libraries  -->
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-  <script type="text/javascript" src="table.js"></script>
+  
+  <!-- Java script for graphs.html -->
   <script type="text/javascript">
-    google.charts.load('current', {'packages':['line', 'corechart']});
-    google.charts.setOnLoadCallback(drawChart);
+
+  // load core packages from google charts
+  google.charts.load('current', {'packages':['line', 'corechart']});
+  // define callback to make sure that function is called, when website is completely loaded
+  google.charts.setOnLoadCallback(drawChart);
+
+  function drawChart(){
+    // define Line chart and assign it to the div element in html
+    var obj_chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+    // define google data table object
+    var obj_data_table = new google.visualization.DataTable();
+    // add columns to google data table object
+    obj_data_table.addColumn('number', "Time");
+    obj_data_table.addColumn('number', "Temperature");
+    obj_data_table.addColumn('number', "TargetPWM");
+  
+    // chart display options
+    var dct_chart_options = {
+      title: 'Temperature and Target PWM',
+      // Gives each series an axis that matches the vAxes number below.
+      series: {
+        0: {targetAxisIndex: 0},
+        1: {targetAxisIndex: 1}
+      },
+      vAxes: {
+        // Adds settings for each vertical axis.
+        0: {title: 'Temperature (Celsius)', 
+            viewWindow: { max: 170, min: 20},
+            ticks:[20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170] },
+        1: {title: 'Target PWM ([0-255])',
+            viewWindow: { max: 255, min: 0 },
+            ticks:[0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255]},
+      },
+      legend: {position: 'top'},
+      hAxis: {
+        title: 'Time (s)',
+      },
+    };
     
-    function drawChart() {
-      var chartDiv = document.getElementById('chart_div');
-      var classicChart = new google.visualization.LineChart(chartDiv);
+    // initialize http request object for asynchronous file request
+    var obj_http_request=new XMLHttpRequest();
+    // request data.csv from http server
+    obj_http_request.open("GET","data.csv");
+    
       
-      var obj_data_table = new google.visualization.DataTable();
-      obj_data_table.addColumn('number', "Time");
-      obj_data_table.addColumn('number', "Temperature");
-      obj_data_table.addColumn('number', "TargetPWM");
+    // define function if requested is fully loaded
+    obj_http_request.onload= function() {
+      // assign response text from request to variable
+      var str_buf = obj_http_request.responseText;
+      // split string request to list (on line breaks)
+      lst_data = str_buf.split(/\r?\n/g);
       
-      var xhr=new XMLHttpRequest();
-      xhr.open("GET","data.csv");
-      xhr.onload= function() {
-        var i_row_start = 3;
-        
-        var str_buf = xhr.responseText;
-        lst_data = str_buf.split(/\r?\n/g);
-        
-        for (let i_row = i_row_start; i_row<lst_data.length; i_row++){
-          var lst_line = lst_data[i_row].split(",")
-          var f_time = parseFloat(lst_line[0]);
-          var f_temp  = parseFloat(lst_line[1]);
-          var f_pwm  = parseFloat(lst_line[6]);
-          obj_data_table.addRow([f_time, f_temp, f_pwm]);
-        }
-        
-        var classicOptions = {
-          title: 'Temperature and Target PWM',
-          // Gives each series an axis that matches the vAxes number below.
-          series: {
-            0: {targetAxisIndex: 0},
-            1: {targetAxisIndex: 1}
-          },
-          vAxes: {
-            // Adds titles to each axis.
-            0: {title: 'Temperature (Celsius)', 
-            viewWindow: { max: 150, min: 20 }},
-            1: {title: 'Target PWM ([0-255])',
-            viewWindow: { max: 255, min: 0 }},
-          },
-          legend: {position: 'bottom'},
-          hAxis: {
-            // ticks: []
-            title: 'Time (s)',
-          },
-        };
-        classicChart.draw(obj_data_table, classicOptions);
+      // iterate over rows in data, only add new rows (i_row_start is changing)
+      for (let i_row = 3; i_row<lst_data.length; i_row++){
+        var lst_line = lst_data[i_row].split(",")
+        var f_time = parseFloat(lst_line[0]);
+        var f_temp  = parseFloat(lst_line[1]);
+        var f_pwm  = parseFloat(lst_line[6]);
+        obj_data_table.addRow([f_time, f_temp, f_pwm]);
       }
-      xhr.send();
+
+      // draw classic chart with new data
+      obj_chart.draw(obj_data_table, dct_chart_options);
+    }
+      // start http request
+      obj_http_request.send();
     }
 
+    // call function draw chart in given interval [ms]
     setInterval(drawChart, 3000);
-</script>
-
+  </script>
 </head>
 <body>
+  <style>
+    p {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+    }
 
+    p > span {
+      display: inline-block;
+      width: 20px;
+    }
+
+    p > span:first-child {
+      display: inline-block;
+      width: 100px;
+    }
+
+  </style>
 <div class="header">
   <h1>Silvia Control</h1>
-  <p>A simple <b>web interface</b> to control Rancilio Silvia espresso machine.</p>
+  A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
 </div>
 
 <div class="navbar">
@@ -80,14 +114,15 @@
   <a href="#" class="right">About</a>
 </div>
 
-<div class="row">
-  <div class="main">
-    <h2>Control Board</h2>
-    <h3>Status</h3>
-    <div id="table_div"></div>
-    <h3>Sensor Graphs</h3>
-    <div id="chart_div", style="width:50%;height:500px"></div>
-  </div>
+<div class="main">
+  <h2>Control Board</h2>
+  <h3>Status</h3>
+  <p>
+    <span>Heating On</span>
+    <span class="indicator on"></span>
+  </p>
+  <h3>Sensor Graphs</h3>
+  <div id="chart_div", style="width:50%;height:500px"></div>
 </div>
 
 <div class="footer">
