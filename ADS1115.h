@@ -135,13 +135,13 @@ class ADS1115
     void setPinRdyMode(bool, byte);
     bool getPinRdyMode(void);
     bool conversionReady(void);
-    int readConversion(void);
-    float readVoltage(void);
-    float readPhysical(void);
+    void readConversionRegister(void);
+    float getVoltVal(void);
+    float getPhysVal(void);
     void printConfigReg(void);
-    void setPhysicalConversion(float, float);
-    void setPhysicalConversion(const float, const float, const float);
-    void setPhysicalConversion(const float[][2], size_t);
+    void setPhysConv(const float, const float);
+    void setPhysConv(const float, const float, const float);
+    void setPhysConv(const float[][2], size_t);
         
   private:
     int _iSdaPin;
@@ -155,6 +155,7 @@ class ADS1115
     uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
+    int16_t iConversionValue;
     int16_t read16(byte);
     void write16(byte, uint16_t);
     void initConvTable(size_t);

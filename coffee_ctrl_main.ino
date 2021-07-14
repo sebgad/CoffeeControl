@@ -4,10 +4,6 @@
  * A script to control an espresso machine and display measurement values on a webserver of an ESP32
  * 
  * TODOS:
- *  - Create different interrupts for operating the PID regulator and other tasks
- *      -  90ms for sensor measurement aquisition
- *      - 100ms task for PID controler
- *      - 450ms task for storing data to csv file
  *  - Implement PID regulator
  *      - temperatur as input, SSR control as output
  *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
@@ -39,12 +35,12 @@
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
 
+// PWM defines
+#define P_SSR_PWM 21
+
 const char* strMeasFilePath = "/data.csv";
 const int iMaxBytes = 1000000;
 unsigned long iTimeStart = 0;
-
-// PWM defines
-#define P_SSR_PWM 21
 
 const uint32_t iSsrFreq = 200; // Hz - PWM frequency
 const uint32_t iPwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
@@ -54,7 +50,6 @@ const uint32_t iPwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (
 // TODO: make Tuning Parameters editeable via webserver
 double fAggKp=4.0, fAggKi=0.2, fAggKd=1;
 double fConsKp=1, fConsKi=0.05, fConsKd=0.25;
-
 
 // Sensor variables
 double fTemp = 0; // TODO -  need to use double for PID lib
@@ -86,9 +81,7 @@ PID objPid(&fTemp, &fTarPwm, &fTempTar,  // IO
            DIRECT); // positive change in outpull will result in positive change in input
 
 // timer object for ISR
-// Short for Sensor Read Out and PID control
 // Long for Measurement Store to csv
-hw_timer_t * objTimerShort = NULL;
 hw_timer_t * objTimerLong = NULL;
 
 // Status for function call timing, used in ISR
@@ -111,7 +104,6 @@ enum eStatusMeas {
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Task intervals in microseconds
-const unsigned long iInterruptShortIntervalMicros = 100000; //microseconds
 const unsigned long iInterruptLongIntervalMicros = 450000; //microseconds
 
 // Create AsyncWebServer object on port 80
@@ -132,7 +124,7 @@ void IRAM_ATTR onAlertRdy(){
         // Only change Status when idle to measurement running
         iStatusCtrl = MEASURE;
         // read out temperature sensor from ADS_1115
-        // fTemp = (double) objAds1115.readPhysical();
+        // fTemp = (double) objAds1115.getPhysVal();
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
@@ -238,14 +230,14 @@ void setup(){
   switch (Pt1000_CONV_METHOD)
   {
   case Pt1000_CONV_LINEAR:
-    objAds1115.setPhysicalConversion(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
+    objAds1115.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
     Serial.print("Applying linear regression function for Pt1000 conversion: ");
     Serial.print(fPt1000LinCoeffX1, 4);
     Serial.print(" * Umess + ");
     Serial.println(fPt1000LinCoeffX0, 4);
     break;
   case Pt1000_CONV_SQUARE:
-    objAds1115.setPhysicalConversion(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
+    objAds1115.setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
     Serial.print("Applying square regression function for Pt1000 conversion: ");
     Serial.print(fPt1000SquareCoeffX2, 4);
     Serial.print(" * Umess² + ");
@@ -255,7 +247,7 @@ void setup(){
     break;
   case Pt1000_CONV_LOOK_UP_TABLE:
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
-    objAds1115.setPhysicalConversion(arrPt1000LookUpTbl, size_1d_map);
+    objAds1115.setPhysConv(arrPt1000LookUpTbl, size_1d_map);
     Serial.println("Applying Lookuptable for Pt1000 conversion:");
     for(int i_row=0; i_row<size_1d_map; i_row++){
       Serial.print(arrPt1000LookUpTbl[i_row][0], 4);
@@ -371,7 +363,7 @@ void setup(){
   // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
-  attachInterrupt(CONV_RDY_PIN, &onAlertRdy, HIGH);
+  attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
   
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
@@ -391,19 +383,26 @@ void setup(){
   objPid.SetOutputLimits(0, (1<<iPwmSsrResolution)-1);
   objPid.SetMode(AUTOMATIC);
 
-  
-
 }// Setup
 
 boolean readSensors(){
   // Read out Sensor values
-    bool b_result = false;
-    fTemp = (double) objAds1115.readPhysical();
-    fPressure = random(0,10);
+  bool b_result = false;
+  objAds1115.readConversionRegister();
+  fTemp = (double) objAds1115.getPhysVal();
+  fTempVoltage = objAds1115.getVoltVal();
+  fPressure = random(0,10);
+  
+  // TODO S.: Logic for Heating Status indicator needs to be added
+  if (fTarPwm >= 120) {
     iHeatingStatus = 1;
-    iPumpStatus = 1;
-    b_result = true;
-    return b_result;
+  } else {
+    iHeatingStatus = 0;
+  }
+
+  iPumpStatus = 0;
+  b_result = true;
+  return b_result;
 } //readSensors
 
 bool controlHeating(){
@@ -414,9 +413,10 @@ bool controlHeating(){
 
   //TODO S: reading physical value from the register of ADS1115 is not in relation with the conversion of the analog temperature signal.
   //        it will actually increase the latency, since i2c communication also take time. Recommend it to remove it, if it is not necessary for debugging reasons. 
-  fTemp = (double) objAds1115.readPhysical(); // TODO added here for minimal latency 
+  // TODO S: can be removed, switch case changed to two independent if conditions that controlHeating will be called immediately after sensor read out
+  fTemp = (double) objAds1115.getPhysVal(); // TODO added here for minimal latency 
 
-  fTempVoltage = objAds1115.readVoltage();
+  fTempVoltage = objAds1115.getVoltVal();
 
   fTempError = abs(fTempTar-fTemp); //distance away from setpoint
   if(fTempError<10.0){  //we're close to setpoint, use conservative tuning parameters
@@ -431,7 +431,7 @@ bool controlHeating(){
   
   return b_result; // TODO S: result of objPid.Compute() is required, otherwise the timing will mess up, because in the loop() it will otherwise only be called once
                    //         Because it is internally also checking the timing difference, it can totally mess up, and won't do anything.
-} // controlHeating TODO S:?
+} // controlHeating
 
 void writeMeasFile(){
   /** Function to store the data in measurement file
@@ -446,7 +446,7 @@ void writeMeasFile(){
     int f_heating_status_local = iHeatingStatus;
     float f_tar_pwm = (float) fTarPwm;
   portEXIT_CRITICAL_ISR(&objTimerMux);
-
+  
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
   if (obj_meas_file.size() < iMaxBytes) {
     float f_time = (float)(millis() - iTimeStart) / 1000.0;
@@ -456,11 +456,11 @@ void writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_voltage, 5);
     obj_meas_file.print(",");
-    //obj_meas_file.print(f_pressure);
+    obj_meas_file.print(f_pressure);
     obj_meas_file.print(",");
-    //obj_meas_file.print(i_pump_status_local);
+    obj_meas_file.print(f_heating_status_local);
     obj_meas_file.print(",");
-    //obj_meas_file.print(f_heating_status_local);
+    obj_meas_file.print(i_pump_status_local);
     obj_meas_file.print(",");
     obj_meas_file.println(f_tar_pwm);
     obj_meas_file.close();
@@ -472,36 +472,35 @@ void writeMeasFile(){
 }// writeMeasFile
 
 void loop(){
-  switch (iStatusCtrl) {
-    // Call sensor read out function or control function
-    case MEASURE:
-      bool b_result_sensor;
-      b_result_sensor = readSensors();
+  if (iStatusCtrl == MEASURE) {
+    // Call sensor read out function
+    bool b_result_sensor;
+    b_result_sensor = readSensors();
 
-      if (b_result_sensor == true) {
-        portENTER_CRITICAL_ISR(&objTimerMux);
-          iStatusCtrl = CONTROL;
-        portEXIT_CRITICAL_ISR(&objTimerMux);
-      }
-      break;
+    if (b_result_sensor == true) {
+      portENTER_CRITICAL_ISR(&objTimerMux);
+        iStatusCtrl = CONTROL;
+      portEXIT_CRITICAL_ISR(&objTimerMux);
+    }
+  }
     
-    case CONTROL:
-      bool b_result_ctrl_heating;
-      b_result_ctrl_heating = controlHeating();
-      if (b_result_ctrl_heating == true) {
-        portENTER_CRITICAL_ISR(&objTimerMux);
-          iStatusCtrl = IDLE;
-        portEXIT_CRITICAL_ISR(&objTimerMux);
+  if (iStatusCtrl == CONTROL) {
+    // Call heating control function
+    bool b_result_ctrl_heating;
+    b_result_ctrl_heating = controlHeating();
+    
+    if (b_result_ctrl_heating == true) {
+      portENTER_CRITICAL_ISR(&objTimerMux);
+        iStatusCtrl = IDLE;
+      portEXIT_CRITICAL_ISR(&objTimerMux);
       }
-      break;
   }
  
-  switch (iStatusMeas) {
-    case STORE_MEAS:
+  if (iStatusMeas==STORE_MEAS) {
       writeMeasFile();
       portENTER_CRITICAL_ISR(&objTimerMux);
         iStatusMeas = IDLE_MEAS;
       portEXIT_CRITICAL_ISR(&objTimerMux);
   }
     
-}// loop TODO S: ?
+}// loop

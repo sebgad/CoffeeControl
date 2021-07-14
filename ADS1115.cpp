@@ -491,37 +491,35 @@ bool ADS1115::readBit(uint16_t i_register, int i_pos){
   return ((i_register & (1<<i_pos)) >> i_pos);
 }
 
-int ADS1115::readConversion() {
+void ADS1115::readConversionRegister() {
   /**
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
-   * @return int in range (0...2^16-1)
   */ 
-  return read16(ADS1115_CONVERSION_REG);
+  iConversionValue = read16(ADS1115_CONVERSION_REG);
 }
 
 
-float ADS1115::readVoltage() {
+float ADS1115::getVoltVal() {
   /**
-   * read voltage level, based on the adc value of the ADS1115
+   * returns voltage level, based on the adc value of the ADS1115. 
+   * NOTE: readConversionRegister() must be called before to get adc value from ADS1115 register over I2C
    * @return measured voltage
   */ 
   int16_t meas;
   float meas_f;
-  meas = read16(ADS1115_CONVERSION_REG);
+  meas = iConversionValue;
   meas_f = meas * bitNumbering;  
   return meas_f;
 }
 
 
-void ADS1115::setPhysicalConversion(float f_x_1, float f_0) {
+void ADS1115::setPhysConv(const float f_x_1, const float f_0) {
   /**
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
   */ 
-  _iSizeConvTable = 1;
-  _ptrConvTable = new float*[1];
-  _ptrConvTable[0]= new float[3];
+  initConvTable(1);
   
   _ptrConvTable[0][0] = 0.0;
   _ptrConvTable[0][1] = f_x_1;
@@ -529,22 +527,20 @@ void ADS1115::setPhysicalConversion(float f_x_1, float f_0) {
 
 }
 
-void ADS1115::setPhysicalConversion(const float f_x_2, const float f_x_1, const float f_0) {
+void ADS1115::setPhysConv(const float f_x_2, const float f_x_1, const float f_0) {
   /**
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
   */ 
-  _iSizeConvTable = 1;
-  _ptrConvTable = new float*[1];
-  _ptrConvTable[0]= new float[3];
+  initConvTable(1);
 
   _ptrConvTable[0][0] = f_x_2;
   _ptrConvTable[0][1] = f_x_1;
   _ptrConvTable[0][2] = f_0;
 }
 
-void ADS1115::setPhysicalConversion(const float arr_conv_table[][2], size_t i_size_conv) {
+void ADS1115::setPhysConv(const float arr_conv_table[][2], size_t i_size_conv) {
   /**
    * set factors for conversion from voltage to physical value
    * @param arr_conv_table: table for conversion, 1st dim is x value, 2nd dim is y value
@@ -576,13 +572,14 @@ void ADS1115::setPhysicalConversion(const float arr_conv_table[][2], size_t i_si
 }
 
 
-float ADS1115::readPhysical(void){
+float ADS1115::getPhysVal(void){
   /**
-   * read physical value
+   * calculate physical value based on defined conversion and adc value
+   * NOTE: readConversionRegister() must be called before to get adc value from ADS1115 register over I2C
    * @return: physical value based on voltage read out
   */
   
-  float f_voltage = readVoltage();
+  float f_voltage = getVoltVal();
   float f_physical;
   int i_index = 0;
 
@@ -658,7 +655,7 @@ void ADS1115::initConvTable(size_t i_size_conv) {
   */
   
   // Make (row) size of conversion table in class available
-  _iSizeConvTable=i_size_conv-1;
+  _iSizeConvTable=i_size_conv;
   // assign memory to the pointer, pointer in pointer element
   _ptrConvTable = new float*[_iSizeConvTable];
   
