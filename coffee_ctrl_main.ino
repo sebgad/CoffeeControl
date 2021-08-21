@@ -502,5 +502,4 @@ void loop(){
         iStatusMeas = IDLE_MEAS;
       portEXIT_CRITICAL_ISR(&objTimerMux);
   }
-    
 }// loop
