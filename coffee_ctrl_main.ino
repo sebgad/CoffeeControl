@@ -25,6 +25,7 @@
 #include "ADS1115.h"
 #include "PidCtrl.h"
 #include <Wire.h>
+#include <ArduinoJson.h>
 
 
 // Hardware definitions for i2c
@@ -40,7 +41,9 @@
 #define P_SSR_PWM 21
 
 const char* strMeasFilePath = "/data.csv";
-const char* strParamFilePath = "/params.csv";
+const char* strParamFilePath = "/params.json";
+StaticJsonDocument<200> objJsonParameterDoc;
+
 const int iMaxBytes = 1000000;
 unsigned long iTimeStart = 0;
 
@@ -259,13 +262,19 @@ void setup(){
   } else{
     Serial.println("SPIFFS mount successfully.");
     if(!SPIFFS.exists(strParamFilePath)){
-      // initialization of parameter file
+      // initialization of a new parameter file
+      objJsonParameterDoc["PID_Kp"] = 0.1;
+      objJsonParameterDoc["Tn"] = 2.0;
+      objJsonParameterDoc["PID_Tv"] = 1.0;
+
       File obj_param_file = SPIFFS.open(strParamFilePath, "w");
-      obj_param_file.println("Parameter,Value");
-      obj_param_file.println("PID_Kp, 0.1");
-      obj_param_file.println("PID_Tn, 2");
-      obj_param_file.println("PID_Tv, 1");
+      serializeJson(objJsonParameterDoc, obj_param_file);
       Serial.println("Parameter file created. Does not exist before.");
+      obj_param_file.close();
+    } else {
+      File obj_param_file = SPIFFS.open(strParamFilePath, "r");
+      DeserializationError error = deserializeJson(objJsonParameterDoc, obj_param_file.readString());
+      obj_param_file.close();
     }
   }
 
@@ -312,24 +321,20 @@ void setup(){
         int paramsNr = request->params();
         float f_kp, f_tn, f_tv;
 
+
         try{
           for(int i=0;i<paramsNr;i++){
             AsyncWebParameter* ptr_paramater = request->getParam(i);
-            
-            if (ptr_paramater->name()=="Kp"){
-              f_kp = ptr_paramater->value().toFloat();
-            }
-            
-            if (ptr_paramater->name()=="Tn"){
-              f_tn = ptr_paramater->value().toFloat();
-            }
-            
-            if (ptr_paramater->name()=="Tv"){
-              f_tv = ptr_paramater->value().toFloat();
-            }
+            String str_param_name = ptr_paramater->name();
+            objJsonParameterDoc[str_param_name] = ptr_paramater->value().toFloat();
           }
           
-          objPid.changePidCoeffs(f_kp, f_tn, f_tv);
+          objPid.changePidCoeffs(objJsonParameterDoc["Kp"], objJsonParameterDoc["Tn"], objJsonParameterDoc["Tv"]);
+
+          File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+          serializeJson(objJsonParameterDoc, obj_param_file);
+          obj_param_file.close();
+
           request->send(200, "text/plain", "success");
         }
         catch (...){
@@ -337,7 +342,6 @@ void setup(){
         }
         }
       );
-
 
       // Route for stylesheets.css
       server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -357,23 +361,6 @@ void setup(){
       // Parameter file, available under http://coffee.local/params.csv
       server.on("/params.csv", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, strParamFilePath, "text/plain");
-      });
-
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        int paramsNr = request->params();
-  
-        for(int i=0;i<paramsNr;i++){
-          AsyncWebParameter* ptr_paramater = request->getParam(i);
-          // TODO: continue here.
-          // if ptr_paramater->name();
-          Serial.print("Param name: ");
-          Serial.print(ptr_paramater->name());
-          Serial.print(", Param value: ");
-          Serial.println(ptr_paramater->value());
-          Serial.println("------");
-        }
-  
-        request->send(200, "text/plain", "message received");
       });
 
       // Start web server
@@ -427,7 +414,8 @@ void setup(){
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(0, (1<<iPwmSsrResolution)-1);
   objPid.changeTargetValue(fTargetValuePid);
-  objPid.changePidCoeffs(0.075, 2, 2);
+
+  objPid.changePidCoeffs(objJsonParameterDoc["Kp"], objJsonParameterDoc["Tn"], objJsonParameterDoc["Tv"]);
 
   // configure PWM functionalitites
   ledcSetup(iPwmSsrChannel, iSsrFreq, iPwmSsrResolution);

@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name EspressoV1-rescue)(type Legacy)(uri ${KIPRJMOD}/EspressoV1-rescue.lib)(options "")(descr ""))
+)
