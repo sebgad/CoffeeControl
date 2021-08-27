@@ -1,7 +1,7 @@
 # CoffeeControl :coffee:
 
 This is primarily a temperatur controller for a Rancilio Silvia Espresso machine.
-The project is based on an eps32 via the arduino IDE.
+The project is based on an esp32 via the arduino IDE.
 
 ## code
 
