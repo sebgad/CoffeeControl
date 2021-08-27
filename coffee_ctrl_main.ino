@@ -19,11 +19,12 @@
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
 #include <time.h>
+#include <string>
 #include "WifiAccess.h"
 #include "Pt1000.h"
 #include "ADS1115.h"
+#include "PidCtrl.h"
 #include <Wire.h>
-#include <PID_v1.h> // https://playground.arduino.cc/Code/PIDLibrary/
 
 
 // Hardware definitions for i2c
@@ -39,28 +40,21 @@
 #define P_SSR_PWM 21
 
 const char* strMeasFilePath = "/data.csv";
+const char* strParamFilePath = "/params.csv";
 const int iMaxBytes = 1000000;
 unsigned long iTimeStart = 0;
 
 const uint32_t iSsrFreq = 200; // Hz - PWM frequency
 const uint32_t iPwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 const uint32_t iPwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
-
-//Define the aggressive and conservative Tuning Parameters
-// TODO: make Tuning Parameters editeable via webserver
-double fAggKp=4.0, fAggKi=0.2, fAggKd=1;
-double fConsKp=1, fConsKi=0.05, fConsKd=0.25;
+float fTargetValuePid = 92.5;
+float fTarPwm;
 
 // Sensor variables
-double fTemp = 0; // TODO -  need to use double for PID lib
+float fTemp = 0; // TODO -  need to use double for PID lib
 float fPressure = 0;
 int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
-
-// PID controler output variable
-double fTarPwm = 0;
-double fTempTar = 35.0; // TODO for room temp
-double fTempError = 0; // used to check if we are close to the value
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -74,11 +68,6 @@ const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 // Initialize ADS1115 I2C connection
 TwoWire objI2cBus = TwoWire(0);
 ADS1115 objAds1115(&objI2cBus);
-
-//Specify the links and initial tuning parameters
-PID objPid(&fTemp, &fTarPwm, &fTempTar,  // IO
-           fConsKp, fConsKi, fConsKd, // parameter
-           DIRECT); // positive change in outpull will result in positive change in input
 
 // timer object for ISR
 // Long for Measurement Store to csv
@@ -100,6 +89,9 @@ enum eStatusMeas {
   STORE_MEAS
 };
 
+// Initialisation of PID controler
+PidCtrl objPid;
+
 // Definition for critical section port
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -108,9 +100,6 @@ const unsigned long iInterruptLongIntervalMicros = 450000; //microseconds
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
-
-// debugging ===========================================================================================================
-float fTempVoltage=0;
 
 // timers ==============================================================================================================
 void IRAM_ATTR onAlertRdy(){
@@ -269,6 +258,15 @@ void setup(){
       ESP.restart();
   } else{
     Serial.println("SPIFFS mount successfully.");
+    if(!SPIFFS.exists(strParamFilePath)){
+      // initialization of parameter file
+      File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+      obj_param_file.println("Parameter,Value");
+      obj_param_file.println("PID_Kp, 0.1");
+      obj_param_file.println("PID_Tn, 2");
+      obj_param_file.println("PID_Tv, 1");
+      Serial.println("Parameter file created. Does not exist before.");
+    }
   }
 
   // Initialization successfull, create csv file
@@ -310,6 +308,37 @@ void setup(){
         request->send(SPIFFS, "/graphs.html");
       });
 
+      server.on("/params", HTTP_GET, [](AsyncWebServerRequest *request){
+        int paramsNr = request->params();
+        float f_kp, f_tn, f_tv;
+
+        try{
+          for(int i=0;i<paramsNr;i++){
+            AsyncWebParameter* ptr_paramater = request->getParam(i);
+            
+            if (ptr_paramater->name()=="Kp"){
+              f_kp = ptr_paramater->value().toFloat();
+            }
+            
+            if (ptr_paramater->name()=="Tn"){
+              f_tn = ptr_paramater->value().toFloat();
+            }
+            
+            if (ptr_paramater->name()=="Tv"){
+              f_tv = ptr_paramater->value().toFloat();
+            }
+          }
+          
+          objPid.changePidCoeffs(f_kp, f_tn, f_tv);
+          request->send(200, "text/plain", "success");
+        }
+        catch (...){
+          request->send(200, "text/plain", "No change. Importing PID parameters fails.");
+        }
+        }
+      );
+
+
       // Route for stylesheets.css
       server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, "/style.css");
@@ -323,6 +352,28 @@ void setup(){
       // Measurement file, available under http://coffee.local/data.csv
       server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, strMeasFilePath, "text/plain");
+      });
+
+      // Parameter file, available under http://coffee.local/params.csv
+      server.on("/params.csv", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, strParamFilePath, "text/plain");
+      });
+
+      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+        int paramsNr = request->params();
+  
+        for(int i=0;i<paramsNr;i++){
+          AsyncWebParameter* ptr_paramater = request->getParam(i);
+          // TODO: continue here.
+          // if ptr_paramater->name();
+          Serial.print("Param name: ");
+          Serial.print(ptr_paramater->name());
+          Serial.print(", Param value: ");
+          Serial.println(ptr_paramater->value());
+          Serial.println("------");
+        }
+  
+        request->send(200, "text/plain", "message received");
       });
 
       // Start web server
@@ -373,24 +424,27 @@ void setup(){
   iTimeStart = millis();
 
   // Setup PID =========================================================================================================
+  objPid.begin(&fTemp, &fTarPwm);
+  objPid.addOutputLimits(0, (1<<iPwmSsrResolution)-1);
+  objPid.changeTargetValue(fTargetValuePid);
+  objPid.changePidCoeffs(0.075, 2, 2);
+
   // configure PWM functionalitites
   ledcSetup(iPwmSsrChannel, iSsrFreq, iPwmSsrResolution);
   
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(P_SSR_PWM, iPwmSsrChannel);
 
-  //turn the PID on
-  objPid.SetOutputLimits(0, (1<<iPwmSsrResolution)-1);
-  objPid.SetMode(AUTOMATIC);
-
 }// Setup
 
 boolean readSensors(){
   // Read out Sensor values
   bool b_result = false;
+  // read conversion register over i2c
   objAds1115.readConversionRegister();
-  fTemp = (double) objAds1115.getPhysVal();
-  fTempVoltage = objAds1115.getVoltVal();
+  // get physical value of sensor
+  fTemp = objAds1115.getPhysVal();
+  // get voltage level of sensor
   fPressure = random(0,10);
   
   // TODO S.: Logic for Heating Status indicator needs to be added
@@ -409,28 +463,14 @@ bool controlHeating(){
   /** PID regulator function for controling heating device
    *
    */
-  bool b_result = false;
 
-  //TODO S: reading physical value from the register of ADS1115 is not in relation with the conversion of the analog temperature signal.
-  //        it will actually increase the latency, since i2c communication also take time. Recommend it to remove it, if it is not necessary for debugging reasons. 
-  // TODO S: can be removed, switch case changed to two independent if conditions that controlHeating will be called immediately after sensor read out
-  fTemp = (double) objAds1115.getPhysVal(); // TODO added here for minimal latency 
-
-  fTempVoltage = objAds1115.getVoltVal();
-
-  fTempError = abs(fTempTar-fTemp); //distance away from setpoint
-  if(fTempError<10.0){  //we're close to setpoint, use conservative tuning parameters
-    objPid.SetTunings(fConsKp, fConsKi, fConsKd);}
-  else{//we're far from setpoint, use aggressive tuning parameters
-    objPid.SetTunings(fAggKp, fAggKi, fAggKd);}
-
-  objPid.Compute(); // calc output 
-  ledcWrite(iPwmSsrChannel, fTarPwm); // set the output
+  bool b_success = true;
   
-  b_result = true; // TODO ... maybe read if correct value was set?
-  
-  return b_result; // TODO S: result of objPid.Compute() is required, otherwise the timing will mess up, because in the loop() it will otherwise only be called once
-                   //         Because it is internally also checking the timing difference, it can totally mess up, and won't do anything.
+  objPid.compute();
+  ledcWrite(iPwmSsrChannel, (int)fTarPwm);
+
+  return b_success;
+
 } // controlHeating
 
 void writeMeasFile(){
@@ -440,21 +480,20 @@ void writeMeasFile(){
 
   portENTER_CRITICAL_ISR(&objTimerMux);
     float f_pressure = fPressure;
-    float f_temp_local = (float) fTemp;
-    float f_temp_voltage = fTempVoltage;
+    float f_temp_local = fTemp;
     int i_pump_status_local = iPumpStatus;
     int f_heating_status_local = iHeatingStatus;
-    float f_tar_pwm = (float) fTarPwm;
+    float f_tar_pwm = fTarPwm;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
+  Serial.println(f_tar_pwm);
+
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
   if (obj_meas_file.size() < iMaxBytes) {
     float f_time = (float)(millis() - iTimeStart) / 1000.0;
     obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_voltage, 5);
     obj_meas_file.print(",");
     obj_meas_file.print(f_pressure);
     obj_meas_file.print(",");
