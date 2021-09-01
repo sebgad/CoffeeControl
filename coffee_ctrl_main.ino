@@ -26,6 +26,7 @@
 #include "PidCtrl.h"
 #include <Wire.h>
 #include <ArduinoJson.h>
+#include "AsyncJson.h"
 
 
 // Hardware definitions for i2c
@@ -261,10 +262,10 @@ void setup(){
       ESP.restart();
   } else{
     Serial.println("SPIFFS mount successfully.");
-    if(!SPIFFS.exists(strParamFilePath)){
+    if(SPIFFS.exists(strParamFilePath)){
       // initialization of a new parameter file
       objJsonParameterDoc["PID_Kp"] = 0.1;
-      objJsonParameterDoc["Tn"] = 2.0;
+      objJsonParameterDoc["PID_Tn"] = 2.0;
       objJsonParameterDoc["PID_Tv"] = 1.0;
 
       File obj_param_file = SPIFFS.open(strParamFilePath, "w");
@@ -317,19 +318,34 @@ void setup(){
         request->send(SPIFFS, "/graphs.html");
       });
 
-      server.on("/params", HTTP_GET, [](AsyncWebServerRequest *request){
-        int paramsNr = request->params();
-        float f_kp, f_tn, f_tv;
+      // Route for graphs web page
+      server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, "/settings.html");
+      });
+      
+      server.addHandler(new AsyncCallbackJsonWebHandler("/paramUpdate",
+                                                        [this](AsyncWebServerRequest* request, JsonVariant& json) {
+                     
+                        auto&& data = json.as<JsonObject>();
+                        serializeJson(data, Serial);
+                                                        }
+      ));                        
 
+
+      server.on("/paramUpdate", HTTP_POST, [](AsyncWebServerRequest *request){
+        int paramsNr = request->params();
 
         try{
           for(int i=0;i<paramsNr;i++){
             AsyncWebParameter* ptr_paramater = request->getParam(i);
             String str_param_name = ptr_paramater->name();
+
+            Serial.println(str_param_name);
+            Serial.println(ptr_paramater->value());
+
             objJsonParameterDoc[str_param_name] = ptr_paramater->value().toFloat();
+
           }
-          
-          objPid.changePidCoeffs(objJsonParameterDoc["Kp"], objJsonParameterDoc["Tn"], objJsonParameterDoc["Tv"]);
 
           File obj_param_file = SPIFFS.open(strParamFilePath, "w");
           serializeJson(objJsonParameterDoc, obj_param_file);
@@ -359,7 +375,7 @@ void setup(){
       });
 
       // Parameter file, available under http://coffee.local/params.csv
-      server.on("/params.csv", HTTP_GET, [](AsyncWebServerRequest *request){
+      server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, strParamFilePath, "text/plain");
       });
 
@@ -378,6 +394,7 @@ void setup(){
         strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
       }
     }
+
 
   // generate header in file
   Serial.print("Create File ");
@@ -474,8 +491,6 @@ void writeMeasFile(){
     float f_tar_pwm = fTarPwm;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
-  Serial.println(f_tar_pwm);
-
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
   if (obj_meas_file.size() < iMaxBytes) {
     float f_time = (float)(millis() - iTimeStart) / 1000.0;
