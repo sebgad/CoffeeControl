@@ -6,7 +6,7 @@ The project is based on an eps32 via the arduino IDE.
 ## code
 
 ### required aduino libaries:
-- for PID control [PID_v1](https://playground.arduino.cc/Code/PIDLibrary/)
+- for Json handling [ArduinoJson](https://arduinojson.org/)
 - for Webserver [ESPAsyncWebserver](https://github.com/me-no-dev/ESPAsyncWebServer)
 - for Async TCP transfer [AsyncTCP](https://github.com/me-no-dev/AsyncTCP)
 
