@@ -19,6 +19,7 @@
     }
     var obj_http_request = new XMLHttpRequest();
     obj_http_request.open("POST", "/paramUpdate", true);
+    obj_http_request.setRequestHeader("Content-Type", "application/json");
     obj_http_request.onload= function() {
         // assign response text from request to variable
         var str_buf = obj_http_request.responseText;

@@ -323,16 +323,17 @@ void setup(){
         request->send(SPIFFS, "/settings.html");
       });
       
-      server.addHandler(new AsyncCallbackJsonWebHandler("/paramUpdate",
-                                                        [this](AsyncWebServerRequest* request, JsonVariant& json) {
-                     
-                        auto&& data = json.as<JsonObject>();
-                        serializeJson(data, Serial);
-                                                        }
-      ));                        
+      AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
+        StaticJsonDocument<200> jsonObj;
+        jsonObj = json.as<JsonObject>();
+        String response;
+        serializeJsonPretty(jsonObj, response);
+        Serial.println(response);
+        
+      });
+      server.addHandler(handler);
 
-
-      server.on("/paramUpdate", HTTP_POST, [](AsyncWebServerRequest *request){
+/*       server.on("/paramUpdate", HTTP_POST, [](AsyncWebServerRequest *request){
         int paramsNr = request->params();
 
         try{
@@ -357,7 +358,7 @@ void setup(){
           request->send(200, "text/plain", "No change. Importing PID parameters fails.");
         }
         }
-      );
+      ); */
 
       // Route for stylesheets.css
       server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){

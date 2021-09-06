@@ -2,17 +2,19 @@
 #include "PidCtrl.h"
 
 PidCtrl::PidCtrl() {
-    /**
+    /** Initialisation of PIDCtrl class
      * 
      */
     _iSizeCoeffTbl = 0;
     _fSumIntegrator = 0;
 
-};
+}
 
 void PidCtrl::begin(){
-    /** Start PID controler. In- and Output of the regulator will be done external.
-     * 
+    /** 
+     * Start PID controler.
+     * Actual value variable and manipulation value variable is initialized and not linked. Compute() method takes actual value and manipulation value 
+     * as parameter.
      */
     
     ptrActualValue = new float;
@@ -22,8 +24,11 @@ void PidCtrl::begin(){
 }
 
 void PidCtrl::begin(float * ptr_actual_value){
-    /*
-    * Start PID controler. In- and Output of the regulator will be done external.
+    /** 
+     * Start PID controler.
+     * Actual value variable is linked, manipulation value variable is initialized and not linked. Compute() method takes the manipulation variale
+     * as parameter.
+     * @param ptr_actual_value     Actual value or measurement value as pointer
     */
     ptrActualValue = ptr_actual_value;
     ptrManipValue = new float;
@@ -32,8 +37,11 @@ void PidCtrl::begin(float * ptr_actual_value){
 }
 
 void PidCtrl::begin(float * ptr_actual_value, float * ptr_manip_value){
-    /*
-    * Start PID controler. In- and Output of the regulator will be done external.
+    /**
+     * Start PID controler. 
+     * Actual value variable and manipulation value variable is linked. Compute() method will directly change the output.
+     * @param ptr_actual_value       Actual value or measurement as pointer
+     * @param ptr_manip_value        Manipulation value as pointer
     */
     ptrActualValue =  ptr_actual_value;
     ptrManipValue = ptr_manip_value;
@@ -42,26 +50,34 @@ void PidCtrl::begin(float * ptr_actual_value, float * ptr_manip_value){
 }
 
 
-void PidCtrl::changePidCoeffs(float f_coeff_p, float f_coeff_i, float f_coeff_d){
-    /*
-    *
-    */
+void PidCtrl::changePidCoeffs(float f_coeff_k_p, float f_coeff_k_i, float f_coeff_k_d){
+    /**
+     * Change PID coefficients for PID controler.
+     * @param f_coeff_k_p       Coefficient for proportional part of the control equation
+     * @param f_coeff_k_i       Coefficient for integration part of the control equation
+     * @param f_coeff_k_d       Coefficient for differentiation part of the control equation
+     */
+
     if (_iSizeCoeffTbl == 0) {
+        // Only one dimensional PID controller is initialized
         _initCoeffTable(1);
     }
 
-    ptrConstants[0][0] = f_coeff_p;
-    ptrConstants[0][1] = f_coeff_i;
-    ptrConstants[0][2] = f_coeff_d;
+    ptrConstants[0][0] = f_coeff_k_p;
+    ptrConstants[0][1] = f_coeff_k_i;
+    ptrConstants[0][2] = f_coeff_k_d;
 }
 
 
 void PidCtrl::changePidCoeffs(const float arr_coeff_table[][4], size_t i_size_conv){
    /**
-    *
+    * Change PID coefficients using a characteristics
+    * @param arr_coeff_table    1st column: Kp, 2nd column: Ki, 3rd column: Kd, 4th column: lower limit measuring value
+    * @param i_size_conv        Size of arr_coeff_table
     */
 
     if (_iSizeCoeffTbl == 0) {
+        // initialize array, if not already initialized
         _initCoeffTable(i_size_conv);
     }
 
@@ -92,8 +108,9 @@ void PidCtrl::changeTargetValue(float f_target_value){
 
 
 void PidCtrl::compute() {
-    /** Everything is linked
-     * 
+    /** 
+     * Compute and calculate controler equitation. Actual value variable and manipulation value variable have to 
+     * be linked in advance.
      */
     
     _calcControlEquation();
@@ -102,8 +119,12 @@ void PidCtrl::compute() {
 
 void PidCtrl::compute(const float & f_actual, float & f_manip){
     /**
-     * Manip variable only linked 
+     * Compute and calculate controler equitation. Actual value variable and manipulation value variable are NOT
+     * linked in advance.
+     * @param f_actual  Actual value variable
+     * @param f_manip   Manipulation value variable
      */    
+
     *ptrActualValue = f_actual;
     _calcControlEquation();
     f_manip = *ptrManipValue;
@@ -112,12 +133,12 @@ void PidCtrl::compute(const float & f_actual, float & f_manip){
 
 void PidCtrl::_calcControlEquation(){
     /**
-     * 
+     * Calculate control equitation.
      */
 
     float f_delta_sec;
     float f_control_deviation;
-    float f_k_p_coeff, f_t_n_coeff, f_t_v_coeff;
+    float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
     float f_manip_value;
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
@@ -125,23 +146,25 @@ void PidCtrl::_calcControlEquation(){
     f_control_deviation = _fTargetValue - *ptrActualValue;
     
     if (_iSizeCoeffTbl > 1) {
+        // Regulator with different coefficients, depending on actual variable value
         for (int i_row=_iSizeCoeffTbl; i_row>=0; i_row--){
             if (ptrConstants[i_row][3] < *ptrActualValue){
                 f_k_p_coeff = ptrConstants[i_row][0];
-                f_t_n_coeff = ptrConstants[i_row][1];
-                f_t_v_coeff = ptrConstants[i_row][2];
+                f_k_i_coeff = ptrConstants[i_row][1];
+                f_k_d_coeff = ptrConstants[i_row][2];
                 break;
             }
         }
     } else {
+        // One coefficient set for all areas
         f_k_p_coeff = ptrConstants[0][0];
-        f_t_n_coeff = ptrConstants[0][1];
-        f_t_v_coeff = ptrConstants[0][2];
+        f_k_i_coeff = ptrConstants[0][1];
+        f_k_d_coeff = ptrConstants[0][2];
     };
 
     _fSumIntegrator += f_delta_sec * f_control_deviation;
 
-    *ptrManipValue = f_k_p_coeff * (f_control_deviation + 1.0/f_t_n_coeff * _fSumIntegrator + f_t_v_coeff / f_delta_sec * f_control_deviation);
+    *ptrManipValue = f_k_p_coeff * (f_control_deviation + f_k_i_coeff * _fSumIntegrator + f_k_d_coeff * f_delta_sec * f_control_deviation);
 
     // Check lower and upper limit of manipulation variable
     if (*ptrManipValue<_fLoLim) { *ptrManipValue = _fLoLim; };
