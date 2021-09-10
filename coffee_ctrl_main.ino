@@ -262,19 +262,22 @@ void setup(){
       ESP.restart();
   } else{
     Serial.println("SPIFFS mount successfully.");
-    if(SPIFFS.exists(strParamFilePath)){
+    if(!SPIFFS.exists(strParamFilePath)){
       // initialization of a new parameter file
-      objJsonParameterDoc["PID_Kp"] = 0.1;
-      objJsonParameterDoc["PID_Tn"] = 2.0;
-      objJsonParameterDoc["PID_Tv"] = 1.0;
+      objJsonParameterDoc["PID_Kp"] = 1.2;
+      objJsonParameterDoc["PID_Ki"] = 1.0;
+      objJsonParameterDoc["PID_Kd"] = 0.01;
 
+      Serial.println("Parameter file created. Does not exist before.");
       File obj_param_file = SPIFFS.open(strParamFilePath, "w");
       serializeJson(objJsonParameterDoc, obj_param_file);
-      Serial.println("Parameter file created. Does not exist before.");
       obj_param_file.close();
     } else {
+      Serial.println("Parameter file found:");
       File obj_param_file = SPIFFS.open(strParamFilePath, "r");
       DeserializationError error = deserializeJson(objJsonParameterDoc, obj_param_file.readString());
+      serializeJsonPretty(objJsonParameterDoc, Serial);
+      Serial.println("");
       obj_param_file.close();
     }
   }
@@ -323,42 +326,6 @@ void setup(){
         request->send(SPIFFS, "/settings.html");
       });
       
-      AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
-        StaticJsonDocument<200> jsonObj;
-        jsonObj = json.as<JsonObject>();
-        String response;
-        serializeJsonPretty(jsonObj, response);
-        Serial.println(response);
-        
-      });
-      server.addHandler(handler);
-
-/*       server.on("/paramUpdate", HTTP_POST, [](AsyncWebServerRequest *request){
-        int paramsNr = request->params();
-
-        try{
-          for(int i=0;i<paramsNr;i++){
-            AsyncWebParameter* ptr_paramater = request->getParam(i);
-            String str_param_name = ptr_paramater->name();
-
-            Serial.println(str_param_name);
-            Serial.println(ptr_paramater->value());
-
-            objJsonParameterDoc[str_param_name] = ptr_paramater->value().toFloat();
-
-          }
-
-          File obj_param_file = SPIFFS.open(strParamFilePath, "w");
-          serializeJson(objJsonParameterDoc, obj_param_file);
-          obj_param_file.close();
-
-          request->send(200, "text/plain", "success");
-        }
-        catch (...){
-          request->send(200, "text/plain", "No change. Importing PID parameters fails.");
-        }
-        }
-      ); */
 
       // Route for stylesheets.css
       server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -375,9 +342,26 @@ void setup(){
         request->send(SPIFFS, strMeasFilePath, "text/plain");
       });
 
-      // Parameter file, available under http://coffee.local/params.csv
+      // Parameter file, available under http://coffee.local/params.json
       server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
         request->send(SPIFFS, strParamFilePath, "text/plain");
+      });
+
+      AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
+        StaticJsonDocument<200> jsonObj;
+        jsonObj = json.as<JsonObject>();
+        objJsonParameterDoc = jsonObj;
+        File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+        serializeJson(objJsonParameterDoc, obj_param_file);
+        obj_param_file.close();
+        request->send(200, "text/plain", "Parameters are updated");
+      });
+      server.addHandler(obj_handler);
+      
+      // #TODO continue here: Reset Parameter file
+      server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(SPIFFS, strParamFilePath, "text/plain");
+        request->send(200, "text/plain", "Parameters are reseted");
       });
 
       // Start web server
@@ -433,7 +417,7 @@ void setup(){
   objPid.addOutputLimits(0, (1<<iPwmSsrResolution)-1);
   objPid.changeTargetValue(fTargetValuePid);
 
-  objPid.changePidCoeffs(objJsonParameterDoc["Kp"], objJsonParameterDoc["Tn"], objJsonParameterDoc["Tv"]);
+  objPid.changePidCoeffs(objJsonParameterDoc["PID_Kp"], objJsonParameterDoc["PID_Ki"], objJsonParameterDoc["PID_Kd"]);
 
   // configure PWM functionalitites
   ledcSetup(iPwmSsrChannel, iSsrFreq, iPwmSsrResolution);
