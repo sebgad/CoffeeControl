@@ -12,58 +12,6 @@
   <!-- Java script for graphs.html -->
   <script type="text/javascript">
 
-  function onSubmitParams(){
-    var str_Kp = document.getElementById("txt_Kp").value;
-    var str_Tn = document.getElementById("txt_Tn").value;
-    var str_Tv = document.getElementById("txt_Tv").value;
-
-    var obj_http_request = new XMLHttpRequest();
-    obj_http_request.open("GET", "/params?Kp="+str_Kp+"&Tn="+str_Tn+"&Tv="+str_Tv, true);
-    obj_http_request.onload= function() {
-      // assign response text from request to variable
-      var str_buf = obj_http_request.responseText;
-      if (str_buf==="success"){
-        alert("All parameters are updated")
-      }
-    }
-    obj_http_request.send();
-  }
-
-  function onAssignTxtParams(){
-    // initialize http request object for asynchronous file request
-    var obj_http_request=new XMLHttpRequest();
-    // request data.csv from http server
-    obj_http_request.open("GET","params.csv");
-      
-    // define function which is executed when requested is fully loaded
-    obj_http_request.onload= function() {
-      var str_buf = obj_http_request.responseText;
-      // split string request to list (on line breaks)
-      // columms: Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm
-      lst_data = str_buf.split(/\r?\n/g);
-      
-      // iterate over rows in data
-      for (let i_row = 1; i_row<lst_data.length; i_row++){
-        if (lst_data[i_row] !== "") {
-          var lst_line = lst_data[i_row].split(",")
-
-          switch (lst_line[0]) {
-            case "PID_Kp":
-              document.getElementById("txt_Kp").value = lst_line[1];
-              break;
-            case "PID_Tn":
-              document.getElementById("txt_Tn").value = lst_line[1];
-              break;
-            case "PID_Tv":
-              document.getElementById("txt_Tv").value = lst_line[1];
-              break;
-          }
-        }
-      }
-    }
-    obj_http_request.send();
-  }
-
   // load core packages from google charts
   google.charts.load('current', {'packages':['line', 'corechart']});
   // define callback to make sure that function is called, when website is completely loaded
@@ -207,11 +155,6 @@
     <span>PUMP ON</span>
     <span id="selPump"></span>
   </p>
-    <h3>PID input values</h3>
-    Kp: <input type="text" id="txt_Kp" value=""><br />
-    Tn: <input type="text" id="txt_Tn" value=""><br />
-    Tv: <input type="text" id="txt_Tv" value=""><br />
-    <button onclick="onSubmitParams()">Submit</button>
     <h3>Sensor Graphs</h3>
   <div id="chart_div", style="width:50%;height:500px"></div>
 </div>
