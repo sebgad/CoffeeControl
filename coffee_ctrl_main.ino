@@ -41,9 +41,15 @@
 // PWM defines
 #define P_SSR_PWM 21
 
+struct PID {
+  float Target;
+  float Kp;
+  float Ki;
+  float Kd;
+};
+
 const char* strMeasFilePath = "/data.csv";
 const char* strParamFilePath = "/params.json";
-StaticJsonDocument<200> objJsonParameterDoc;
 
 const int iMaxBytes = 1000000;
 unsigned long iTimeStart = 0;
@@ -51,8 +57,8 @@ unsigned long iTimeStart = 0;
 const uint32_t iSsrFreq = 200; // Hz - PWM frequency
 const uint32_t iPwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 const uint32_t iPwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
-float fTargetValuePid = 92.5;
 float fTarPwm;
+PID objPidCoeff;
 
 // Sensor variables
 float fTemp = 0; // TODO -  need to use double for PID lib
@@ -187,6 +193,59 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   return b_successful;
 } // connectWiFi
 
+void loadConfiguration(){
+  /**
+   * Load configuration from configuration file 
+   */
+  
+  File obj_param_file = SPIFFS.open(strParamFilePath, "r");
+  StaticJsonDocument<200> json_doc;
+  DeserializationError error = deserializeJson(json_doc, obj_param_file);
+
+  if ((!obj_param_file) || (error)){
+    Serial.println(F("Failed to read file, using default configuration"));
+    initConfiguration();
+  } else {
+    objPidCoeff.Kd = json_doc["Kp"];
+    objPidCoeff.Ki = json_doc["Ki"];
+    objPidCoeff.Kd = json_doc["Kd"];
+    objPidCoeff.Target = json_doc["Target"];
+  }
+
+  obj_param_file.close();
+}
+
+void saveConfiguration(){
+  /**
+   * Save configuration to configuration file 
+   */
+  
+  StaticJsonDocument<200> json_doc;
+
+  json_doc["Kp"] = objPidCoeff.Kp;
+  json_doc["Ki"] = objPidCoeff.Ki;
+  json_doc["Kd"] = objPidCoeff.Kd;
+  json_doc["Target"] = objPidCoeff.Target;
+
+  File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+  
+  if (serializeJson(json_doc, obj_param_file) == 0) {
+    Serial.println(F("Failed to write to file"));
+  }
+  obj_param_file.close();
+}
+
+void initConfiguration(){
+  /**
+   * init configuration to configuration file 
+   */
+  
+  objPidCoeff.Kp = 0.01;
+  objPidCoeff.Ki = 0.01;
+  objPidCoeff.Kd = 0.01;
+  objPidCoeff.Target = 92.5;
+  saveConfiguration();
+}
 
 void setup(){
   // Serial port for debugging purposes
@@ -262,24 +321,7 @@ void setup(){
       ESP.restart();
   } else{
     Serial.println("SPIFFS mount successfully.");
-    if(!SPIFFS.exists(strParamFilePath)){
-      // initialization of a new parameter file
-      objJsonParameterDoc["PID_Kp"] = 1.2;
-      objJsonParameterDoc["PID_Ki"] = 1.0;
-      objJsonParameterDoc["PID_Kd"] = 0.01;
-
-      Serial.println("Parameter file created. Does not exist before.");
-      File obj_param_file = SPIFFS.open(strParamFilePath, "w");
-      serializeJson(objJsonParameterDoc, obj_param_file);
-      obj_param_file.close();
-    } else {
-      Serial.println("Parameter file found:");
-      File obj_param_file = SPIFFS.open(strParamFilePath, "r");
-      DeserializationError error = deserializeJson(objJsonParameterDoc, obj_param_file.readString());
-      serializeJsonPretty(objJsonParameterDoc, Serial);
-      Serial.println("");
-      obj_param_file.close();
-    }
+    loadConfiguration();
   }
 
   // Initialization successfull, create csv file
@@ -348,20 +390,25 @@ void setup(){
       });
 
       AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
-        StaticJsonDocument<200> jsonObj;
-        jsonObj = json.as<JsonObject>();
-        objJsonParameterDoc = jsonObj;
-        File obj_param_file = SPIFFS.open(strParamFilePath, "w");
-        serializeJson(objJsonParameterDoc, obj_param_file);
-        obj_param_file.close();
+        StaticJsonDocument<200> obj_json;
+        obj_json = json.as<JsonObject>();
+        
+        objPidCoeff.Kp = obj_json["Kp"];
+        objPidCoeff.Ki = obj_json["Ki"];
+        objPidCoeff.Kd = obj_json["Kd"];
+        objPidCoeff.Target = obj_json["Target"];
+        
+        saveConfiguration();
         request->send(200, "text/plain", "Parameters are updated");
       });
+
       server.addHandler(obj_handler);
       
-      // #TODO continue here: Reset Parameter file
       server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, strParamFilePath, "text/plain");
-        request->send(200, "text/plain", "Parameters are reseted");
+        // initialization of a new parameter file
+        initConfiguration();
+        saveConfiguration();
+        request->send(200, "text/plain", "Parameters are set back to default values");
       });
 
       // Start web server
@@ -379,7 +426,6 @@ void setup(){
         strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
       }
     }
-
 
   // generate header in file
   Serial.print("Create File ");
@@ -415,9 +461,9 @@ void setup(){
   // Setup PID =========================================================================================================
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(0, (1<<iPwmSsrResolution)-1);
-  objPid.changeTargetValue(fTargetValuePid);
+  objPid.changeTargetValue(objPidCoeff.Target);
 
-  objPid.changePidCoeffs(objJsonParameterDoc["PID_Kp"], objJsonParameterDoc["PID_Ki"], objJsonParameterDoc["PID_Kd"]);
+  objPid.changePidCoeffs(objPidCoeff.Kp, objPidCoeff.Ki, objPidCoeff.Kd);
 
   // configure PWM functionalitites
   ledcSetup(iPwmSsrChannel, iSsrFreq, iPwmSsrResolution);

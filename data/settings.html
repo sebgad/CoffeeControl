@@ -28,6 +28,22 @@
     obj_http_request.send(JSON.stringify(obj_json_req));
   }
 
+  function onResetParameter(){
+    // initialize http request object for asynchronous file request
+    var obj_http_request=new XMLHttpRequest();
+    // request data.csv from http server
+    obj_http_request.open("GET","/paramReset");
+      
+    // define function which is executed when requested is fully loaded
+    obj_http_request.onload= function() {
+      var str_buf = obj_http_request.responseText;
+      alert(str_buf);
+    }
+
+    obj_http_request.send();
+    onGetParameter();
+  }
+
   function onGetParameter(){
     // initialize http request object for asynchronous file request
     var obj_http_request=new XMLHttpRequest();
@@ -127,7 +143,7 @@
     <form>
       <div id="id_input"></div>
       <input type="button" onclick="onSubmitParams()" value="Submit">
-      <input type="button" onclick="onGetParameter()" value="Reset">
+      <input type="button" onclick="onResetParameter()" value="Reset">
     </form>
 </div>
 
