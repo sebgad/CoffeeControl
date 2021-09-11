@@ -13,8 +13,8 @@ PidCtrl::PidCtrl() {
 void PidCtrl::begin(){
     /** 
      * Start PID controler.
-     * Actual value variable and manipulation value variable is initialized and not linked. Compute() method takes actual value and manipulation value 
-     * as parameter.
+     * Actual value variable and manipulation value variable is initialized and not linked. 
+     * Compute() method takes actual value and manipulation value as parameter.
      */
     
     ptrActualValue = new float;
@@ -26,8 +26,8 @@ void PidCtrl::begin(){
 void PidCtrl::begin(float * ptr_actual_value){
     /** 
      * Start PID controler.
-     * Actual value variable is linked, manipulation value variable is initialized and not linked. Compute() method takes the manipulation variale
-     * as parameter.
+     * Actual value variable is linked, manipulation value variable is initialized and not linked. 
+     * Compute() method takes the manipulation variale as parameter.
      * @param ptr_actual_value     Actual value or measurement value as pointer
     */
     ptrActualValue = ptr_actual_value;
@@ -63,9 +63,16 @@ void PidCtrl::changePidCoeffs(float f_coeff_k_p, float f_coeff_k_i, float f_coef
         _initCoeffTable(1);
     }
 
-    ptrConstants[0][0] = f_coeff_k_p;
-    ptrConstants[0][1] = f_coeff_k_i;
-    ptrConstants[0][2] = f_coeff_k_d;
+    ptrConstants[0][0] = f_coeff_k_p; // Kp
+    if (f_coeff_k_p != 0) {  
+        ptrConstants[0][1] = f_coeff_k_i/f_coeff_k_p; // 1/Tn = Ki/Kp
+        ptrConstants[0][2] = f_coeff_k_d/f_coeff_k_p; //Tv= Kd/Kp
+    }
+    else{
+        // really stupid choice of controller parameters... but now everything is really disabled
+        ptrConstants[0][1] = 0;
+        ptrConstants[0][2] = 0;
+    }
 }
 
 
@@ -83,15 +90,25 @@ void PidCtrl::changePidCoeffs(const float arr_coeff_table[][4], size_t i_size_co
 
     // calculate gradient and offset and write it to array
     for(int i_row=0; i_row<i_size_conv; i_row++){
-        for(int i_col; i_col<=4; i_col++){
-            ptrConstants[i_row][i_col] = arr_coeff_table[i_row][i_col];
+        // specian handling for Kp=0 divide by 0
+        ptrConstants[i_row][0] = arr_coeff_table[i_row][0]; // Kp
+        if (arr_coeff_table[i_row][0] != 0) {
+            ptrConstants[i_row][1] = arr_coeff_table[i_row][1]/arr_coeff_table[i_row][0];
+            ptrConstants[i_row][2] = arr_coeff_table[i_row][2]/arr_coeff_table[i_row][0];
         }
+        else{
+        // really stupid choice of controller parameters... but now everything is really disabled
+            ptrConstants[i_row][1] = 0;
+            ptrConstants[i_row][2] = 0;
+        }
+        ptrConstants[i_row][3] = arr_coeff_table[i_row][3]; // lower limit measuring value
     }
 }
 
 void PidCtrl::addOutputLimits(const float f_lower_lim, const float f_upper_lim){
     /**
      * lower and upper limit and data type (0=float, 1=integer)
+     * TODO param
      */
 
     _fLoLim = f_lower_lim;
@@ -99,12 +116,33 @@ void PidCtrl::addOutputLimits(const float f_lower_lim, const float f_upper_lim){
 }
 
 void PidCtrl::changeTargetValue(float f_target_value){
-    /**
+    /** TODO
      * 
      */
 
     _fTargetValue = f_target_value;
 }
+
+void PidCtrl::setOnOffThresh(float f_tresh_on, float f_tresh_off) {
+    /**
+    * Set a threshold were the PID output is hard set to on when the actual value is lower f_tresh_on 
+    * or hard set off when the actual value is higher f_tresh_off
+    * @param f_tresh_on     lower threshold to be used
+    * @param f_tresh_off    upper threshold to be used
+    */
+  _fTreashOn = f_tresh_on;
+  _fTreashOff = f_tresh_off;
+}//void PidCtrl::setOnOffThres
+
+
+void PidCtrl::setOnOffThresh(float f_tresh) {
+    /**
+    * Set a threshold were the PID output is hard set to on when the actual value is lower -f_tresh 
+    * or hard set off when the actual value is higher f_tresh
+    * @param f_tresh    threshold to be used
+    */
+  setOnOffThresh(f_tresh, -f_tresh);
+}//void PidCtrl::setOnOffThresh
 
 
 void PidCtrl::compute() {
@@ -138,39 +176,46 @@ void PidCtrl::_calcControlEquation(){
 
     float f_delta_sec;
     float f_control_deviation;
-    float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
-    float f_manip_value;
+    float f_d_control_deviation; // deviation of actual value TODO needed?
+    float f_k_p_coeff, f_t_i_coeff_inv, f_t_d_coeff;
+    float f_manip_value; // TODO not needed
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
     
-    f_control_deviation = _fTargetValue - *ptrActualValue;
+    f_control_deviation = _fTargetValue - *ptrActualValue; // error
+    f_d_control_deviation = (f_control_deviation - _fLastControlDev); // deviation of error
     
     if (_iSizeCoeffTbl > 1) {
         // Regulator with different coefficients, depending on actual variable value
         for (int i_row=_iSizeCoeffTbl; i_row>=0; i_row--){
             if (ptrConstants[i_row][3] < *ptrActualValue){
                 f_k_p_coeff = ptrConstants[i_row][0];
-                f_k_i_coeff = ptrConstants[i_row][1];
-                f_k_d_coeff = ptrConstants[i_row][2];
+                f_t_i_coeff_inv = ptrConstants[i_row][1];
+                f_t_d_coeff = ptrConstants[i_row][2];
                 break;
             }
         }
     } else {
         // One coefficient set for all areas
         f_k_p_coeff = ptrConstants[0][0];
-        f_k_i_coeff = ptrConstants[0][1];
-        f_k_d_coeff = ptrConstants[0][2];
+        f_t_i_coeff_inv = ptrConstants[0][1];
+        f_t_d_coeff = ptrConstants[0][2];
     };
 
-    _fSumIntegrator += f_delta_sec * f_control_deviation;
+    _fSumIntegrator += f_delta_sec * f_control_deviation; // integrate deviation over time
 
-    *ptrManipValue = f_k_p_coeff * (f_control_deviation + f_k_i_coeff * _fSumIntegrator + f_k_d_coeff * f_delta_sec * f_control_deviation);
+    // setValue = Kp* (error + 1/Ti * integal(error) * dt + Td * diff(error)/dt)
+    *ptrManipValue = f_k_p_coeff * (f_control_deviation + f_t_i_coeff_inv * _fSumIntegrator + f_t_d_coeff * f_d_control_deviation / f_delta_sec);
 
     // Check lower and upper limit of manipulation variable
     if (*ptrManipValue<_fLoLim) { *ptrManipValue = _fLoLim; };
     if (*ptrManipValue>_fUpLim) { *ptrManipValue = _fUpLim; };
+
+    // TODO check for ONOFFThreshold
     
+    _fLastControlDev = f_control_deviation;
     _iLastComputeMillis = millis();
+
 }
 
 void PidCtrl::_initCoeffTable(size_t i_size_conv) {
