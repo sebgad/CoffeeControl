@@ -123,26 +123,46 @@ void PidCtrl::changeTargetValue(float f_target_value){
     _fTargetValue = f_target_value;
 }
 
-void PidCtrl::setOnOffThresh(float f_tresh_on, float f_tresh_off) {
+void PidCtrl::setOnOffThres(float f_thres_on, float f_thres_off) {
     /**
     * Set a threshold were the PID output is hard set to on when the actual value is lower f_tresh_on 
     * or hard set off when the actual value is higher f_tresh_off
-    * @param f_tresh_on     lower threshold to be used
-    * @param f_tresh_off    upper threshold to be used
+    * @param f_thres_on     lower threshold to be used
+    * @param f_thres_off    upper threshold to be used
     */
-  _fTreashOn = f_tresh_on;
-  _fTreashOff = f_tresh_off;
+  _fThresOn = f_thres_on;
+  _fThresOff = f_thres_off;
+  _bThresOn = true;
+  _bThresOff = true;
 }//void PidCtrl::setOnOffThres
 
 
-void PidCtrl::setOnOffThresh(float f_tresh) {
+void PidCtrl::setOnOffThres(float f_thres) {
     /**
     * Set a threshold were the PID output is hard set to on when the actual value is lower -f_tresh 
     * or hard set off when the actual value is higher f_tresh
+    * @param f_thres    threshold to be used
+    */
+  setOnOffThres(f_thres, -f_thres);
+}//void PidCtrl::setOnOffThresh
+
+void PidCtrl::setOnThres(float f_thres) {
+    /**
+    * Set a threshold were the PID output is hard set to on when the actual value is lower f_tresh 
+    * @param f_thres    threshold to be used
+    */
+  _fThresOn = f_thres;
+  _bThresOn = true;
+}//void PidCtrl::setOnThresh
+
+void PidCtrl::setOffThres(float f_tresh) {
+    /**
+    * Set a threshold were the PID output is hard set to off when the actual value is higher f_tresh 
     * @param f_tresh    threshold to be used
     */
-  setOnOffThresh(f_tresh, -f_tresh);
-}//void PidCtrl::setOnOffThresh
+  _fThresOff = f_tresh;
+  _bThresOff = true; 
+}//void PidCtrl::setOffThresh
 
 
 void PidCtrl::compute() {
@@ -153,7 +173,6 @@ void PidCtrl::compute() {
     
     _calcControlEquation();
 }
-
 
 void PidCtrl::compute(const float & f_actual, float & f_manip){
     /**
