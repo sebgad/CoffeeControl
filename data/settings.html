@@ -15,7 +15,11 @@
     var obj_json_req = {};
 
     for (i = 0; i < obj_div_input_children.length; ++i) {
-      obj_json_req[obj_div_input_children[i].id] = parseFloat(obj_div_input_children[i].value);
+      if (obj_div_input_children[i].type === "text"){
+        obj_json_req[obj_div_input_children[i].id] = parseFloat(obj_div_input_children[i].value);
+      } else if (obj_div_input_children[i].type === "checkbox"){
+        obj_json_req[obj_div_input_children[i].id] = (obj_div_input_children[i].checked);
+      }
     }
     var obj_http_request = new XMLHttpRequest();
     obj_http_request.open("POST", "/paramUpdate", true);
@@ -78,7 +82,12 @@
           // define text input and line break
           var obj_input = document.createElement("Input");
           var obj_br_input = document.createElement("BR");
-          obj_input.type="text";
+          if (typeof obj_json_req[str_key] === "boolean"){
+            obj_input.type = "checkbox";
+            obj_input.checked = obj_json_req[str_key];
+          } else {
+            obj_input.type="text";
+          }
           obj_input.value=obj_json_req[str_key];
           obj_input.id=str_key;
           
@@ -93,35 +102,116 @@
     }
     obj_http_request.send();
   }
+
+  function onFileUpload(files){
+    // upload file json file content
+
+    //only select first file
+    var obj_file = files[0];
+    if(!obj_file.type.match("application/json")) {
+      // upload file is not from type json file
+      alert("File is not json type. Abort!");
+    } else {
+      // initialize FileReader object
+      var obj_file_reader = new FileReader();
+      
+      // define function when FileReader object has finished to parse file content
+      obj_file_reader.onload = function(evt) {
+        // get file content
+        var str_file_content = evt.target.result;
+        
+        // start http request to transmit data
+        var obj_http_request = new XMLHttpRequest();
+        obj_http_request.open("POST", "/paramUpdate", true);
+        obj_http_request.setRequestHeader("Content-Type", "application/json");
+        // define response handling when transmit is finished
+        obj_http_request.onload= function() {
+          // assign response text from request to variable
+          var str_buf = obj_http_request.responseText;
+          alert(str_buf);
+        }
+        // send file content
+        obj_http_request.send(str_file_content);
+      };
+      // initiate FileRead
+      obj_file_reader.readAsText(obj_file);
+      // reload text field content
+      onGetParameter();
+    }
+  }
+  
+  const saveDownloadedData = (fileName, data) => {
+    // code based on: https://stackoverflow.com/questions/3665115/how-to-create-a-file-in-memory-for-user-to-download-but-not-through-server
+    if(~navigator.userAgent.indexOf('MSIE') || ~navigator.appVersion.indexOf('Trident/')) { /* IE9-11 */
+        const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
+        navigator.msSaveBlob(blob, fileName);
+    } else {
+        const link = document.createElement('a')
+        link.setAttribute('target', '_blank');
+        if(Blob !== undefined) {
+            const blob = new Blob([data], { type: 'text/plain' });
+            link.setAttribute('href', URL.createObjectURL(blob));
+        } else {
+            link.setAttribute('href', 'data:text/plain,' + encodeURIComponent(data));
+        }
+
+        ~window.navigator.userAgent.indexOf('Edge')
+            && (fileName = fileName.replace(/[&\/\\#,+$~%.'':*?<>{}]/g, '_')); /* Edge */
+
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
+
+function onFileDownload(){
+  var obj_http_request=new XMLHttpRequest();
+  // request data.csv from http server
+  obj_http_request.open("GET","params.json");
+  // define function which is executed when requested is fully loaded
+  obj_http_request.onload= function() {
+    // get response as string from esp async webserver
+    var str_buf = obj_http_request.responseText;
+    saveDownloadedData('silvia_ctrl_config.json', str_buf);
+  }
+  obj_http_request.send();
+}
   </script>
 </head>
 <body onload="onGetParameter()">
   <style>
-      input[type=text] {
-        width: 50%;
-        padding: 12px 20px;
-        margin: 8px 0;
-        box-sizing: border-box;
-        border: 3px solid #ccc;
-        -webkit-transition: 0.5s;
-        transition: 0.5s;
-        outline: none;
-      }
+    input[type=text] {
+      width: 50%;
+      padding: 12px 20px;
+      margin: 8px 0;
+      box-sizing: border-box;
+      border: 3px solid #ccc;
+      -webkit-transition: 0.5s;
+      transition: 0.5s;
+      outline: none;
+    }
 
     input[type=text]:focus {
-        border: 3px solid #555;
+      border: 3px solid #555;
     }
 
     input[type=button], input[type=submit], input[type=reset] {
-        background-color: #4CAF50;
-        border: none;
-        color: white;
-        padding: 16px 32px;
-        text-decoration: none;
-        margin: 4px 2px;  
-        cursor: pointer;
-        border-radius: 4px;
-        font-size:medium;
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 16px 32px;
+      text-decoration: none;
+      margin: 4px 2px;  
+      cursor: pointer;
+      border-radius: 4px;
+      font-size:medium;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    input[type=button]:hover, input[type=submit]:hover, input[type=reset]:hover {
+      background: #009e00;
     }
 
   </style>
@@ -144,6 +234,9 @@
       <div id="id_input"></div>
       <input type="button" onclick="onSubmitParams()" value="Submit">
       <input type="button" onclick="onResetParameter()" value="Reset">
+      <input type="button" onclick="document.getElementById('ConfigUpload').click();" value="Upload config">
+      <input type="button" onclick="onFileDownload()" value="Download config">
+      <input type="file" id="ConfigUpload" accept=".json" style="display:none;" onchange="onFileUpload(this.files)">
     </form>
 </div>
 

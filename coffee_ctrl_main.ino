@@ -41,11 +41,20 @@
 // PWM defines
 #define P_SSR_PWM 21
 
-struct PID {
+struct config {
   float Target;
   float Kp;
   float Ki;
   float Kd;
+  bool LowThresholdActivate;
+  float LowThresholdValue;
+  bool HighThresholdActivate;
+  float HighTresholdValue;
+  float LowLimitManipulation;
+  float HighLimitManipulation;
+  uint32_t SsrFreq = 200; // Hz - PWM frequency
+  uint32_t PwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
+  uint32_t PwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
 };
 
 const char* strMeasFilePath = "/data.csv";
@@ -54,11 +63,8 @@ const char* strParamFilePath = "/params.json";
 const int iMaxBytes = 1000000;
 unsigned long iTimeStart = 0;
 
-const uint32_t iSsrFreq = 200; // Hz - PWM frequency
-const uint32_t iPwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
-const uint32_t iPwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
 float fTarPwm;
-PID objPidCoeff;
+config objConfig;
 
 // Sensor variables
 float fTemp = 0; // TODO -  need to use double for PID lib
@@ -206,10 +212,19 @@ void loadConfiguration(){
     Serial.println(F("Failed to read file, using default configuration"));
     initConfiguration();
   } else {
-    objPidCoeff.Kd = json_doc["Kp"];
-    objPidCoeff.Ki = json_doc["Ki"];
-    objPidCoeff.Kd = json_doc["Kd"];
-    objPidCoeff.Target = json_doc["Target"];
+    objConfig.Kd = json_doc["Kp"];
+    objConfig.Ki = json_doc["Ki"];
+    objConfig.Kd = json_doc["Kd"];
+    objConfig.Target = json_doc["Target"];
+    objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"];
+    objConfig.LowThresholdValue = json_doc["LowThresholdValue"];
+    objConfig.HighThresholdActivate = json_doc["HighThresholdActivate"];
+    objConfig.HighTresholdValue = json_doc["HighTresholdValue"];
+    objConfig.LowLimitManipulation = json_doc["LowLimitManipulation"];
+    objConfig.HighLimitManipulation = json_doc["HighLimitManipulation"];
+    objConfig.SsrFreq = json_doc["SsrFreq"];
+    objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"];
+    objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"];
   }
 
   obj_param_file.close();
@@ -222,15 +237,25 @@ void saveConfiguration(){
   
   StaticJsonDocument<200> json_doc;
 
-  json_doc["Kp"] = objPidCoeff.Kp;
-  json_doc["Ki"] = objPidCoeff.Ki;
-  json_doc["Kd"] = objPidCoeff.Kd;
-  json_doc["Target"] = objPidCoeff.Target;
+  json_doc["Kp"] = objConfig.Kp;
+  json_doc["Ki"] = objConfig.Ki;
+  json_doc["Kd"] = objConfig.Kd;
+  json_doc["Target"] = objConfig.Target;
+  json_doc["LowThresholdActivate"] = objConfig.LowThresholdActivate;
+  json_doc["LowThresholdValue"] = objConfig.LowThresholdValue;
+  json_doc["HighThresholdActivate"] = objConfig.HighThresholdActivate;
+  json_doc["HighTresholdValue"] = objConfig.HighTresholdValue;
+  json_doc["LowLimitManipulation"] = objConfig.LowLimitManipulation;
+  json_doc["HighLimitManipulation"] = objConfig.HighLimitManipulation;
+  json_doc["SsrFreq"]  = objConfig.SsrFreq;
+  json_doc["PwmSsrChannel"] = objConfig.PwmSsrChannel;
+  json_doc["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
+
 
   File obj_param_file = SPIFFS.open(strParamFilePath, "w");
   
   if (serializeJson(json_doc, obj_param_file) == 0) {
-    Serial.println(F("Failed to write to file"));
+    Serial.println(F("Failed to write configuration to file"));
   }
   obj_param_file.close();
 }
@@ -240,11 +265,38 @@ void initConfiguration(){
    * init configuration to configuration file 
    */
   
-  objPidCoeff.Kp = 0.01;
-  objPidCoeff.Ki = 0.01;
-  objPidCoeff.Kd = 0.01;
-  objPidCoeff.Target = 92.5;
+  objConfig.Kp = 0.01;
+  objConfig.Ki = 0.01;
+  objConfig.Kd = 0.01;
+  objConfig.Target = 92.5;
+  objConfig.LowThresholdActivate = false;
+  objConfig.LowThresholdValue = 0.0;
+  objConfig.HighThresholdActivate = false;
+  objConfig.HighTresholdValue = 0.0;
+  objConfig.LowLimitManipulation = 0;
+  objConfig.HighLimitManipulation = 255;
+  objConfig.SsrFreq = 200;
+  objConfig.PwmSsrChannel = 0;
+  objConfig.PwmSsrResolution = 8;
   saveConfiguration();
+}
+
+void configPID(){
+  /**
+   * Configurate the PID controller
+   */
+  
+  objPid.begin(&fTemp, &fTarPwm);
+  objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
+  objPid.changeTargetValue(objConfig.Target);
+  objPid.changePidCoeffs(objConfig.Kp, objConfig.Ki, objConfig.Kd);
+
+  if (objConfig.LowThresholdActivate) {
+    objPid.setOnOffThresh(objConfig.LowThresholdValue);
+  }
+
+  // configure PWM functionalitites
+  ledcSetup(objConfig.PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
 }
 
 void setup(){
@@ -393,12 +445,20 @@ void setup(){
         StaticJsonDocument<200> obj_json;
         obj_json = json.as<JsonObject>();
         
-        objPidCoeff.Kp = obj_json["Kp"];
-        objPidCoeff.Ki = obj_json["Ki"];
-        objPidCoeff.Kd = obj_json["Kd"];
-        objPidCoeff.Target = obj_json["Target"];
-        
+        objConfig.Kp = obj_json["Kp"];
+        objConfig.Ki = obj_json["Ki"];
+        objConfig.Kd = obj_json["Kd"];
+        objConfig.Target = obj_json["Target"];
+        objConfig.LowThresholdActivate = obj_json["LowThresholdActivate"];
+        objConfig.LowThresholdValue = obj_json["LowThresholdValue"];
+        objConfig.HighThresholdActivate = obj_json["HighThresholdActivate"];
+        objConfig.HighTresholdValue = obj_json["HighTresholdValue"];
+        objConfig.SsrFreq = obj_json["SsrFreq"];
+        objConfig.PwmSsrChannel = obj_json["PwmSsrChannel"];
+        objConfig.PwmSsrResolution = obj_json["PwmSsrResolution"];
+
         saveConfiguration();
+        configPID();
         request->send(200, "text/plain", "Parameters are updated");
       });
 
@@ -408,6 +468,7 @@ void setup(){
         // initialization of a new parameter file
         initConfiguration();
         saveConfiguration();
+        configPID();
         request->send(200, "text/plain", "Parameters are set back to default values");
       });
 
@@ -458,18 +519,11 @@ void setup(){
   timerAlarmEnable(objTimerLong);
   iTimeStart = millis();
 
-  // Setup PID =========================================================================================================
-  objPid.begin(&fTemp, &fTarPwm);
-  objPid.addOutputLimits(0, (1<<iPwmSsrResolution)-1);
-  objPid.changeTargetValue(objPidCoeff.Target);
-
-  objPid.changePidCoeffs(objPidCoeff.Kp, objPidCoeff.Ki, objPidCoeff.Kd);
-
-  // configure PWM functionalitites
-  ledcSetup(iPwmSsrChannel, iSsrFreq, iPwmSsrResolution);
+  // Configure PID library
+  configPID();
   
   // attach the channel to the GPIO to be controlled
-  ledcAttachPin(P_SSR_PWM, iPwmSsrChannel);
+  ledcAttachPin(P_SSR_PWM, objConfig.PwmSsrChannel);
 
 }// Setup
 
@@ -503,7 +557,7 @@ bool controlHeating(){
   bool b_success = true;
   
   objPid.compute();
-  ledcWrite(iPwmSsrChannel, (int)fTarPwm);
+  ledcWrite(objConfig.PwmSsrChannel, (int)fTarPwm);
 
   return b_success;
 
