@@ -25,8 +25,10 @@ class PidCtrl
     void changePidCoeffs(float, float, float);
     void changePidCoeffs(const float[][4], size_t);
     void changeTargetValue(float);
-    void setOnOffThresh(float f_tresh_on, float f_tresh_off);
-    void setOnOffThresh(float f_tresh);
+    void setOnOffThres(float f_tresh_on, float f_tresh_off);
+    void setOnOffThres(float f_tresh);
+    void setOnThres(float f_tresh);
+    void setOffThres(float f_tresh);
     void compute();
     void compute(const float &, float &);
     void addOutputLimits(const float, const float);
@@ -38,8 +40,10 @@ class PidCtrl
     float _fTargetValue;
     float _fLoLim;
     float _fUpLim;
-    float _fTreashOn;
-    float _fTreashOff;
+    float _fThresOn;
+    float _fThresOff;
+    bool _bThresOn = false;
+    bool _bThresOff = false;
     int _iLinkMode;
     float _fSumIntegrator;
     unsigned long _iLastComputeMillis;
