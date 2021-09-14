@@ -9,8 +9,6 @@
  *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
  *      - Implement both ideas and switching regulation over web interface, e.g. config page?
  *      - make Tuning Parameters editeable via webserver
- *  - Implement config web page and define parameters which can be set dynamically (pid control parameters, etc.)
- *  - Make it look nice, maybe?
  *  - Make coffe.local address also available for wifi clients
 *********/
 
@@ -28,19 +26,20 @@
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
 
+// PIN definitions
 
-// Hardware definitions for i2c
 // I2C pins
 #define SDA_0 23
 #define SCL_0 22
 #define CONV_RDY_PIN 14
 
-// File system definitions
-#define FORMAT_SPIFFS_IF_FAILED true
-
 // PWM defines
 #define P_SSR_PWM 21
 
+// File system definitions
+#define FORMAT_SPIFFS_IF_FAILED true
+
+// config structure for online calibration
 struct config {
   float Target;
   float Kp;
@@ -57,13 +56,18 @@ struct config {
   uint32_t PwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
 };
 
+// File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
+const int iMaxBytesMeasFile = 1000000; // Maximum allowed bytes for the measurement file
 const char* strParamFilePath = "/params.json";
 
-const int iMaxBytes = 1000000;
+// start time for measurement
 unsigned long iTimeStart = 0;
 
+// define target PWM
 float fTarPwm;
+
+// define configuration struct
 config objConfig;
 
 // Sensor variables
@@ -86,7 +90,6 @@ TwoWire objI2cBus = TwoWire(0);
 ADS1115 objAds1115(&objI2cBus);
 
 // timer object for ISR
-// Long for Measurement Store to csv
 hw_timer_t * objTimerLong = NULL;
 
 // Status for function call timing, used in ISR
@@ -161,13 +164,13 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
    */
   
   WiFi.disconnect(true);
-  delay(500);
+  delay(100);
 
   Serial.print("Device ");
   Serial.print(WiFi.macAddress());
   Serial.print(" try connecting to ");
   Serial.println(charSsid);
-  delay(500);
+  delay(100);
 
   int i_run_cnt_fail = 0;
   int i_wifi_status = WL_IDLE_STATUS;
@@ -299,19 +302,92 @@ void configPID(){
   ledcSetup(objConfig.PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
 }
 
-void setup(){
-  // Serial port for debugging purposes
-  Serial.begin(115200);
-  delay(500);
-  Serial.println("Starting setup.");
+void configWebserver(){
+  /**
+   * Configure and start asynchronous webserver
+   */
+
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html");
+  });
+
+  // Route for graphs web page
+  server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/graphs.html");
+  });
+
+  // Route for graphs web page
+  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/settings.html");
+  });
   
-  // Setup ADS1115 =========================================================================================================
+
+  // Route for stylesheets.css
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/style.css");
+  });
+
+  // Route for java script status table
+  server.on("/table.js", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/table.js");
+  });
+
+  // Measurement file, available under http://coffee.local/data.csv
+  server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, strMeasFilePath, "text/plain");
+  });
+
+  // Parameter file, available under http://coffee.local/params.json
+  server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, strParamFilePath, "text/plain");
+  });
+
+  AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    StaticJsonDocument<200> obj_json;
+    obj_json = json.as<JsonObject>();
+    
+    objConfig.Kp = obj_json["Kp"];
+    objConfig.Ki = obj_json["Ki"];
+    objConfig.Kd = obj_json["Kd"];
+    objConfig.Target = obj_json["Target"];
+    objConfig.LowThresholdActivate = obj_json["LowThresholdActivate"];
+    objConfig.LowThresholdValue = obj_json["LowThresholdValue"];
+    objConfig.HighThresholdActivate = obj_json["HighThresholdActivate"];
+    objConfig.HighTresholdValue = obj_json["HighTresholdValue"];
+    objConfig.SsrFreq = obj_json["SsrFreq"];
+    objConfig.PwmSsrChannel = obj_json["PwmSsrChannel"];
+    objConfig.PwmSsrResolution = obj_json["PwmSsrResolution"];
+
+    saveConfiguration();
+    configPID();
+    request->send(200, "text/plain", "Parameters are updated");
+  });
+
+  server.addHandler(obj_handler);
+  
+  server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
+    // initialization of a new parameter file
+    initConfiguration();
+    saveConfiguration();
+    configPID();
+    request->send(200, "text/plain", "Parameters are set back to default values");
+  });
+
+  // Start web server
+  server.begin();
+}
+
+bool configADS1115(){
+  /**
+   * Configure Analog digital converter ADS1115
+   */
+  
   // Initialize I2c on defined pins with default adress
   if (!objAds1115.begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
     Serial.println("Failed to initialize I2C sensor connection, stop working.");
-    // TODO: diagnose
-    while(1);
-  } 
+    return false;
+  }
 
   // set differential voltage: A0-A1
   objAds1115.setMux(ADS1115_MUX_AIN0_AIN1);
@@ -362,38 +438,49 @@ void setup(){
   }
 
   objAds1115.printConfigReg();
+  return true;
+}
 
-  // Setup Webserver =========================================================================================================
+void setup(){
+  // Serial port for debugging purposes
+  Serial.begin(115200);
+  delay(50);
+  Serial.println("Starting setup.");
 
-  // Initialize SPIFFS
-  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-      // Initialization of SPIFFS failed, restart it
-      Serial.println("SPIFFS mount Failed, restart ESP");
-      delay(1000);
-      ESP.restart();
-  } else{
-    Serial.println("SPIFFS mount successfully.");
-    loadConfiguration();
-  }
+  if (configADS1115()){
+    // configuration of analog digital converter is successfull
 
-  // Initialization successfull, create csv file
-  unsigned int i_total_bytes = SPIFFS.totalBytes();
-  unsigned int i_used_bytes = SPIFFS.usedBytes();
+    // Initialize SPIFFS
+    if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
+        // Initialization of SPIFFS failed, restart it
+        Serial.println("SPIFFS mount Failed, restart ESP");
+        delay(1000);
+        ESP.restart();
+    } else{
+      Serial.println("SPIFFS mount successfully.");
+      // load configuration from file in eeprom
+      loadConfiguration();
+    }
 
-  Serial.println("File system info:");
-  Serial.print("Total space on SPIFFS: ");
-  Serial.print(i_total_bytes);
-  Serial.println("byte");
-  
-  Serial.print("Total space used on SPIFFS: ");
-  Serial.print(i_used_bytes);
-  Serial.println("byte");
-  
-  // Connect to wifi
-  bEspOnline = connectWiFi();
-  char char_timestamp[50];
+    // Initialization successfull, create csv file
+    unsigned int i_total_bytes = SPIFFS.totalBytes();
+    unsigned int i_used_bytes = SPIFFS.usedBytes();
 
-  if (bEspOnline == true) {
+    Serial.println("File system info:");
+    Serial.print("Total space on SPIFFS: ");
+    Serial.print(i_total_bytes);
+    Serial.println(" bytes");
+
+    Serial.print("Total space used on SPIFFS: ");
+    Serial.print(i_used_bytes);
+    Serial.println(" bytes");
+    Serial.println("");
+    
+    // Connect to wifi
+    bEspOnline = connectWiFi();
+    char char_timestamp[50];
+
+    if (bEspOnline == true) {
       // ESP has wifi connection
 
       // register mDNS. ESP is available under http://coffee.local
@@ -403,77 +490,6 @@ void setup(){
         // add service to standart http connection
         MDNS.addService("http", "tcp", 80);
       }
-
-      // Webserver Settings
-      // Route for root / web page
-      server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, "/index.html");
-      });
-    
-      // Route for graphs web page
-      server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, "/graphs.html");
-      });
-
-      // Route for graphs web page
-      server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, "/settings.html");
-      });
-      
-
-      // Route for stylesheets.css
-      server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, "/style.css");
-      });
-
-      // Route for java script status table
-      server.on("/table.js", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, "/table.js");
-      });
-
-      // Measurement file, available under http://coffee.local/data.csv
-      server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, strMeasFilePath, "text/plain");
-      });
-
-      // Parameter file, available under http://coffee.local/params.json
-      server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
-        request->send(SPIFFS, strParamFilePath, "text/plain");
-      });
-
-      AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
-        StaticJsonDocument<200> obj_json;
-        obj_json = json.as<JsonObject>();
-        
-        objConfig.Kp = obj_json["Kp"];
-        objConfig.Ki = obj_json["Ki"];
-        objConfig.Kd = obj_json["Kd"];
-        objConfig.Target = obj_json["Target"];
-        objConfig.LowThresholdActivate = obj_json["LowThresholdActivate"];
-        objConfig.LowThresholdValue = obj_json["LowThresholdValue"];
-        objConfig.HighThresholdActivate = obj_json["HighThresholdActivate"];
-        objConfig.HighTresholdValue = obj_json["HighTresholdValue"];
-        objConfig.SsrFreq = obj_json["SsrFreq"];
-        objConfig.PwmSsrChannel = obj_json["PwmSsrChannel"];
-        objConfig.PwmSsrResolution = obj_json["PwmSsrResolution"];
-
-        saveConfiguration();
-        configPID();
-        request->send(200, "text/plain", "Parameters are updated");
-      });
-
-      server.addHandler(obj_handler);
-      
-      server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
-        // initialization of a new parameter file
-        initConfiguration();
-        saveConfiguration();
-        configPID();
-        request->send(200, "text/plain", "Parameters are set back to default values");
-      });
-
-      // Start web server
-      server.begin();
 
       // initialize NTP client
       configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
@@ -486,44 +502,52 @@ void setup(){
         // write time stamp into variable
         strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
       }
-    }
+      // configure and start webserver
+      configWebserver();
+      }
 
-  // generate header in file
-  Serial.print("Create File ");
-  Serial.print(WiFi.localIP());
-  Serial.println(strMeasFilePath);
-  
-  File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
+    // generate header in file
+    Serial.print("Create File ");
+    Serial.print(WiFi.localIP());
+    Serial.println(strMeasFilePath);
+    
+    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
 
-  obj_meas_file.print("Measurement File created on ");
-  obj_meas_file.println(char_timestamp);
-  obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm");
-  obj_meas_file.close();
+    obj_meas_file.print("Measurement File created on ");
+    obj_meas_file.println(char_timestamp);
+    obj_meas_file.println("");
+    obj_meas_file.println("Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm");
+    obj_meas_file.close();
 
-  // Initialize Timer 
-  // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
-  // true: increasing counter
-  objTimerLong = timerBegin(1, 80, true);
+    // Initialize Timer 
+    // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
+    // true: increasing counter
+    objTimerLong = timerBegin(1, 80, true);
 
-  // Attach ISR function to timer
-  // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
-  timerAttachInterrupt(objTimerLong, &onTimerLong, true);
-  pinMode(CONV_RDY_PIN, INPUT);
-  attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
-  
-  // Define timer alarm
-  // factor is 100000, equals 100ms when prescaler is 80
-  // true: Alarm will be reseted automatically
-  timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
-  timerAlarmEnable(objTimerLong);
-  iTimeStart = millis();
+    // Attach ISR function to timer
+    // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
+    timerAttachInterrupt(objTimerLong, &onTimerLong, true);
+    pinMode(CONV_RDY_PIN, INPUT);
+    attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
+    
+    // Define timer alarm
+    // factor is 100000, equals 100ms when prescaler is 80
+    // true: Alarm will be reseted automatically
+    timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
+    timerAlarmEnable(objTimerLong);
+    iTimeStart = millis();
 
-  // Configure PID library
-  configPID();
-  
-  // attach the channel to the GPIO to be controlled
-  ledcAttachPin(P_SSR_PWM, objConfig.PwmSsrChannel);
+    // Configure PID library
+    configPID();
+    
+    // attach the channel to the GPIO to be controlled
+    ledcAttachPin(P_SSR_PWM, objConfig.PwmSsrChannel);
+
+  } else {
+    // TODO add diagnosis when ADS1115 is not connected
+    Serial.println("ADS1115 configuration not successful. System halt.");
+    while(1);
+  }
 
 }// Setup
 
@@ -577,7 +601,7 @@ void writeMeasFile(){
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
-  if (obj_meas_file.size() < iMaxBytes) {
+  if (obj_meas_file.size() < iMaxBytesMeasFile) {
     float f_time = (float)(millis() - iTimeStart) / 1000.0;
     obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");

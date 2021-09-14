@@ -71,9 +71,9 @@
           var lst_line = lst_data[i_row].split(",")
           var f_time = parseFloat(lst_line[0]);
           var f_temp  = parseFloat(lst_line[1]);
-          var f_pwm  = parseFloat(lst_line[6]);
-          var i_heating  = parseInt(lst_line[4]);
-          var i_pump  = parseInt(lst_line[5]);
+          var f_pwm  = parseFloat(lst_line[5]);
+          var i_heating  = parseInt(lst_line[3]);
+          var i_pump  = parseInt(lst_line[4]);
           obj_data_table.addRow([f_time, f_temp, f_pwm, i_heating, i_pump]);
         }
       }
