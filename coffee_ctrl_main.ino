@@ -217,7 +217,7 @@ void loadConfiguration(){
     }
     if (error) {
       Serial.print(F("json deserializion error: "));
-      Serial.println(error.code());
+      Serial.println(error.c_str());
     }
 
     initConfiguration();
@@ -278,9 +278,9 @@ void initConfiguration(){
    * init configuration to configuration file 
    */
   
-  objConfig.Kp = 1.5;
-  objConfig.Ki = 0.01;
-  objConfig.Kd = 0.01;
+  objConfig.Kp = 40.0;
+  objConfig.Ki = 0.001;
+  objConfig.Kd = 0.0;
   objConfig.Target = 92.5;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
