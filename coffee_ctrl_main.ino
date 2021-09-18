@@ -295,7 +295,7 @@ void configPID(){
   objPid.changePidCoeffs(objConfig.Kp, objConfig.Ki, objConfig.Kd);
 
   if (objConfig.LowThresholdActivate) {
-    objPid.setOnOffThresh(objConfig.LowThresholdValue);
+    objPid.setOnThres(objConfig.LowThresholdValue);
   }
 
   // configure PWM functionalitites
