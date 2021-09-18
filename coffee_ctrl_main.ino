@@ -6,9 +6,7 @@
  * TODOS:
  *  - Implement PID regulator
  *      - temperatur as input, SSR control as output
- *      - 2 basic regulation ideas: 1) PWM with short period. 2) PWM with relatively long period.
- *      - Implement both ideas and switching regulation over web interface, e.g. config page?
- *      - make Tuning Parameters editeable via webserver
+ *      - adapt tuning parameter
  *  - Make coffe.local address also available for wifi clients
 *********/
 
@@ -38,6 +36,7 @@
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
+#define JSON_MEMORY 500
 
 // config structure for online calibration
 struct config {
@@ -208,11 +207,19 @@ void loadConfiguration(){
    */
   
   File obj_param_file = SPIFFS.open(strParamFilePath, "r");
-  StaticJsonDocument<200> json_doc;
+  StaticJsonDocument<JSON_MEMORY> json_doc;
   DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
   if ((!obj_param_file) || (error)){
     Serial.println(F("Failed to read file, using default configuration"));
+    if (!obj_param_file) {
+      Serial.println(F("File could not be opened"));
+    }
+    if (error) {
+      Serial.print(F("json deserializion error: "));
+      Serial.println(error.code());
+    }
+
     initConfiguration();
   } else {
     objConfig.Kd = json_doc["Kp"];
@@ -238,7 +245,7 @@ void saveConfiguration(){
    * Save configuration to configuration file 
    */
   
-  StaticJsonDocument<200> json_doc;
+  StaticJsonDocument<JSON_MEMORY> json_doc;
 
   json_doc["Kp"] = objConfig.Kp;
   json_doc["Ki"] = objConfig.Ki;
@@ -260,6 +267,9 @@ void saveConfiguration(){
   if (serializeJson(json_doc, obj_param_file) == 0) {
     Serial.println(F("Failed to write configuration to file"));
   }
+  else{
+    Serial.println("configuration file updated successfully");
+  }
   obj_param_file.close();
 }
 
@@ -268,7 +278,7 @@ void initConfiguration(){
    * init configuration to configuration file 
    */
   
-  objConfig.Kp = 0.01;
+  objConfig.Kp = 1.5;
   objConfig.Ki = 0.01;
   objConfig.Kd = 0.01;
   objConfig.Target = 92.5;
@@ -344,7 +354,7 @@ void configWebserver(){
   });
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
-    StaticJsonDocument<200> obj_json;
+    StaticJsonDocument<JSON_MEMORY> obj_json;
     obj_json = json.as<JsonObject>();
     
     objConfig.Kp = obj_json["Kp"];
@@ -406,17 +416,14 @@ bool configADS1115(){
 
   // assert after one conversion
   objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
-
-  switch (Pt1000_CONV_METHOD)
-  {
-  case Pt1000_CONV_LINEAR:
+  #ifdef Pt1000_CONV_LINEAR
     objAds1115.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
     Serial.print("Applying linear regression function for Pt1000 conversion: ");
     Serial.print(fPt1000LinCoeffX1, 4);
     Serial.print(" * Umess + ");
     Serial.println(fPt1000LinCoeffX0, 4);
-    break;
-  case Pt1000_CONV_SQUARE:
+  #endif
+  #ifdef Pt1000_CONV_SQUARE
     objAds1115.setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
     Serial.print("Applying square regression function for Pt1000 conversion: ");
     Serial.print(fPt1000SquareCoeffX2, 4);
@@ -424,8 +431,8 @@ bool configADS1115(){
     Serial.print(fPt1000SquareCoeffX1, 4);
     Serial.print(" * Umess + ");
     Serial.println(fPt1000SquareCoeffX0);
-    break;
-  case Pt1000_CONV_LOOK_UP_TABLE:
+  #endif
+  #ifdef Pt1000_CONV_LOOK_UP_TABLE
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
     objAds1115.setPhysConv(arrPt1000LookUpTbl, size_1d_map);
     Serial.println("Applying Lookuptable for Pt1000 conversion:");
@@ -434,8 +441,7 @@ bool configADS1115(){
       Serial.print("   ");
       Serial.println(arrPt1000LookUpTbl[i_row][1], 4);
     }
-    break;
-  }
+  #endif
 
   objAds1115.printConfigReg();
   return true;

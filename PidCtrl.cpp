@@ -197,7 +197,6 @@ void PidCtrl::_calcControlEquation(){
     float f_control_deviation;
     float f_d_control_deviation; // deviation of actual value TODO needed?
     float f_k_p_coeff, f_t_i_coeff_inv, f_t_d_coeff;
-    float f_manip_value; // TODO not needed
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
     
