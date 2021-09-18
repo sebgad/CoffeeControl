@@ -6,7 +6,7 @@ The project is based on an esp32 via the arduino IDE.
 ## code
 
 ### required aduino libaries:
-- for PID control [PID_v1](https://playground.arduino.cc/Code/PIDLibrary/)
+- for Json handling [ArduinoJson](https://arduinojson.org/)
 - for Webserver [ESPAsyncWebserver](https://github.com/me-no-dev/ESPAsyncWebServer)
 - for Async TCP transfer [AsyncTCP](https://github.com/me-no-dev/AsyncTCP)
 
@@ -28,24 +28,27 @@ static const char charPassword[] = "XXX";
 ```c++
 #ifndef Pt1000_h
 #define Pt1000_h
+
+#define Pt1000_CONV_SQUARE  // define for square interpolation
+
 #include "Arduino.h"
 
-#define Pt1000_CONV_LINEAR 0b001
-#define Pt1000_CONV_SQUARE 0b010
-#define Pt1000_CONV_LOOK_UP_TABLE 0b011
-
-const int Pt1000_CONV_METHOD = Pt1000_CONV_SQUARE;
-
 // Define coefficients for linear regression function
+// use #define Pt1000_CONV_LINEAR if you want to use the linear interpolation
+// variable are only requred if this define is set
 const float fPt1000LinCoeffX1 = 433.6520668;
 const float fPt1000LinCoeffX0 = 82.01975366;
 
 // Define coefficients for quadratic regression function
+// use #define Pt1000_CONV_SQUARE if you want to use the square interpolation
+// variable are only requred if this define is set
 const float fPt1000SquareCoeffX2 = 295.16714369;
 const float fPt1000SquareCoeffX1 = 417.84868016;
 const float fPt1000SquareCoeffX0 = 76.91861221;
 
 // Define lookup table for temperature calculation
+// use #define Pt1000_CONV_LOOK_UP_TABLE if you want to use the lookup table
+// variable are only requred if this define is set
 const float arrPt1000LookUpTbl[][2] = {
                                         {-0.21396866840731069, 0.0},
                                         {-0.19826086393703643, 5.0},
