@@ -206,6 +206,7 @@ void PidCtrl::_calcControlEquation(){
     if (_iSizeCoeffTbl > 1) {
         // Regulator with different coefficients, depending on actual variable value
         for (int i_row=_iSizeCoeffTbl; i_row>=0; i_row--){
+            // TODO dont use actual value as parameter selector -> use different pointer (can be actual value or anything else)
             if (ptrConstants[i_row][3] < *ptrActualValue){
                 f_k_p_coeff = ptrConstants[i_row][0];
                 f_t_i_coeff_inv = ptrConstants[i_row][1];
@@ -229,7 +230,7 @@ void PidCtrl::_calcControlEquation(){
     if (*ptrManipValue<_fLoLim) { *ptrManipValue = _fLoLim; };
     if (*ptrManipValue>_fUpLim) { *ptrManipValue = _fUpLim; };
 
-    // TODO check for ONOFFThreshold
+    // TODO check and react for ONOFFThreshold
     
     _fLastControlDev = f_control_deviation;
     _iLastComputeMillis = millis();
