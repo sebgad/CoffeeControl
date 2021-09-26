@@ -57,8 +57,10 @@ struct config {
 
 // File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
+bool bMeasFileLocked = false;
 const int iMaxBytesMeasFile = 1000000; // Maximum allowed bytes for the measurement file
 const char* strParamFilePath = "/params.json";
+bool bParamFileLocked = false;
 
 // start time for measurement
 unsigned long iTimeStart = 0;
@@ -201,27 +203,39 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   return b_successful;
 } // connectWiFi
 
-void loadConfiguration(){
+bool loadConfiguration(){
   /**
    * Load configuration from configuration file 
    */
   
-  File obj_param_file = SPIFFS.open(strParamFilePath, "r");
-  StaticJsonDocument<JSON_MEMORY> json_doc;
-  DeserializationError error = deserializeJson(json_doc, obj_param_file);
+  bool b_success = false;
 
-  if ((!obj_param_file) || (error)){
-    Serial.println(F("Failed to read file, using default configuration"));
-    if (!obj_param_file) {
-      Serial.println(F("File could not be opened"));
-    }
-    if (error) {
-      Serial.print(F("json deserializion error: "));
-      Serial.println(error.c_str());
-    }
+  if (!bParamFileLocked){
+    // file is not locked by another process ->  save to read or write
+    bParamFileLocked = true;
+    File obj_param_file = SPIFFS.open(strParamFilePath, "r");
+    StaticJsonDocument<JSON_MEMORY> json_doc;
+    DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
-    initConfiguration();
-  } else {
+    if ((!obj_param_file) || (error)){
+      Serial.println(F("Failed to read file, using default configuration"));
+      
+      if (!obj_param_file) {
+        Serial.println(F("File could not be opened"));
+      }
+    
+      if (error) {
+        Serial.print(F("json deserializion error: "));
+        Serial.println(error.c_str());
+      }
+    
+      obj_param_file.close();
+      bParamFileLocked = false;
+      initConfiguration();
+    
+    } else {
+    // file could be read without issues and json document could be interpreted
+    bParamFileLocked = false;
     objConfig.Kd = json_doc["Kp"];
     objConfig.Ki = json_doc["Ki"];
     objConfig.Kd = json_doc["Kd"];
@@ -236,15 +250,19 @@ void loadConfiguration(){
     objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"];
     objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"];
   }
-
-  obj_param_file.close();
+    b_success = true;
+  } else {
+    b_success = false;
+  }
+  return b_success;
 }
 
-void saveConfiguration(){
+bool saveConfiguration(){
   /**
    * Save configuration to configuration file 
    */
   
+  bool b_success = false;
   StaticJsonDocument<JSON_MEMORY> json_doc;
 
   json_doc["Kp"] = objConfig.Kp;
@@ -261,16 +279,23 @@ void saveConfiguration(){
   json_doc["PwmSsrChannel"] = objConfig.PwmSsrChannel;
   json_doc["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
 
-
-  File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+  if (!bParamFileLocked){
+    bParamFileLocked = true;
+    File obj_param_file = SPIFFS.open(strParamFilePath, "w");
   
-  if (serializeJson(json_doc, obj_param_file) == 0) {
-    Serial.println(F("Failed to write configuration to file"));
+    if (serializeJson(json_doc, obj_param_file) == 0) {
+      Serial.println(F("Failed to write configuration to file"));
+    }
+    else{
+      Serial.println("configuration file updated successfully");
+      b_success = true;
+    }
+    obj_param_file.close();
+    bParamFileLocked = false;
+  } else {
+    b_success = false;
   }
-  else{
-    Serial.println("configuration file updated successfully");
-  }
-  obj_param_file.close();
+  return b_success;
 }
 
 void initConfiguration(){
@@ -345,12 +370,20 @@ void configWebserver(){
 
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, strMeasFilePath, "text/plain");
+    if (!bMeasFileLocked){
+      bMeasFileLocked = true;
+      request->send(SPIFFS, strMeasFilePath, "text/plain");
+      bMeasFileLocked = false;
+    }
   });
 
   // Parameter file, available under http://coffee.local/params.json
   server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, strParamFilePath, "text/plain");
+    if (!bParamFileLocked){
+      bParamFileLocked = true;
+      request->send(SPIFFS, strParamFilePath, "text/plain");
+      bParamFileLocked = false;
+    }
   });
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
@@ -369,9 +402,13 @@ void configWebserver(){
     objConfig.PwmSsrChannel = obj_json["PwmSsrChannel"];
     objConfig.PwmSsrResolution = obj_json["PwmSsrResolution"];
 
-    saveConfiguration();
-    configPID();
-    request->send(200, "text/plain", "Parameters are updated");
+    if (saveConfiguration()){
+      configPID();
+      request->send(200, "text/plain", "Parameters are updated to file and applied to system");
+    } else {
+      request->send(200, "text/plain", "Parameters are not updated due to write lock");
+    }
+  
   });
 
   server.addHandler(obj_handler);
@@ -517,13 +554,19 @@ void setup(){
     Serial.print(WiFi.localIP());
     Serial.println(strMeasFilePath);
     
-    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
+    if (!bMeasFileLocked){
+      bMeasFileLocked = true;
+      File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
 
-    obj_meas_file.print("Measurement File created on ");
-    obj_meas_file.println(char_timestamp);
-    obj_meas_file.println("");
-    obj_meas_file.println("Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm");
-    obj_meas_file.close();
+      obj_meas_file.print("Measurement File created on ");
+      obj_meas_file.println(char_timestamp);
+      obj_meas_file.println("");
+      obj_meas_file.println("Time,Temperature,Pressure,Heating,Pump,TargetPWM");
+      obj_meas_file.close();
+      bMeasFileLocked = false;
+    } else {
+      Serial.println("Could not create measurement file due to active Lock");
+    }
 
     // Initialize Timer 
     // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
@@ -593,11 +636,12 @@ bool controlHeating(){
 
 } // controlHeating
 
-void writeMeasFile(){
+bool writeMeasFile(){
   /** Function to store the data in measurement file
    *
    */
 
+  bool b_success = false;
   portENTER_CRITICAL_ISR(&objTimerMux);
     float f_pressure = fPressure;
     float f_temp_local = fTemp;
@@ -606,26 +650,34 @@ void writeMeasFile(){
     float f_tar_pwm = fTarPwm;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
-  File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
-  if (obj_meas_file.size() < iMaxBytesMeasFile) {
-    float f_time = (float)(millis() - iTimeStart) / 1000.0;
-    obj_meas_file.print(f_time, 4);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_local);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_pressure);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_heating_status_local);
-    obj_meas_file.print(",");
-    obj_meas_file.print(i_pump_status_local);
-    obj_meas_file.print(",");
-    obj_meas_file.println(f_tar_pwm);
-    obj_meas_file.close();
+  if (!bMeasFileLocked){
+    bMeasFileLocked = true;
+    File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
+    if (obj_meas_file.size() < iMaxBytesMeasFile) {
+      float f_time = (float)(millis() - iTimeStart) / 1000.0;
+      obj_meas_file.print(f_time, 4);
+      obj_meas_file.print(",");
+      obj_meas_file.print(f_temp_local);
+      obj_meas_file.print(",");
+      obj_meas_file.print(f_pressure);
+      obj_meas_file.print(",");
+      obj_meas_file.print(f_heating_status_local);
+      obj_meas_file.print(",");
+      obj_meas_file.print(i_pump_status_local);
+      obj_meas_file.print(",");
+      obj_meas_file.println(f_tar_pwm);
+      obj_meas_file.close();
+    } else {
+      Serial.println("Data file size exceeded, delete it.");
+      obj_meas_file.close();
+      SPIFFS.remove(strMeasFilePath);
+    }
+    b_success = true;
+    bMeasFileLocked = false;
   } else {
-    Serial.println("Data file size exceeded, delete it.");
-    obj_meas_file.close();
-    SPIFFS.remove(strMeasFilePath);
+    b_success = false;
   }
+  return b_success;
 }// writeMeasFile
 
 void loop(){
@@ -654,9 +706,12 @@ void loop(){
   }
  
   if (iStatusMeas==STORE_MEAS) {
-      writeMeasFile();
+      bool b_result_meas_write;
+      b_result_meas_write = writeMeasFile();
       portENTER_CRITICAL_ISR(&objTimerMux);
-        iStatusMeas = IDLE_MEAS;
+        if (b_result_meas_write){
+          iStatusMeas = IDLE_MEAS;
+        }
       portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 }// loop
