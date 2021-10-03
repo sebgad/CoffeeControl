@@ -15,57 +15,27 @@
    google.charts.setOnLoadCallback(drawChart);
 
   function drawChart() {
-    var bPress = false;
-    var bTemp = true;
-
-    if (bPress){
-      var dataPress= google.visualization.arrayToDataTable([
-        ['Label', 'Value'],
-        ['Pressure', 0.0],
-      ]);
-
-      var optionsPressure = {
-        width: 400, height: 120,
-        greenFrom: 8.5, greenTo: 9,
-        redFrom: 9, redTo: 11,
-        yellowFrom:0, yellowTo: 8.5,
-        minorTicks: 10,
-        min:0, max:11,
-      };
+    var dataTemp = google.visualization.arrayToDataTable([
+      ['Label', 'Value'],
+      ['Temp', 0.0],
+    ]);
       
-      var formatterPress = new google.visualization.NumberFormat({
-        suffix: 'bar',
-        fractionDigits: 1
-      });
+    var optionsTemp = {
+      width: 400, height: 120,
+      greenFrom: 90, greenTo: 95,
+      redFrom: 95, redTo: 120,
+      yellowFrom:0, yellowTo: 90,
+      minorTicks: 10
+    };
       
-      formatterPress.format(dataPress, 1);
-      var chartPress = new google.visualization.Gauge(document.getElementById('gauge_Press'));
-      chartPress.draw(dataPress, optionsPressure);
-    }
-
-    if (bTemp){
-      var dataTemp = google.visualization.arrayToDataTable([
-        ['Label', 'Value'],
-        ['Temp', 0.0],
-      ]);
+    var formatterTemp = new google.visualization.NumberFormat({
+      suffix: '°C',
+      fractionDigits: 1,
+    });
+    formatterTemp.format(dataTemp, 1); 
       
-      var optionsTemp = {
-        width: 400, height: 120,
-        greenFrom: 90, greenTo: 95,
-        redFrom: 95, redTo: 120,
-        yellowFrom:0, yellowTo: 90,
-        minorTicks: 10
-      };
-      
-      var formatterTemp = new google.visualization.NumberFormat({
-        suffix: '°C',
-        fractionDigits: 1,
-      });
-      formatterTemp.format(dataTemp, 1); 
-      
-      var chartTemp = new google.visualization.Gauge(document.getElementById('gauge_Temp'));
-      chartTemp.draw(dataTemp, optionsTemp);
-    }
+    var chartTemp = new google.visualization.Gauge(document.getElementById('gauge_Temp'));
+    chartTemp.draw(dataTemp, optionsTemp);
 
     setInterval(function() {
       var xhr=new XMLHttpRequest();
@@ -74,19 +44,21 @@
       xhr.onload= function() {
         var str_buf = xhr.responseText;
         data = str_buf.split(/\r?\n/g);
+
+        // change status icons
+        var obj_sel_heating = document.getElementById("selHeating");
+        var f_last_heating_status = data[data.length-2].split(",")[2]; 
+        if(f_last_heating_status == 0){
+          obj_sel_heating.className = "indicator off";
+        } else if (f_last_heating_status == 1) {
+          obj_sel_heating.className = "indicator on";
+        }
+
         var temp = parseFloat(data[data.length-2].split(",")[1]);
-        var press  = parseFloat(data[data.length-2].split(",")[2]);
         
-        if (bTemp){
-          dataTemp.setValue(0, 1, temp);
-          formatterTemp.format(dataTemp, 1);
-          chartTemp.draw(dataTemp, optionsTemp);
-        }
-        if (bPress){
-          dataPress.setValue(0, 1, press, 2);
-          formatterPress.format(dataPress, 1);
-          chartPress.draw(dataPress, optionsPressure);
-        }
+        dataTemp.setValue(0, 1, temp);
+        formatterTemp.format(dataTemp, 1);
+        chartTemp.draw(dataTemp, optionsTemp);
       }
       xhr.send();
     }, 3000);
@@ -94,10 +66,27 @@
  </script> 
 </head>
 <body>
+  <style>
+    p {
+      display: flex;
+      justify-content: left;
+      align-items: center;
+    }
+
+    p > span {
+      display: inline-block;
+      width: 20px;
+    }
+
+    p > span:first-child {
+      display: inline-block;
+      width: 200px;
+    }
+    </style>
 
 <div class="header">
   <h1>Silvia Control</h1>
-  <p>A simple <b>web interface</b> to control Rancilio Silvia espresso machine.</p>
+  A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
 </div>
 
 <div class="navbar">
@@ -107,16 +96,17 @@
   <a href="#" class="right">About</a>
 </div>
 
-<div class="row">
-  <div class="main">
-    <h2>Control Board</h2>
-    <h3>Status</h3>
-    <div id="table_div"></div>
-    <h3>Actual Sensor Values</h3>
-    <div class="container">
-      <div class="item", id="gauge_Temp"></div>
-      <div class="item", id="gauge_Press"></div>
-    </div>
+<div class="main">
+  <h2>Control Board</h2>
+  <h3>Status</h3>
+  <p>
+    <span>HEATING ON</span>
+    <span id="selHeating"></span>
+  </p>
+  <h3>Actual Sensor Values</h3>
+  <div class="container">
+    <div class="item", id="gauge_Temp"></div>
+    <div class="item", id="gauge_Press"></div>
   </div>
 </div>
 
