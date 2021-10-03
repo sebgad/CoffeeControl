@@ -73,8 +73,6 @@ config objConfig;
 
 // Sensor variables
 float fTemp = 0; // TODO -  need to use double for PID lib
-float fPressure = 0;
-int iPumpStatus = 0; // 0: off, 1: on
 int iHeatingStatus = 0; // 0: off, 1:on
 
 // bit variable to indicate whether ESP32 has a online connection
@@ -232,23 +230,22 @@ bool loadConfiguration(){
       obj_param_file.close();
       bParamFileLocked = false;
       initConfiguration();
-    
     } else {
-    // file could be read without issues and json document could be interpreted
-    bParamFileLocked = false;
-    objConfig.Kd = json_doc["Kp"];
-    objConfig.Ki = json_doc["Ki"];
-    objConfig.Kd = json_doc["Kd"];
-    objConfig.Target = json_doc["Target"];
-    objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"];
-    objConfig.LowThresholdValue = json_doc["LowThresholdValue"];
-    objConfig.HighThresholdActivate = json_doc["HighThresholdActivate"];
-    objConfig.HighTresholdValue = json_doc["HighTresholdValue"];
-    objConfig.LowLimitManipulation = json_doc["LowLimitManipulation"];
-    objConfig.HighLimitManipulation = json_doc["HighLimitManipulation"];
-    objConfig.SsrFreq = json_doc["SsrFreq"];
-    objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"];
-    objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"];
+      // file could be read without issues and json document could be interpreted
+      bParamFileLocked = false;
+      objConfig.Kd = json_doc["Kp"];
+      objConfig.Ki = json_doc["Ki"];
+      objConfig.Kd = json_doc["Kd"];
+      objConfig.Target = json_doc["Target"];
+      objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"];
+      objConfig.LowThresholdValue = json_doc["LowThresholdValue"];
+      objConfig.HighThresholdActivate = json_doc["HighThresholdActivate"];
+      objConfig.HighTresholdValue = json_doc["HighTresholdValue"];
+      objConfig.LowLimitManipulation = json_doc["LowLimitManipulation"];
+      objConfig.HighLimitManipulation = json_doc["HighLimitManipulation"];
+      objConfig.SsrFreq = json_doc["SsrFreq"];
+      objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"];
+      objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"];
   }
     b_success = true;
   } else {
@@ -283,7 +280,7 @@ bool saveConfiguration(){
     bParamFileLocked = true;
     File obj_param_file = SPIFFS.open(strParamFilePath, "w");
   
-    if (serializeJson(json_doc, obj_param_file) == 0) {
+    if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
       Serial.println(F("Failed to write configuration to file"));
     }
     else{
@@ -502,7 +499,9 @@ void setup(){
     } else{
       Serial.println("SPIFFS mount successfully.");
       // load configuration from file in eeprom
-      loadConfiguration();
+      if (loadConfiguration()) {
+        Serial.println("Parameter file is locked on startup. Please reset to factory settings.");
+      }
     }
 
     // Initialization successfull, create csv file
@@ -561,7 +560,7 @@ void setup(){
       obj_meas_file.print("Measurement File created on ");
       obj_meas_file.println(char_timestamp);
       obj_meas_file.println("");
-      obj_meas_file.println("Time,Temperature,Pressure,Heating,Pump,TargetPWM");
+      obj_meas_file.println("Time,Temperature,Heating,TargetPWM,Memory_Alloc");
       obj_meas_file.close();
       bMeasFileLocked = false;
     } else {
@@ -608,7 +607,6 @@ boolean readSensors(){
   // get physical value of sensor
   fTemp = objAds1115.getPhysVal();
   // get voltage level of sensor
-  fPressure = random(0,10);
   
   // TODO S.: Logic for Heating Status indicator needs to be added
   if (fTarPwm >= 120) {
@@ -617,7 +615,6 @@ boolean readSensors(){
     iHeatingStatus = 0;
   }
 
-  iPumpStatus = 0;
   b_result = true;
   return b_result;
 } //readSensors
@@ -643,11 +640,10 @@ bool writeMeasFile(){
 
   bool b_success = false;
   portENTER_CRITICAL_ISR(&objTimerMux);
-    float f_pressure = fPressure;
     float f_temp_local = fTemp;
-    int i_pump_status_local = iPumpStatus;
     int f_heating_status_local = iHeatingStatus;
     float f_tar_pwm = fTarPwm;
+    float f_free_heap_size = ESP.getFreeHeap()/1000.0;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   if (!bMeasFileLocked){
@@ -659,13 +655,11 @@ bool writeMeasFile(){
       obj_meas_file.print(",");
       obj_meas_file.print(f_temp_local);
       obj_meas_file.print(",");
-      obj_meas_file.print(f_pressure);
-      obj_meas_file.print(",");
       obj_meas_file.print(f_heating_status_local);
       obj_meas_file.print(",");
-      obj_meas_file.print(i_pump_status_local);
+      obj_meas_file.print(f_tar_pwm);
       obj_meas_file.print(",");
-      obj_meas_file.println(f_tar_pwm);
+      obj_meas_file.println(f_free_heap_size);
       obj_meas_file.close();
     } else {
       Serial.println("Data file size exceeded, delete it.");
@@ -697,7 +691,6 @@ void loop(){
     // Call heating control function
     bool b_result_ctrl_heating;
     b_result_ctrl_heating = controlHeating();
-    
     if (b_result_ctrl_heating == true) {
       portENTER_CRITICAL_ISR(&objTimerMux);
         iStatusCtrl = IDLE;
