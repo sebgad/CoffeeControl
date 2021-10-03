@@ -1,0 +1,100 @@
+
+(rules PCB EspressoV1
+  (snap_angle 
+    fortyfive_degree
+  )
+  (autoroute_settings
+    (fanout off)
+    (eu.mihosoft.freerouting.autoroute on)
+    (postroute on)
+    (vias on)
+    (via_costs 50)
+    (plane_via_costs 5)
+    (start_ripup_costs 100)
+    (start_pass_no 530)
+    (layer_rule F.Cu
+      (active on)
+      (preferred_direction horizontal)
+      (preferred_direction_trace_costs 1.0)
+      (against_preferred_direction_trace_costs 2.4)
+    )
+    (layer_rule B.Cu
+      (active on)
+      (preferred_direction vertical)
+      (preferred_direction_trace_costs 1.0)
+      (against_preferred_direction_trace_costs 1.7)
+    )
+  )
+  (rule
+    (width 250.0)
+    (clear 200.2)
+    (clear 125.0 (type smd_to_turn_gap))
+    (clear 250.2 (type default_thicker1))
+    (clear 50.0 (type smd_smd))
+    (clear 250.2 (type smd_thicker1))
+    (clear 250.2 (type "kicad_default"_thicker1))
+    (clear 250.2 (type thicker1_thicker1))
+  )
+  (padstack "Via[0-1]_800:400_um"
+    (shape
+      (circle F.Cu 800.0 0.0 0.0)
+    )
+    (shape
+      (circle B.Cu 800.0 0.0 0.0)
+    )
+    (attach off)
+  )
+  (via 
+    "Via[0-1]_800:400_um" "Via[0-1]_800:400_um" default
+  )
+  (via 
+    "Via[0-1]_800:400_um-kicad_default" "Via[0-1]_800:400_um" "kicad_default"
+  )
+  (via 
+    "Via[0-1]_800:400_um-thicker1" "Via[0-1]_800:400_um" thicker1
+  )
+  (via_rule
+    default "Via[0-1]_800:400_um"
+  )
+  (via_rule
+    "kicad_default" "Via[0-1]_800:400_um-kicad_default"
+  )
+  (via_rule
+    thicker1 "Via[0-1]_800:400_um-thicker1"
+  )
+  (class default
+    (clearance_class default)
+    (via_rule default)
+    (rule
+      (width 250.0)
+    )
+    (circuit 
+      (use_layer F.Cu B.Cu)
+    )
+  )
+  (class "kicad_default"
+    (clearance_class "kicad_default")
+    (via_rule kicad_default)
+    (rule
+      (width 250.0)
+    )
+    (circuit 
+      (use_layer F.Cu B.Cu)
+    )
+  )
+  (class thicker1
+    GND "Net-(0x48-Pad2)" "Net-(0x48-Pad4)" "Net-(0x48-Pad5)" "Net-(0x48-Pad6)" "Net-(0x48-Pad7)" "Net-(0x48-Pad8)" "Net-(0x48-Pad9)"
+    "Net-(0x48-Pad10)" "Net-(0x49-Pad7)" "Net-(0x49-Pad6)" "Net-(0x49-Pad5)" "Net-(0x49-Pad4)" "Net-(0x49-Pad2)" "Net-(ESP321-PadP34)" "Net-(ESP321-PadP25)"
+    "Net-(ESP321-PadP04)" "Net-(ESP321-PadP26)" "Net-(ESP321-PadP39)" "Net-(ESP321-PadP18)" "Net-(ESP321-PadNC)" "Net-(ESP321-PadP21)" "Net-(ESP321-PadP05)" "Net-(ESP321-PadP16)"
+    "Net-(ESP321-PadP36)" "Net-(ESP321-PadP17)" "Net-(ESP321-PadP19)" "Net-(ESP321-PadRESET)" "Net-(ESP321-PadP13)" "Net-(ESP321-PadVBAT)" "Net-(ESP321-PadP33)" "Net-(ESP321-PadVUSB)"
+    "Net-(ESP321-PadEN)" "Net-(ESP321-PadP27)" "Net-(ESP321-PadP15)" "Net-(ESP321-PadP12)"
+    (clearance_class thicker1)
+    (via_rule thicker1)
+    (rule
+      (width 350.0)
+    )
+    (circuit 
+      (use_layer F.Cu B.Cu)
+    )
+  )
+)
