@@ -191,6 +191,21 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
       // Print ESP32 Local IP Address
       Serial.print("Connection successful. Local IP: ");
       Serial.println(WiFi.localIP());
+      // Signal strength and approximate conversion to percentage
+      int i_dBm = WiFi.RSSI();
+      int i_dBm_percentage = 0;
+      if (i_dBm>=-50) {
+        i_dBm_percentage = 100;
+      } else if (i_dBm<=-100) {
+        i_dBm_percentage = 0;
+      } else {
+        i_dBm_percentage = 2*(i_dBm+100);
+      }
+      Serial.print("Signal Strength: ");
+      Serial.print(i_dBm);
+      Serial.print(" dB -> ");
+      Serial.print(i_dBm_percentage);
+      Serial.println(" %");
       b_successful = true;
   } else {
     Serial.print("Connection unsuccessful. WiFi status: ");
