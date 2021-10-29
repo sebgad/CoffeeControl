@@ -16,7 +16,7 @@
 
     for (i = 0; i < obj_div_input_children.length; ++i) {
       if (obj_div_input_children[i].type === "text"){
-        obj_json_req[obj_div_input_children[i].id] = parseFloat(obj_div_input_children[i].value);
+        obj_json_req[obj_div_input_children[i].id] = obj_div_input_children[i].value;
       } else if (obj_div_input_children[i].type === "checkbox"){
         obj_json_req[obj_div_input_children[i].id] = (obj_div_input_children[i].checked);
       }

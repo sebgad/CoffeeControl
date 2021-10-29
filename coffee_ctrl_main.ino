@@ -40,6 +40,8 @@
 
 // config structure for online calibration
 struct config {
+  String wifiSSID;
+  String wifiPassword;
   float Target;
   float Kp;
   float Ki;
@@ -162,23 +164,25 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
    *    b_status:         true if connection is successfull
    */
   
+  bool b_successful = false;
+  
   WiFi.disconnect(true);
   delay(100);
 
   Serial.print("Device ");
-  Serial.print(WiFi.macAddress());
-  Serial.print(" try connecting to ");
-  Serial.println(charSsid);
+  Serial.println(WiFi.macAddress());
+
+  Serial.print("try connecting to ");
+  Serial.print(objConfig.wifiSSID);
   delay(100);
 
   int i_run_cnt_fail = 0;
   int i_wifi_status = WL_IDLE_STATUS;
-  bool b_successful = false;
 
   WiFi.mode(WIFI_STA);
 
   // Connect to WPA/WPA2 network:
-  WiFi.begin(charSsid, charPassword);
+  WiFi.begin(objConfig.wifiSSID.c_str(), objConfig.wifiPassword.c_str());
 
   while ((i_wifi_status != WL_CONNECTED) && (i_run_cnt_fail<i_total_fail)) {
     // wait for connection establish
@@ -210,9 +214,8 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   } else {
     Serial.print("Connection unsuccessful. WiFi status: ");
     Serial.println(i_wifi_status);
-    b_successful = false;
   }
-
+  
   return b_successful;
 } // connectWiFi
 
@@ -248,6 +251,8 @@ bool loadConfiguration(){
     } else {
       // file could be read without issues and json document could be interpreted
       bParamFileLocked = false;
+      objConfig.wifiSSID = json_doc["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
+      objConfig.wifiPassword = json_doc["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
       objConfig.Kd = json_doc["Kp"];
       objConfig.Ki = json_doc["Ki"];
       objConfig.Kd = json_doc["Kd"];
@@ -277,6 +282,8 @@ bool saveConfiguration(){
   bool b_success = false;
   StaticJsonDocument<JSON_MEMORY> json_doc;
 
+  json_doc["wifiSSID"] = objConfig.wifiSSID;
+  json_doc["wifiPassword"] = objConfig.wifiPassword;
   json_doc["Kp"] = objConfig.Kp;
   json_doc["Ki"] = objConfig.Ki;
   json_doc["Kd"] = objConfig.Kd;
@@ -315,6 +322,8 @@ void initConfiguration(){
    * init configuration to configuration file 
    */
   
+  objConfig.wifiSSID = "";
+  objConfig.wifiPassword = "";
   objConfig.Kp = 40.0;
   objConfig.Ki = 0.001;
   objConfig.Kd = 0.0;
@@ -402,6 +411,8 @@ void configWebserver(){
     StaticJsonDocument<JSON_MEMORY> obj_json;
     obj_json = json.as<JsonObject>();
     
+    objConfig.wifiSSID = obj_json["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
+    objConfig.wifiPassword = obj_json["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
     objConfig.Kp = obj_json["Kp"];
     objConfig.Ki = obj_json["Ki"];
     objConfig.Kd = obj_json["Kd"];
@@ -540,13 +551,6 @@ void setup(){
     if (bEspOnline == true) {
       // ESP has wifi connection
 
-      // register mDNS. ESP is available under http://coffee.local
-      if (!MDNS.begin("coffee")) {
-        Serial.println("Error setting up MDNS responder!");
-      } else {
-        // add service to standart http connection
-        MDNS.addService("http", "tcp", 80);
-      }
 
       // initialize NTP client
       configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
@@ -559,15 +563,36 @@ void setup(){
         // write time stamp into variable
         strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
       }
-      // configure and start webserver
-      configWebserver();
-      }
 
-    // generate header in file
-    Serial.print("Create File ");
-    Serial.print(WiFi.localIP());
-    Serial.println(strMeasFilePath);
+      // print location to measurement file
+      Serial.print("Create File ");
+      Serial.print(WiFi.localIP());
+      Serial.println(strMeasFilePath);
     
+    } else {
+      // No wifi connection possible start SoftAP
+      Serial.print("Connection to SSID '");
+      Serial.print(objConfig.wifiSSID);
+      Serial.println("' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'");
+      WiFi.softAP("SilviaCoffeeCtrl");
+      
+      // print location to measurement file
+      Serial.print("Create File ");
+      Serial.print(WiFi.softAPIP());
+      Serial.println(strMeasFilePath);
+    }
+
+    // register mDNS. ESP is available under http://coffee.local
+    if (!MDNS.begin("coffee")) {
+      Serial.println("Error setting up MDNS responder!");
+    } else {
+      // add service to standart http connection
+      MDNS.addService("http", "tcp", 80);
+    }
+
+    // configure and start webserver
+    configWebserver();
+
     if (!bMeasFileLocked){
       bMeasFileLocked = true;
       File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
@@ -723,3 +748,4 @@ void loop(){
       portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 }// loop
+
