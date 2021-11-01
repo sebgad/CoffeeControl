@@ -3,11 +3,6 @@
  * coffee_ctrl_main
  * A script to control an espresso machine and display measurement values on a webserver of an ESP32
  * 
- * TODOS:
- *  - Implement PID regulator
- *      - temperatur as input, SSR control as output
- *      - adapt tuning parameter
- *  - Make coffe.local address also available for wifi clients
 *********/
 
 #include <WiFi.h>
@@ -16,7 +11,6 @@
 #include <SPIFFS.h>
 #include <time.h>
 #include <string>
-#include "WifiAccess.h"
 #include "Pt1000.h"
 #include "ADS1115.h"
 #include "PidCtrl.h"
@@ -170,10 +164,10 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   delay(100);
 
   Serial.print("Device ");
-  Serial.println(WiFi.macAddress());
+  Serial.print(WiFi.macAddress());
 
-  Serial.print("try connecting to ");
-  Serial.print(objConfig.wifiSSID);
+  Serial.print(" try connecting to ");
+  Serial.println(objConfig.wifiSSID);
   delay(100);
 
   int i_run_cnt_fail = 0;
@@ -247,7 +241,7 @@ bool loadConfiguration(){
     
       obj_param_file.close();
       bParamFileLocked = false;
-      initConfiguration();
+      resetConfiguration(true);
     } else {
       // file could be read without issues and json document could be interpreted
       bParamFileLocked = false;
@@ -317,9 +311,11 @@ bool saveConfiguration(){
   return b_success;
 }
 
-void initConfiguration(){
+void resetConfiguration(boolean b_safe_to_json){
   /**
    * init configuration to configuration file 
+   * 
+   * @param b_safe_to_json: Safe initial configuration to json file
    */
   
   objConfig.wifiSSID = "";
@@ -337,7 +333,9 @@ void initConfiguration(){
   objConfig.SsrFreq = 200;
   objConfig.PwmSsrChannel = 0;
   objConfig.PwmSsrResolution = 8;
-  saveConfiguration();
+  if (b_safe_to_json){
+    saveConfiguration();
+  }
 }
 
 void configPID(){
@@ -438,8 +436,7 @@ void configWebserver(){
   
   server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
     // initialization of a new parameter file
-    initConfiguration();
-    saveConfiguration();
+    resetConfiguration(true);
     configPID();
     request->send(200, "text/plain", "Parameters are set back to default values");
   });
@@ -524,6 +521,9 @@ void setup(){
         ESP.restart();
     } else{
       Serial.println("SPIFFS mount successfully.");
+      // initialize configuration before load json file
+      resetConfiguration(false);
+      
       // load configuration from file in eeprom
       if (loadConfiguration()) {
         Serial.println("Parameter file is locked on startup. Please reset to factory settings.");
@@ -580,7 +580,11 @@ void setup(){
       Serial.print("Create File ");
       Serial.print(WiFi.softAPIP());
       Serial.println(strMeasFilePath);
+
     }
+    
+    // configure and start webserver
+    configWebserver();
 
     // register mDNS. ESP is available under http://coffee.local
     if (!MDNS.begin("coffee")) {
@@ -589,9 +593,6 @@ void setup(){
       // add service to standart http connection
       MDNS.addService("http", "tcp", 80);
     }
-
-    // configure and start webserver
-    configWebserver();
 
     if (!bMeasFileLocked){
       bMeasFileLocked = true;
