@@ -146,6 +146,7 @@ void IRAM_ATTR onTimerLong(){
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
+
 bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   /**
    * Try to connect to WiFi Accesspoint based on the given information in the header file WiFiAccess.h.
@@ -212,6 +213,18 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   
   return b_successful;
 } // connectWiFi
+
+void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
+  /**
+   * Try to reconnect to WiFi when disconnected from network
+   */
+    
+  Serial.println("Disconnected from WiFi access point");
+  Serial.print("WiFi lost connection. Reason: ");
+  Serial.println(info.disconnected.reason);
+  Serial.println("Trying to Reconnect");
+  connectWiFi(3, 1000);
+} // reconnectWiFi
 
 bool loadConfiguration(){
   /**
@@ -551,6 +564,8 @@ void setup(){
     if (bEspOnline == true) {
       // ESP has wifi connection
 
+      // Define reconnect action when disconnecting from Wifi
+      WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
 
       // initialize NTP client
       configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
