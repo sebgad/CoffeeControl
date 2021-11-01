@@ -1,6 +1,9 @@
 # CoffeeControl :coffee:
 
-This is primarily a temperatur controller for a Rancilio Silvia Espresso machine.
+This is primarily a temperatur controller for a Rancilio Silvia Espresso machine. Parameters for controller and running the controller can be configured over a web interface. 
+
+**default settings / no connection to wifi possible:** If no wifi is available to connect, a soft-AP (SSID: 'SilviaCoffeeCtrl', no PW)  is setup to control. It can be accessed either by the IP address of the controller or the domain http://coffee.local. In this mode plotting is currently not working (because googleCharts is used). Over the page "settings" the SSID and Password can be setup.
+
 The project is based on an esp32 via the arduino IDE.
 
 ## code
@@ -11,18 +14,7 @@ The project is based on an esp32 via the arduino IDE.
 - for Async TCP transfer [AsyncTCP](https://github.com/me-no-dev/AsyncTCP)
 
 
-In addition there are two files required for individual setup:
-
-"WifiAccess.h" required for storing the credentials for your network:
-
-```c++
-#ifndef WifiAccess_h
-#define WifiAccess_h
-#include "Arduino.h"
-static const char charSsid[] = "XXX";
-static const char charPassword[] = "XXX";
-#endif
-```
+In addition there is one file required for individual setup:
 
 "Pt1000.h" for defining individual characteristic of wheatstone bridge:
 ```c++
