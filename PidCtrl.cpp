@@ -50,23 +50,24 @@ void PidCtrl::begin(float * ptr_actual_value, float * ptr_manip_value){
 }
 
 
-void PidCtrl::activate(bool b_kp_activate, bool b_ti_activate, bool b_td_activate){
+void PidCtrl::activate(bool b_kp_activate, bool b_ki_activate, bool b_kd_activate){
     /**
      * @brief Define which Parameters should be activated
      * 
      */
 
     bKpActivate = b_kp_activate;
-    bTiActivate = b_ti_activate;
-    bTdActivate = b_td_activate;
+    bKiActivate = b_ki_activate;
+    bKdActivate = b_kd_activate;
 }
 
-void PidCtrl::changePidCoeffs(float f_coeff_k_p, float f_coeff_t_i, float f_coeff_t_d){
+void PidCtrl::changePidCoeffs(float f_coeff_prop, float f_coeff_int, float f_coeff_dif, bool b_time_coeff){
     /**
      * Change PID coefficients for PID controler.
-     * @param f_coeff_k_p       Proportional part of the control equitation
-     * @param f_coeff_t_i       Reset time (Nachstellzeit)
-     * @param f_coeff_t_d       Lead time (Vorstellzeit)
+     * @param f_coeff_prop      Proportional part of the control equitation
+     * @param f_coeff_int       Integration coefficient
+     * @param f_coeff_dif       Differential coefficient
+     * @param b_time_coeff      Int and diff coefficient are based on time (reset time and lead time)
      */
 
     if (_iSizeCoeffTbl == 0) {
@@ -74,15 +75,26 @@ void PidCtrl::changePidCoeffs(float f_coeff_k_p, float f_coeff_t_i, float f_coef
         _initCoeffTable(1);
     }
 
-    ptrConstants[0][0] = f_coeff_k_p; // Kp
-    if (f_coeff_k_p > 0.0) {  
-        ptrConstants[0][1] = f_coeff_t_i; // Ti
-        ptrConstants[0][2] = f_coeff_t_d; // Td
-    }
-    else{
-        // really stupid choice of controller parameters... but now everything is really disabled
-        ptrConstants[0][1] = 0.0;
-        ptrConstants[0][2] = 0.0;
+    ptrConstants[0][0] = f_coeff_prop;
+
+    if (b_time_coeff){
+        // coefficients are based on time and related to proportional part
+        
+        // factor for integration part
+        if ((f_coeff_int>0.0) || (f_coeff_int<0.0)){
+            ptrConstants[0][1] = f_coeff_prop / f_coeff_int;
+        } else {
+            ptrConstants[0][1] = 0.0;
+        }
+
+        // factor for differential part
+        ptrConstants[0][2] = f_coeff_prop * f_coeff_dif;
+    } else {
+        // coefficients not related to time and not depending on proportional part
+        // factor for integration part
+        ptrConstants[0][1] = f_coeff_int;
+        // factor for differential part
+        ptrConstants[0][2] = f_coeff_dif;
     }
 }
 
@@ -207,7 +219,7 @@ void PidCtrl::_calcControlEquation(){
     float f_delta_sec;
     float f_control_deviation;
     float f_d_control_deviation; // deviation of actual value TODO needed?
-    float f_k_p_coeff, f_t_i_coeff, f_t_d_coeff;
+    float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
     f_control_deviation = _fTargetValue - *ptrActualValue; // error
@@ -218,16 +230,16 @@ void PidCtrl::_calcControlEquation(){
             // TODO dont use actual value as parameter selector -> use different pointer (can be actual value or anything else)
             if (ptrConstants[i_row][3] < *ptrActualValue){
                 f_k_p_coeff = ptrConstants[i_row][0];
-                f_t_i_coeff = ptrConstants[i_row][1];
-                f_t_d_coeff = ptrConstants[i_row][2];
+                f_k_i_coeff = ptrConstants[i_row][1];
+                f_k_d_coeff = ptrConstants[i_row][2];
                 break;
             }
         }
     } else {
         // One coefficient set for all areas
         f_k_p_coeff = ptrConstants[0][0];
-        f_t_i_coeff = ptrConstants[0][1];
-        f_t_d_coeff = ptrConstants[0][2];
+        f_k_i_coeff = ptrConstants[0][1];
+        f_k_d_coeff = ptrConstants[0][2];
     };
 
     *ptrManipValue = 0.0;
@@ -236,16 +248,16 @@ void PidCtrl::_calcControlEquation(){
         // Proportional component of the controler
         *ptrManipValue += f_k_p_coeff * f_control_deviation; 
 
-        if (bTiActivate){
+        if (bKiActivate){
             // Integral part of the controler
             _fSumIntegrator += f_delta_sec * f_control_deviation; // integrate deviation over time
-            *ptrManipValue += f_k_p_coeff / f_t_i_coeff * _fSumIntegrator;
+            *ptrManipValue += f_k_i_coeff * _fSumIntegrator;
         }
 
-        if (bTdActivate){
+        if (bKdActivate){
             // Differential component of the controler
             f_d_control_deviation = (f_control_deviation - _fLastControlDev); // deviation of error
-            *ptrManipValue += f_k_p_coeff * f_t_d_coeff * f_d_control_deviation / f_delta_sec;
+            *ptrManipValue += f_k_d_coeff * f_d_control_deviation / f_delta_sec;
         }
     }
 

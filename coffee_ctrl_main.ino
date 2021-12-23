@@ -37,13 +37,14 @@
 struct config {
   String wifiSSID;
   String wifiPassword;
-  float Target;
-  float Kp;
-  bool KpActivate;
-  float Ti;
-  bool TiActivate;
-  float Td;
-  bool TdActivate;
+  float CtrlTarget;
+  bool CtrlTimeFactor;
+  bool CtrlPropActivate;
+  float CtrlPropFactor;
+  bool CtrlIntActivate;
+  float CtrlIntFactor;
+  bool CtrlDifActivate;
+  float CtrlDifFactor;
   bool LowThresholdActivate;
   float LowThresholdValue;
   bool HighThresholdActivate;
@@ -264,13 +265,14 @@ bool loadConfiguration(){
       bParamFileLocked = false;
       objConfig.wifiSSID = json_doc["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
       objConfig.wifiPassword = json_doc["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
-      objConfig.KpActivate = json_doc["KpActivate"];
-      objConfig.Kp = json_doc["Kp"];
-      objConfig.TiActivate = json_doc["TiActivate"];
-      objConfig.Ti = json_doc["Ti"];
-      objConfig.TdActivate = json_doc["TdActivate"];
-      objConfig.Td = json_doc["Td"];
-      objConfig.Target = json_doc["Target"];
+      objConfig.CtrlTimeFactor = json_doc["CtrlTimeFactor"];
+      objConfig.CtrlPropActivate = json_doc["CtrlPropActivate"];
+      objConfig.CtrlPropFactor = json_doc["CtrlPropFactor"];
+      objConfig.CtrlIntActivate = json_doc["CtrlIntActivate"];
+      objConfig.CtrlIntFactor = json_doc["CtrlIntFactor"];
+      objConfig.CtrlDifActivate = json_doc["CtrlDifActivate"];
+      objConfig.CtrlDifFactor = json_doc["CtrlDifFactor"];
+      objConfig.CtrlTarget = json_doc["CtrlTarget"];
       objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"];
       objConfig.LowThresholdValue = json_doc["LowThresholdValue"];
       objConfig.HighThresholdActivate = json_doc["HighThresholdActivate"];
@@ -298,13 +300,14 @@ bool saveConfiguration(){
 
   json_doc["wifiSSID"] = objConfig.wifiSSID;
   json_doc["wifiPassword"] = objConfig.wifiPassword;
-  json_doc["KpActivate"] = objConfig.KpActivate;
-  json_doc["Kp"] = objConfig.Kp;
-  json_doc["TiActivate"] = objConfig.TiActivate;
-  json_doc["Ti"] = objConfig.Ti;
-  json_doc["TdActivate"] = objConfig.TdActivate;
-  json_doc["Td"] = objConfig.Td;
-  json_doc["Target"] = objConfig.Target;
+  json_doc["CtrlTimeFactor"] = objConfig.CtrlTimeFactor;
+  json_doc["CtrlPropActivate"] = objConfig.CtrlPropActivate;
+  json_doc["CtrlPropFactor"] = objConfig.CtrlPropFactor;
+  json_doc["CtrlIntActivate"] = objConfig.CtrlIntActivate;
+  json_doc["CtrlIntFactor"] = objConfig.CtrlIntFactor;
+  json_doc["CtrlDifActivate"] = objConfig.CtrlDifActivate;
+  json_doc["CtrlDifFactor"] = objConfig.CtrlDifFactor;
+  json_doc["CtrlTarget"] = objConfig.CtrlTarget;
   json_doc["LowThresholdActivate"] = objConfig.LowThresholdActivate;
   json_doc["LowThresholdValue"] = objConfig.LowThresholdValue;
   json_doc["HighThresholdActivate"] = objConfig.HighThresholdActivate;
@@ -343,13 +346,14 @@ void resetConfiguration(boolean b_safe_to_json){
   
   objConfig.wifiSSID = "";
   objConfig.wifiPassword = "";
-  objConfig.KpActivate = true;
-  objConfig.Kp = 3.1;
-  objConfig.Ti = 0.001;
-  objConfig.TiActivate = true;
-  objConfig.Td = 0.0;
-  objConfig.TdActivate = false;
-  objConfig.Target = 89;
+  objConfig.CtrlTimeFactor = true;
+  objConfig.CtrlPropActivate = true;
+  objConfig.CtrlPropFactor = 3.1;
+  objConfig.CtrlIntActivate = false;
+  objConfig.CtrlIntFactor = 0.001;
+  objConfig.CtrlDifActivate = false;
+  objConfig.CtrlDifFactor = 0.0;
+  objConfig.CtrlTarget = 89.0;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
   objConfig.HighThresholdActivate = false;
@@ -371,14 +375,14 @@ void configPID(){
   
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
-  objPid.changeTargetValue(objConfig.Target);
-  objPid.changePidCoeffs(objConfig.Kp, objConfig.Ti, objConfig.Td);
+  objPid.changeTargetValue(objConfig.CtrlTarget);
+  objPid.changePidCoeffs(objConfig.CtrlPropFactor, objConfig.CtrlIntFactor, objConfig.CtrlDifFactor, objConfig.CtrlTimeFactor);
 
   if (objConfig.LowThresholdActivate) {
     objPid.setOnThres(objConfig.LowThresholdValue);
   }
 
-  objPid.activate(objConfig.KpActivate, objConfig.TiActivate, objConfig.TdActivate);
+  objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
 
   // configure PWM functionalitites
   ledcSetup(objConfig.PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
@@ -419,6 +423,7 @@ void configWebserver(){
     request->send(SPIFFS, "/table.js");
   });
 
+
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!bMeasFileLocked){
@@ -437,19 +442,22 @@ void configWebserver(){
     }
   });
 
+
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
+    bool b_restart_required = false;
     StaticJsonDocument<JSON_MEMORY> obj_json;
     obj_json = json.as<JsonObject>();
     
     objConfig.wifiSSID = obj_json["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
     objConfig.wifiPassword = obj_json["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
-    objConfig.KpActivate = obj_json["KpActivate"];
-    objConfig.Kp = obj_json["Kp"];
-    objConfig.TiActivate = obj_json["TiActivate"];
-    objConfig.Ti = obj_json["Ti"];
-    objConfig.TdActivate = obj_json["TdActivate"];
-    objConfig.Td = obj_json["Td"];
-    objConfig.Target = obj_json["Target"];
+    objConfig.CtrlTimeFactor = obj_json["CtrlTimeFactor"];
+    objConfig.CtrlPropActivate = obj_json["CtrlPropActivate"];
+    objConfig.CtrlPropFactor = obj_json["CtrlPropFactor"];
+    objConfig.CtrlIntActivate = obj_json["CtrlIntActivate"];
+    objConfig.CtrlIntFactor = obj_json["CtrlIntFactor"];
+    objConfig.CtrlDifActivate = obj_json["CtrlDifActivate"];
+    objConfig.CtrlDifFactor = obj_json["CtrlDifFactor"];
+    objConfig.CtrlTarget = obj_json["CtrlTarget"];
     objConfig.LowThresholdActivate = obj_json["LowThresholdActivate"];
     objConfig.LowThresholdValue = obj_json["LowThresholdValue"];
     objConfig.HighThresholdActivate = obj_json["HighThresholdActivate"];
@@ -461,6 +469,7 @@ void configWebserver(){
     if (saveConfiguration()){
       configPID();
       request->send(200, "text/plain", "Parameters are updated to file and applied to system. ESP restart.");
+      delay(500);
       ESP.restart();
     } else {
       request->send(200, "text/plain", "Parameters are not updated due to write lock");

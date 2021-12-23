@@ -22,7 +22,7 @@ class PidCtrl
     void begin();
     void begin(float *);
     void begin(float *, float *);
-    void changePidCoeffs(float, float, float);
+    void changePidCoeffs(float, float, float, bool);
     void changePidCoeffs(const float[][4], size_t);
     void activate(bool, bool, bool);
     void changeTargetValue(float);
@@ -37,8 +37,8 @@ class PidCtrl
   private:
     float ** ptrConstants;
     bool bKpActivate;
-    bool bTiActivate;
-    bool bTdActivate;
+    bool bKiActivate;
+    bool bKdActivate;
     float * ptrActualValue;
     float * ptrManipValue;
     float _fTargetValue;
