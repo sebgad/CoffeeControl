@@ -17,6 +17,7 @@
 #include <Wire.h>
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
+#include <Update.h>
 
 // PIN definitions
 
@@ -30,7 +31,7 @@
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
-#define JSON_MEMORY 500
+#define JSON_MEMORY 1000
 
 // config structure for online calibration
 struct config {
@@ -38,8 +39,11 @@ struct config {
   String wifiPassword;
   float Target;
   float Kp;
-  float Ki;
-  float Kd;
+  bool KpActivate;
+  float Ti;
+  bool TiActivate;
+  float Td;
+  bool TdActivate;
   bool LowThresholdActivate;
   float LowThresholdValue;
   bool HighThresholdActivate;
@@ -54,7 +58,7 @@ struct config {
 // File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
-const int iMaxBytesMeasFile = 1000000; // Maximum allowed bytes for the measurement file
+const int iMaxMeasurements = 10000; // Maximum allowed measurement lines
 const char* strParamFilePath = "/params.json";
 bool bParamFileLocked = false;
 
@@ -260,9 +264,12 @@ bool loadConfiguration(){
       bParamFileLocked = false;
       objConfig.wifiSSID = json_doc["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
       objConfig.wifiPassword = json_doc["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
-      objConfig.Kd = json_doc["Kp"];
-      objConfig.Ki = json_doc["Ki"];
-      objConfig.Kd = json_doc["Kd"];
+      objConfig.KpActivate = json_doc["KpActivate"];
+      objConfig.Kp = json_doc["Kp"];
+      objConfig.TiActivate = json_doc["TiActivate"];
+      objConfig.Ti = json_doc["Ti"];
+      objConfig.TdActivate = json_doc["TdActivate"];
+      objConfig.Td = json_doc["Td"];
       objConfig.Target = json_doc["Target"];
       objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"];
       objConfig.LowThresholdValue = json_doc["LowThresholdValue"];
@@ -291,9 +298,12 @@ bool saveConfiguration(){
 
   json_doc["wifiSSID"] = objConfig.wifiSSID;
   json_doc["wifiPassword"] = objConfig.wifiPassword;
+  json_doc["KpActivate"] = objConfig.KpActivate;
   json_doc["Kp"] = objConfig.Kp;
-  json_doc["Ki"] = objConfig.Ki;
-  json_doc["Kd"] = objConfig.Kd;
+  json_doc["TiActivate"] = objConfig.TiActivate;
+  json_doc["Ti"] = objConfig.Ti;
+  json_doc["TdActivate"] = objConfig.TdActivate;
+  json_doc["Td"] = objConfig.Td;
   json_doc["Target"] = objConfig.Target;
   json_doc["LowThresholdActivate"] = objConfig.LowThresholdActivate;
   json_doc["LowThresholdValue"] = objConfig.LowThresholdValue;
@@ -333,17 +343,20 @@ void resetConfiguration(boolean b_safe_to_json){
   
   objConfig.wifiSSID = "";
   objConfig.wifiPassword = "";
-  objConfig.Kp = 40.0;
-  objConfig.Ki = 0.001;
-  objConfig.Kd = 0.0;
-  objConfig.Target = 92.5;
+  objConfig.KpActivate = true;
+  objConfig.Kp = 3.1;
+  objConfig.Ti = 0.001;
+  objConfig.TiActivate = true;
+  objConfig.Td = 0.0;
+  objConfig.TdActivate = false;
+  objConfig.Target = 89;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
   objConfig.HighThresholdActivate = false;
   objConfig.HighTresholdValue = 0.0;
   objConfig.LowLimitManipulation = 0;
   objConfig.HighLimitManipulation = 255;
-  objConfig.SsrFreq = 200;
+  objConfig.SsrFreq = 15;
   objConfig.PwmSsrChannel = 0;
   objConfig.PwmSsrResolution = 8;
   if (b_safe_to_json){
@@ -359,11 +372,13 @@ void configPID(){
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPid.changeTargetValue(objConfig.Target);
-  objPid.changePidCoeffs(objConfig.Kp, objConfig.Ki, objConfig.Kd);
+  objPid.changePidCoeffs(objConfig.Kp, objConfig.Ti, objConfig.Td);
 
   if (objConfig.LowThresholdActivate) {
     objPid.setOnThres(objConfig.LowThresholdValue);
   }
+
+  objPid.activate(objConfig.KpActivate, objConfig.TiActivate, objConfig.TdActivate);
 
   // configure PWM functionalitites
   ledcSetup(objConfig.PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
@@ -384,11 +399,15 @@ void configWebserver(){
     request->send(SPIFFS, "/graphs.html");
   });
 
-  // Route for graphs web page
+  // Route for settings web page
   server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SPIFFS, "/settings.html");
   });
   
+  // Route for ota web page
+  server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/ota.html");
+  });
 
   // Route for stylesheets.css
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -424,9 +443,12 @@ void configWebserver(){
     
     objConfig.wifiSSID = obj_json["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
     objConfig.wifiPassword = obj_json["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
+    objConfig.KpActivate = obj_json["KpActivate"];
     objConfig.Kp = obj_json["Kp"];
-    objConfig.Ki = obj_json["Ki"];
-    objConfig.Kd = obj_json["Kd"];
+    objConfig.TiActivate = obj_json["TiActivate"];
+    objConfig.Ti = obj_json["Ti"];
+    objConfig.TdActivate = obj_json["TdActivate"];
+    objConfig.Td = obj_json["Td"];
     objConfig.Target = obj_json["Target"];
     objConfig.LowThresholdActivate = obj_json["LowThresholdActivate"];
     objConfig.LowThresholdValue = obj_json["LowThresholdValue"];
@@ -438,7 +460,8 @@ void configWebserver(){
 
     if (saveConfiguration()){
       configPID();
-      request->send(200, "text/plain", "Parameters are updated to file and applied to system");
+      request->send(200, "text/plain", "Parameters are updated to file and applied to system. ESP restart.");
+      ESP.restart();
     } else {
       request->send(200, "text/plain", "Parameters are not updated due to write lock");
     }
@@ -454,9 +477,108 @@ void configWebserver(){
     request->send(200, "text/plain", "Parameters are set back to default values");
   });
 
+  // OTA Update functionality
+  server.on("/ota_firmware", HTTP_POST, [&](AsyncWebServerRequest *request) {
+    // definition of response when request is finished (file upload is complete)
+    AsyncWebServerResponse *response = request->beginResponse((Update.hasError())?500:200, "text/plain", (Update.hasError())?"Firmware flash FAIL":"Firmware flash OK");
+    response->addHeader("Connection", "close");
+    response->addHeader("Access-Control-Allow-Origin", "*");
+    request->send(response); // request->send is called when upload from client is finished
+    delay(1000);
+    ESP.restart();
+
+    }, [&](AsyncWebServerRequest *ptr_request, String str_filename, size_t i_index, uint8_t *ptr_data, size_t i_len, bool b_final){
+          /**
+            * @brief (anonymous function) file is devided into chunks/parts and request is called repeatedly
+            * 
+            * @param ptr_request    pointer object of the request
+            * @param str_filename   filename of the file to upload
+            * @param i_index        index of the current data chunk
+            * @param ptr_data       actual data of the chunk
+            * @param i_len          length of the actual data
+            * @param b_final        fileupload is completed
+            */
+        
+            if (!i_index){
+              // precheck before upload the filestream (index not given)
+              if(!ptr_request->hasParam("MD5", true)) {
+                // request has no parameter MD5 (Hash value) --> aborting file upload
+                return ptr_request->send(400, "text/plain", "MD5 parameter missing");
+              } 
+              
+              if(!Update.setMD5(ptr_request->getParam("MD5", true)->value().c_str())) {
+                // MD5 parameter is not a valid format --> aborting file upload
+                return ptr_request->send(400, "text/plain", "MD5 parameter invalid");
+              } 
+              
+              // MD5 precheck done, creating temp file on spiffs file system
+              if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
+                // Update cannot be started for reasons
+                Update.printError(Serial);
+                return ptr_request->send(400, "text/plain", "OTA could not begin");
+              }
+            }
+
+            if (i_len) {
+              if (Update.write(ptr_data, i_len) != i_len){
+                // data chunks cannot be written for defined length
+                return ptr_request->send(400, "text/plain", "OTA aborted.");
+              }
+            }
+
+            if (b_final){
+              // file download finished, last data chunk is reached
+              if (!Update.end(true)) {
+                Update.printError(Serial);
+                return ptr_request->send(400, "text/plain", "Could not end OTA");
+              } else {
+                Serial.println("Firmware flash successful. Restart ESP.");
+              }
+            } else {
+              // everything runs smooth in this iteration -> return none
+              return;
+            }
+     });
+
+
+  server.on("/ota_spiffs", HTTP_POST, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", "Parameters are updated to file and applied to system");
+    }, [&](AsyncWebServerRequest *ptr_request, String str_filename, size_t i_index, uint8_t *ptr_data, size_t i_len, bool b_final){
+          /**
+          * @brief (anonymous function) file is devided into chunks/parts and request is called repeatedly
+          * 
+          * @param ptr_request    pointer object of the request
+          * @param str_filename   filename of the file to upload
+          * @param i_index        index of the current data chunk
+          * @param ptr_data       actual data of the chunk
+          * @param i_len          length of the actual data
+          * @param b_final        fileupload is completed
+          */
+          if (!i_index) {
+            // open the file on first call and store the file handle in the request object
+            ptr_request->_tempFile = SPIFFS.open("/" + str_filename, "w");
+            Serial.print("Start uploading file: ");
+            Serial.println(str_filename);
+          }
+
+          if (i_len) {
+            // stream the incoming chunk to the opened file
+            ptr_request->_tempFile.write(ptr_data, i_len);
+          }
+
+          if (b_final) {
+            // close the file handle as the upload is now done
+            ptr_request->_tempFile.close();
+            ptr_request->redirect("/ota");
+            Serial.println("File upload finished.");
+          }
+    }
+    );
+
   // Start web server
   server.begin();
 }
+
 
 bool configADS1115(){
   /**
@@ -616,7 +738,7 @@ void setup(){
       obj_meas_file.print("Measurement File created on ");
       obj_meas_file.println(char_timestamp);
       obj_meas_file.println("");
-      obj_meas_file.println("Time,Temperature,Heating,TargetPWM,Memory_Alloc");
+      obj_meas_file.println("Time,Temperature,Heating,TargetPWM");
       obj_meas_file.close();
       bMeasFileLocked = false;
     } else {
@@ -699,29 +821,20 @@ bool writeMeasFile(){
     float f_temp_local = fTemp;
     int f_heating_status_local = iHeatingStatus;
     float f_tar_pwm = fTarPwm;
-    float f_free_heap_size = ESP.getFreeHeap()/1000.0;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   if (!bMeasFileLocked){
     bMeasFileLocked = true;
     File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
-    if (obj_meas_file.size() < iMaxBytesMeasFile) {
-      float f_time = (float)(millis() - iTimeStart) / 1000.0;
-      obj_meas_file.print(f_time, 4);
-      obj_meas_file.print(",");
-      obj_meas_file.print(f_temp_local);
-      obj_meas_file.print(",");
-      obj_meas_file.print(f_heating_status_local);
-      obj_meas_file.print(",");
-      obj_meas_file.print(f_tar_pwm);
-      obj_meas_file.print(",");
-      obj_meas_file.println(f_free_heap_size);
-      obj_meas_file.close();
-    } else {
-      Serial.println("Data file size exceeded, delete it.");
-      obj_meas_file.close();
-      SPIFFS.remove(strMeasFilePath);
-    }
+    float f_time = (float)(millis() - iTimeStart) / 1000.0;
+    obj_meas_file.print(f_time, 4);
+    obj_meas_file.print(",");
+    obj_meas_file.print(f_temp_local);
+    obj_meas_file.print(",");
+    obj_meas_file.print(f_heating_status_local);
+    obj_meas_file.print(",");
+    obj_meas_file.println(f_tar_pwm);
+    obj_meas_file.close();
     b_success = true;
     bMeasFileLocked = false;
   } else {

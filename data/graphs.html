@@ -127,9 +127,9 @@
       // create a data view for the chart, only include columns 0-2
       var obj_data_chart_view = new google.visualization.DataView(obj_data_table);
       obj_data_chart_view.setColumns([0,1,2])
-      // limit x axis to last 60 seconds
+      // limit x axis to last 600 seconds
       var f_last_time_value = obj_data_table.getValue(obj_data_table.getNumberOfRows()-1, 0) 
-      obj_data_chart_view.setRows(obj_data_chart_view.getFilteredRows([{column: 0, minValue:f_last_time_value-60.0}]))
+      obj_data_chart_view.setRows(obj_data_chart_view.getFilteredRows([{column: 0, minValue:f_last_time_value-600.0}]))
       
       // draw classic chart with data
       obj_chart.draw(obj_data_chart_view, dct_chart_options);
@@ -202,6 +202,7 @@
   <a href="/">Home</a>
   <a href="graphs" class="active">Graphs</a>
   <a href="settings">Settings</a>
+  <a href="ota">OTA</a>
   <a href="#" class="right">About</a>
 </div>
 

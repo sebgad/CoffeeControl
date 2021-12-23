@@ -24,6 +24,7 @@ class PidCtrl
     void begin(float *, float *);
     void changePidCoeffs(float, float, float);
     void changePidCoeffs(const float[][4], size_t);
+    void activate(bool, bool, bool);
     void changeTargetValue(float);
     void setOnOffThres(float f_tresh_on, float f_tresh_off);
     void setOnOffThres(float f_tresh);
@@ -35,6 +36,9 @@ class PidCtrl
 
   private:
     float ** ptrConstants;
+    bool bKpActivate;
+    bool bTiActivate;
+    bool bTdActivate;
     float * ptrActualValue;
     float * ptrManipValue;
     float _fTargetValue;

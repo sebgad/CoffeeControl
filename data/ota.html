@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <title>Silvia Control</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <style>
+    p {
+      display: flex;
+      justify-content: left;
+      align-items: center;
+    }
+
+    p > span {
+      display: inline-block;
+      width: 20px;
+    }
+
+    p > span:first-child {
+      display: inline-block;
+      width: 200px;
+    }
+    </style>
+
+<div class="header">
+  <h1>Silvia Control</h1>
+  A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
+</div>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="graphs">Graphs</a>
+  <a href="settings">Settings</a>
+  <a href="ota" class="active">OTA</a>
+  <a href="#" class="right">About</a>
+</div>
+
+<div class="main">
+  <h2>Firmware Update</h2>
+  <form method="POST" action="/ota_firmware" enctype="multipart/form-data" acceptcharset="UTF-8">
+    <label>MD5 Checksum for firmware</label>
+    <input type="text" name="MD5" id="MD5">
+    <input type="file" name="data" accept=".bin">
+    <input type="submit" name="upload" value="Upload" title="Upload Firnware">
+  </form>
+  <h2>Data file Update (SPIFFS)</h2>
+  <form method="POST" action="/ota_spiffs" enctype="multipart/form-data">
+    <input type="file" name="data" />
+    <input type="submit" name="upload" value="Upload" title="Upload File">
+  </form>
+</div>
+
+<div class="footer">
+  <h5>Footer</h5>
+</div>
+
+</body>
+</html>
