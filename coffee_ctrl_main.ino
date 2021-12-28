@@ -28,6 +28,9 @@
 
 // PWM defines
 #define P_SSR_PWM 21
+#define P_RED_LED_PWM 13
+#define P_GRN_LED_PWM 12
+#define P_BLU_LED_PWM 27
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
@@ -55,6 +58,13 @@ struct config {
   uint32_t PwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
   uint32_t PwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
 };
+
+// RGB PWM config
+uint32_t RwmRgbFreq = 200; // Hz - PWM frequency
+uint32_t RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
+uint32_t RwmRedChannel = 13; //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
+uint32_t RwmGrnChannel = 14; //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
+uint32_t RwmBluChannel = 15; //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 
 // File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
@@ -654,6 +664,18 @@ void setup(){
   delay(50);
   Serial.println("Starting setup.");
 
+
+  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
+  ledcSetup(RwmRedChannel, RwmRgbFreq, RwmRgbResolution);
+  ledcSetup(RwmGrnChannel, RwmRgbFreq, RwmRgbResolution);
+  ledcSetup(RwmBluChannel, RwmRgbFreq, RwmRgbResolution);
+
+  ledcAttachPin(P_RED_LED_PWM, RwmRedChannel);
+  ledcAttachPin(P_GRN_LED_PWM, RwmGrnChannel);
+  ledcAttachPin(P_BLU_LED_PWM, RwmBluChannel);
+
+  setColor(255, 255, 255); // White 
+
   if (configADS1115()){
     // configuration of analog digital converter is successfull
 
@@ -727,6 +749,9 @@ void setup(){
       Serial.print(WiFi.softAPIP());
       Serial.println(strMeasFilePath);
 
+      // set RGB-LED to purple to user knows whats up
+      setColor(170, 0, 255);   // Purple 
+
     }
     
     // configure and start webserver
@@ -778,6 +803,7 @@ void setup(){
     // attach the channel to the GPIO to be controlled
     ledcAttachPin(P_SSR_PWM, objConfig.PwmSsrChannel);
 
+
   } else {
     // TODO add diagnosis when ADS1115 is not connected
     Serial.println("ADS1115 configuration not successful. System halt.");
@@ -796,9 +822,17 @@ boolean readSensors(){
   // get voltage level of sensor
   
   // TODO S.: Logic for Heating Status indicator needs to be added
-  if (fTarPwm >= 120) {
+  //      TS: is this still true? 
+  if (fTemp < 90) {
+    setColor(255,165,0);     // Orange 
     iHeatingStatus = 1;
-  } else {
+  } 
+  else if (fTemp > 96){
+    setColor(255, 0, 0);     // Red
+    iHeatingStatus = 1;
+  } 
+  else {
+    setColor(0, 255, 0);     // Green
     iHeatingStatus = 0;
   }
 
@@ -851,6 +885,28 @@ bool writeMeasFile(){
   }
   return b_success;
 }// writeMeasFile
+
+
+void setColor(int i_red_value, int i_green_value, int i_blue_value) {
+  /** Function to output a RGB value to the LED
+   * examples: (from https://www.rapidtables.com/web/color/RGB_Color.html)
+   * setColor(255, 0, 0);     // Red 
+   * setColor(0, 255, 0);     // Green 
+   * setColor(0, 0, 255);     // Blue 
+   * setColor(255, 255, 255); // White 
+   * setColor(170, 0, 255);   // Purple 
+   * setColor(255,165,0);     // Orange 
+   * setColor(255,255,0);     // Yellow 
+   *
+   * @param i_red_value    [0, 255] Red RGB value
+   * @param i_green_value  [0, 255] Green RGB value
+   * @param i_blue_value   [0, 255] Blue RGB value
+   */
+  ledcWrite(RwmRedChannel, i_red_value);
+  ledcWrite(RwmGrnChannel, i_green_value);
+  ledcWrite(RwmBluChannel, i_blue_value);
+
+}// setColor
 
 void loop(){
   if (iStatusCtrl == MEASURE) {

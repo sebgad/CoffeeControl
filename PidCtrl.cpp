@@ -265,7 +265,9 @@ void PidCtrl::_calcControlEquation(){
     if (*ptrManipValue<_fLoLim) { *ptrManipValue = _fLoLim; };
     if (*ptrManipValue>_fUpLim) { *ptrManipValue = _fUpLim; };
 
-    // TODO check and react for ONOFFThreshold
+    // check and react for ONOFFThreshold
+    if (_bThresOn &&  (*ptrActualValue < _fThresOn)) { *ptrManipValue = _fUpLim; }; // below lower thres -> set to upper limit
+    if (_bThresOff &&  (*ptrActualValue > _fThresOff)) { *ptrManipValue = _fLoLim; }; // below lower thres -> set to upper limit
     
     _fLastControlDev = f_control_deviation;
     _iLastComputeMillis = millis();
