@@ -65,8 +65,8 @@ void PidCtrl::changePidCoeffs(float f_coeff_prop, float f_coeff_int, float f_coe
     /**
      * Change PID coefficients for PID controler.
      * @param f_coeff_prop      Proportional part of the control equitation
-     * @param f_coeff_int       Integration coefficient
-     * @param f_coeff_dif       Differential coefficient
+     * @param f_coeff_int       Integration coefficient can be Ki or Tn
+     * @param f_coeff_dif       Differential coefficient can be Kd or Tv
      * @param b_time_coeff      Int and diff coefficient are based on time (reset time and lead time)
      */
 
@@ -82,17 +82,17 @@ void PidCtrl::changePidCoeffs(float f_coeff_prop, float f_coeff_int, float f_coe
         
         // factor for integration part
         if ((f_coeff_int>0.0) || (f_coeff_int<0.0)){
-            ptrConstants[0][1] = f_coeff_prop / f_coeff_int;
+            ptrConstants[0][1] = f_coeff_prop / f_coeff_int; // Kp/Tn = 1/Ti = Ki
         } else {
             ptrConstants[0][1] = 0.0;
         }
 
         // factor for differential part
-        ptrConstants[0][2] = f_coeff_prop * f_coeff_dif;
+        ptrConstants[0][2] = f_coeff_prop * f_coeff_dif; // Kp*Tv = Td = Kd
     } else {
         // coefficients not related to time and not depending on proportional part
         // factor for integration part
-        ptrConstants[0][1] = f_coeff_int;
+        ptrConstants[0][1] = f_coeff_int; 
         // factor for differential part
         ptrConstants[0][2] = f_coeff_dif;
     }
