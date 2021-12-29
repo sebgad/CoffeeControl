@@ -57,14 +57,14 @@ struct config {
   uint32_t SsrFreq = 200; // Hz - PWM frequency
   uint32_t PwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
   uint32_t PwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
+  // RGB PWM config
+  uint32_t RwmRgbFreq = 500; // Hz - PWM frequency
+  uint32_t RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
+  uint32_t RwmRedChannel = 13; //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
+  uint32_t RwmGrnChannel = 14; //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
+  uint32_t RwmBluChannel = 15; //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 };
 
-// RGB PWM config
-uint32_t RwmRgbFreq = 200; // Hz - PWM frequency
-uint32_t RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
-uint32_t RwmRedChannel = 13; //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
-uint32_t RwmGrnChannel = 14; //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
-uint32_t RwmBluChannel = 15; //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 
 // File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
@@ -105,6 +105,10 @@ hw_timer_t * objTimerLong = NULL;
 // Status for function call timing, used in ISR
 volatile uint8_t iStatusMeas = 0; // 0:init/idle, 1:store value running, 2: store value finished
 volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measurement finished, 3:control
+volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
+
+// define Counter for interrupt handling
+volatile int iInterruptCntLong = 0;
 
 // enums for the status
 enum eStatusCtrl {
@@ -116,6 +120,11 @@ enum eStatusCtrl {
 enum eStatusMeas {
   IDLE_MEAS,
   STORE_MEAS
+};
+
+enum eStatusLED {
+  LED_IDLE,
+  LED_SET
 };
 
 // Initialisation of PID controler
@@ -141,8 +150,6 @@ void IRAM_ATTR onAlertRdy(){
       if (iStatusCtrl == IDLE) {
         // Only change Status when idle to measurement running
         iStatusCtrl = MEASURE;
-        // read out temperature sensor from ADS_1115
-        // fTemp = (double) objAds1115.getPhysVal();
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
@@ -157,6 +164,13 @@ void IRAM_ATTR onTimerLong(){
       if (iStatusMeas == IDLE_MEAS) {
         // Only change Status when idle to measurement running
         iStatusMeas = STORE_MEAS;
+      }
+
+      if (iInterruptCntLong > 5) {
+        // Only write LED value when interrupt function is called 5 times
+        iStatusLED = LED_SET;
+      } else {
+        iInterruptCntLong++;
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
@@ -292,6 +306,11 @@ bool loadConfiguration(){
       objConfig.SsrFreq = json_doc["SsrFreq"];
       objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"];
       objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"];
+      objConfig.RwmRgbFreq = json_doc["RwmRgbFreq"];
+      objConfig.RwmRgbResolution = json_doc["RwmRgbResolution"];
+      objConfig.RwmRedChannel = json_doc["RwmRedChannel"];
+      objConfig.RwmGrnChannel = json_doc["RwmGrnChannel"];
+      objConfig.RwmBluChannel = json_doc["RwmBluChannel"];
   }
     b_success = true;
   } else {
@@ -327,6 +346,11 @@ bool saveConfiguration(){
   json_doc["SsrFreq"]  = objConfig.SsrFreq;
   json_doc["PwmSsrChannel"] = objConfig.PwmSsrChannel;
   json_doc["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
+  json_doc["RwmRgbFreq"] = objConfig.RwmRgbFreq;
+  json_doc["RwmRgbResolution"] = objConfig.RwmRgbResolution;
+  json_doc["RwmRedChannel"] = objConfig.RwmRedChannel;
+  json_doc["RwmGrnChannel"] = objConfig.RwmGrnChannel;
+  json_doc["RwmBluChannel"] = objConfig.RwmBluChannel;
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
@@ -373,9 +397,29 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.SsrFreq = 15;
   objConfig.PwmSsrChannel = 0;
   objConfig.PwmSsrResolution = 8;
+  objConfig.RwmRgbFreq = 500; // Hz - PWM frequency
+  objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
+  objConfig.RwmRedChannel = 13; //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
+  objConfig.RwmGrnChannel = 14; //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
+  objConfig.RwmBluChannel = 15; //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
+
   if (b_safe_to_json){
     saveConfiguration();
   }
+}
+
+void configLED(){
+  /**
+   * @brief Method to configure LED functionality
+   * 
+   */
+  ledcSetup(objConfig.RwmRedChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
+  ledcSetup(objConfig.RwmGrnChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
+  ledcSetup(objConfig.RwmBluChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
+
+  ledcAttachPin(P_RED_LED_PWM, objConfig.RwmRedChannel);
+  ledcAttachPin(P_GRN_LED_PWM, objConfig.RwmGrnChannel);
+  ledcAttachPin(P_BLU_LED_PWM, objConfig.RwmBluChannel);
 }
 
 void configPID(){
@@ -458,6 +502,14 @@ void configWebserver(){
     StaticJsonDocument<JSON_MEMORY> obj_json;
     obj_json = json.as<JsonObject>();
     
+    if (objConfig.wifiSSID != obj_json["wifiSSID"].as<String>()) {
+      b_restart_required = true;
+    }
+
+    if (objConfig.wifiPassword != obj_json["wifiPassword"].as<String>()){
+      b_restart_required = true;
+    }
+
     objConfig.wifiSSID = obj_json["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
     objConfig.wifiPassword = obj_json["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
     objConfig.CtrlTimeFactor = obj_json["CtrlTimeFactor"];
@@ -475,12 +527,22 @@ void configWebserver(){
     objConfig.SsrFreq = obj_json["SsrFreq"];
     objConfig.PwmSsrChannel = obj_json["PwmSsrChannel"];
     objConfig.PwmSsrResolution = obj_json["PwmSsrResolution"];
+    objConfig.RwmRgbFreq = obj_json["RwmRgbFreq"];
+    objConfig.RwmRgbResolution = obj_json["RwmRgbResolution"];
+    objConfig.RwmRedChannel = obj_json["RwmRedChannel"];
+    objConfig.RwmGrnChannel = obj_json["RwmGrnChannel"];
+    objConfig.RwmBluChannel = obj_json["RwmBluChannel"];
 
     if (saveConfiguration()){
-      configPID();
-      request->send(200, "text/plain", "Parameters are updated to file and applied to system. ESP restart.");
-      delay(500);
-      ESP.restart();
+      if(b_restart_required){
+        request->send(200, "text/plain", "Parameters are updated to file and applied to system. ESP restart.");
+        delay(500);
+        ESP.restart();
+      }else{
+        configPID();
+        configLED();
+        request->send(200, "text/plain", "Parameters are updated and changes applied.");
+      }
     } else {
       request->send(200, "text/plain", "Parameters are not updated due to write lock");
     }
@@ -663,18 +725,9 @@ void setup(){
   Serial.begin(115200);
   delay(50);
   Serial.println("Starting setup.");
-
-
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
-  ledcSetup(RwmRedChannel, RwmRgbFreq, RwmRgbResolution);
-  ledcSetup(RwmGrnChannel, RwmRgbFreq, RwmRgbResolution);
-  ledcSetup(RwmBluChannel, RwmRgbFreq, RwmRgbResolution);
-
-  ledcAttachPin(P_RED_LED_PWM, RwmRedChannel);
-  ledcAttachPin(P_GRN_LED_PWM, RwmGrnChannel);
-  ledcAttachPin(P_BLU_LED_PWM, RwmBluChannel);
-
-  setColor(255, 255, 255); // White 
+  configLED();
+  setColor(0, 0, 0); // White 
 
   if (configADS1115()){
     // configuration of analog digital converter is successfull
@@ -821,21 +874,6 @@ boolean readSensors(){
   fTemp = objAds1115.getPhysVal();
   // get voltage level of sensor
   
-  // TODO S.: Logic for Heating Status indicator needs to be added
-  //      TS: is this still true? 
-  if (fTemp < 90) {
-    setColor(255,165,0);     // Orange 
-    iHeatingStatus = 1;
-  } 
-  else if (fTemp > 96){
-    setColor(255, 0, 0);     // Red
-    iHeatingStatus = 1;
-  } 
-  else {
-    setColor(0, 255, 0);     // Green
-    iHeatingStatus = 0;
-  }
-
   b_result = true;
   return b_result;
 } //readSensors
@@ -902,9 +940,9 @@ void setColor(int i_red_value, int i_green_value, int i_blue_value) {
    * @param i_green_value  [0, 255] Green RGB value
    * @param i_blue_value   [0, 255] Blue RGB value
    */
-  ledcWrite(RwmRedChannel, i_red_value);
-  ledcWrite(RwmGrnChannel, i_green_value);
-  ledcWrite(RwmBluChannel, i_blue_value);
+  ledcWrite(objConfig.RwmRedChannel, i_red_value);
+  ledcWrite(objConfig.RwmGrnChannel, i_green_value);
+  ledcWrite(objConfig.RwmBluChannel, i_blue_value);
 
 }// setColor
 
@@ -919,6 +957,28 @@ void loop(){
         iStatusCtrl = CONTROL;
       portEXIT_CRITICAL_ISR(&objTimerMux);
     }
+  }
+
+  if (iStatusLED == LED_SET) {
+    if (fTemp < objConfig.CtrlTarget - 1.0) {
+      // Heat up signal
+      setColor(165,0,165);     // purple 
+      iHeatingStatus = 1;
+    } 
+    else if (fTemp > objConfig.CtrlTarget + 1.0){
+      // Cool down signal
+      setColor(0,0,165);     // blue 
+      iHeatingStatus = 1;
+    } 
+    else {
+      // temperature in range signal
+      setColor(0,165,0);     // green 
+      iHeatingStatus = 0;
+    }
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iInterruptCntLong = 0;
+      iStatusLED = LED_IDLE;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
   }
     
   if (iStatusCtrl == CONTROL) {
