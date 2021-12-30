@@ -38,7 +38,7 @@
         const obj_json_req = JSON.parse(str_buf);
 
         var optionsTemp = {
-          width: 350, height: 200,
+          width: 350, height: 150,
           greenFrom: obj_json_req["PID"]["TargetValue"]-1, greenTo: obj_json_req["PID"]["TargetValue"]+1,
           redFrom: obj_json_req["PID"]["TargetValue"]+1, redTo: 120,
           yellowFrom:0, yellowTo: obj_json_req["PID"]["TargetValue"]-1,
@@ -60,7 +60,7 @@
             obj_div.appendChild(obj_sub_div);
           }
             
-          obj_sub_div.innerHTML = "<b>" + str_key + "</b> : " + obj_json_req["PID"][str_key];
+          obj_sub_div.innerHTML = "<p style='width:20%;'> <b>" + str_key + "</b> </p><p style='width:20%;'>" + obj_json_req["PID"][str_key] + "</p>";
         }
       }
       xhr.send();
@@ -102,9 +102,10 @@
 
 <div class="main">
   <h2>Control Board</h2>
-  <h3>Actual Sensor Values</h3>
-    <div class="item", id="pid_values", width="80%" style="text-align: left;"></div><br />
-    <div class="item", id="gauge_Temp", width="400", height="200"></div>
+  <h3>PID values</h3>
+  <div class="item", id="pid_values", width="80%" style="text-align: left;"></div>
+  <h3>Sensor values</h3>
+  <div class="item", id="gauge_Temp", height="100px"></div>
 </div>
 
 <div class="footer">
