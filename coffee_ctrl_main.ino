@@ -14,6 +14,7 @@
 #include "Pt1000.h"
 #include "ADS1115.h"
 #include "PidCtrl.h"
+#include "WifiAccess.h"
 #include <Wire.h>
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
@@ -389,8 +390,8 @@ void resetConfiguration(boolean b_safe_to_json){
    * @param b_safe_to_json: Safe initial configuration to json file
    */
   
-  objConfig.wifiSSID = "";
-  objConfig.wifiPassword = "";
+  objConfig.wifiSSID = strWifiSsidFactory;
+  objConfig.wifiPassword = strWifiPwFactory;
   objConfig.CtrlTimeFactor = true;
   objConfig.CtrlPropActivate = true;
   objConfig.CtrlPropFactor = 3.1;
@@ -398,7 +399,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.CtrlIntFactor = 0.001;
   objConfig.CtrlDifActivate = false;
   objConfig.CtrlDifFactor = 0.0;
-  objConfig.CtrlTarget = 89.0;
+  objConfig.CtrlTarget = 93.0;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
   objConfig.HighThresholdActivate = false;
@@ -756,7 +757,7 @@ void setup(){
   Serial.println("Starting setup.");
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
-  setColor(0, 0, 0); // White 
+  setColor(170, 170, 170); // White 
 
   if (configADS1115()){
     // configuration of analog digital converter is successfull
