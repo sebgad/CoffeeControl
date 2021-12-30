@@ -33,15 +33,18 @@ class PidCtrl
     void compute();
     void compute(const float &, float &);
     void addOutputLimits(const float, const float);
+    float getErrorIntegrator();
+    float getTargetValue();
 
   private:
     float ** ptrConstants;
-    bool bKpActivate;
-    bool bKiActivate;
-    bool bKdActivate;
-    float * ptrActualValue;
-    float * ptrManipValue;
+    bool _bKpActivate;
+    bool _bKiActivate;
+    bool _bKdActivate;
+    float * _ptrActualValue;
+    float * _ptrManipValue;
     float _fTargetValue;
+    float _fSumIntegrator;
     float _fLoLim;
     float _fUpLim;
     float _fThresOn;
@@ -49,7 +52,6 @@ class PidCtrl
     bool _bThresOn = false;
     bool _bThresOff = false;
     int _iLinkMode;
-    float _fSumIntegrator;
     unsigned long _iLastComputeMillis;
     float _fLastControlDev;
     size_t _iSizeCoeffTbl;

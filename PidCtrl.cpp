@@ -17,8 +17,8 @@ void PidCtrl::begin(){
      * Compute() method takes actual value and manipulation value as parameter.
      */
     
-    ptrActualValue = new float;
-    ptrManipValue = new float;
+    _ptrActualValue = new float;
+    _ptrManipValue = new float;
     _iLastComputeMillis = millis();
     _iLinkMode = 1;
 }
@@ -30,8 +30,8 @@ void PidCtrl::begin(float * ptr_actual_value){
      * Compute() method takes the manipulation variale as parameter.
      * @param ptr_actual_value     Actual value or measurement value as pointer
     */
-    ptrActualValue = ptr_actual_value;
-    ptrManipValue = new float;
+    _ptrActualValue = ptr_actual_value;
+    _ptrManipValue = new float;
     _iLastComputeMillis = millis();
     _iLinkMode = 2;
 }
@@ -43,8 +43,8 @@ void PidCtrl::begin(float * ptr_actual_value, float * ptr_manip_value){
      * @param ptr_actual_value       Actual value or measurement as pointer
      * @param ptr_manip_value        Manipulation value as pointer
     */
-    ptrActualValue =  ptr_actual_value;
-    ptrManipValue = ptr_manip_value;
+    _ptrActualValue =  ptr_actual_value;
+    _ptrManipValue = ptr_manip_value;
     _iLastComputeMillis = millis();
     _iLinkMode = 3;
 }
@@ -56,9 +56,9 @@ void PidCtrl::activate(bool b_kp_activate, bool b_ki_activate, bool b_kd_activat
      * 
      */
 
-    bKpActivate = b_kp_activate;
-    bKiActivate = b_ki_activate;
-    bKdActivate = b_kd_activate;
+    _bKpActivate = b_kp_activate;
+    _bKiActivate = b_ki_activate;
+    _bKdActivate = b_kd_activate;
 }
 
 void PidCtrl::changePidCoeffs(float f_coeff_prop, float f_coeff_int, float f_coeff_dif, bool b_time_coeff){
@@ -205,9 +205,9 @@ void PidCtrl::compute(const float & f_actual, float & f_manip){
      * @param f_manip   Manipulation value variable
      */    
 
-    *ptrActualValue = f_actual;
+    *_ptrActualValue = f_actual;
     _calcControlEquation();
-    f_manip = *ptrManipValue;
+    f_manip = *_ptrManipValue;
 }
 
 
@@ -222,13 +222,13 @@ void PidCtrl::_calcControlEquation(){
     float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
-    f_control_deviation = _fTargetValue - *ptrActualValue; // error
+    f_control_deviation = _fTargetValue - *_ptrActualValue; // error
     
     if (_iSizeCoeffTbl > 1) {
         // Regulator with different coefficients, depending on actual variable value
         for (int i_row=_iSizeCoeffTbl; i_row>=0; i_row--){
             // TODO dont use actual value as parameter selector -> use different pointer (can be actual value or anything else)
-            if (ptrConstants[i_row][3] < *ptrActualValue){
+            if (ptrConstants[i_row][3] < *_ptrActualValue){
                 f_k_p_coeff = ptrConstants[i_row][0];
                 f_k_i_coeff = ptrConstants[i_row][1];
                 f_k_d_coeff = ptrConstants[i_row][2];
@@ -242,32 +242,32 @@ void PidCtrl::_calcControlEquation(){
         f_k_d_coeff = ptrConstants[0][2];
     };
 
-    *ptrManipValue = 0.0;
+    *_ptrManipValue = 0.0;
     // setValue = Kp* (error + 1/Ti * integal(error) * dt + Td * diff(error)/dt)
-    if (bKpActivate){
+    if (_bKpActivate){
         // Proportional component of the controler
-        *ptrManipValue += f_k_p_coeff * f_control_deviation; 
+        *_ptrManipValue += f_k_p_coeff * f_control_deviation; 
 
-        if (bKiActivate){
+        if (_bKiActivate){
             // Integral part of the controler
             _fSumIntegrator += f_delta_sec * f_control_deviation; // integrate deviation over time
-            *ptrManipValue += f_k_i_coeff * _fSumIntegrator;
+            *_ptrManipValue += f_k_i_coeff * _fSumIntegrator;
         }
 
-        if (bKdActivate){
+        if (_bKdActivate){
             // Differential component of the controler
             f_d_control_deviation = (f_control_deviation - _fLastControlDev); // deviation of error
-            *ptrManipValue += f_k_d_coeff * f_d_control_deviation / f_delta_sec;
+            *_ptrManipValue += f_k_d_coeff * f_d_control_deviation / f_delta_sec;
         }
     }
 
     // Check lower and upper limit of manipulation variable
-    if (*ptrManipValue<_fLoLim) { *ptrManipValue = _fLoLim; };
-    if (*ptrManipValue>_fUpLim) { *ptrManipValue = _fUpLim; };
+    if (*_ptrManipValue<_fLoLim) { *_ptrManipValue = _fLoLim; };
+    if (*_ptrManipValue>_fUpLim) { *_ptrManipValue = _fUpLim; };
 
     // check and react for ONOFFThreshold
-    if (_bThresOn &&  (*ptrActualValue < _fThresOn)) { *ptrManipValue = _fUpLim; }; // below lower thres -> set to upper limit
-    if (_bThresOff &&  (*ptrActualValue > _fThresOff)) { *ptrManipValue = _fLoLim; }; // below lower thres -> set to upper limit
+    if (_bThresOn &&  (*_ptrActualValue < _fThresOn)) { *_ptrManipValue = _fUpLim; }; // below lower thres -> set to upper limit
+    if (_bThresOff &&  (*_ptrActualValue > _fThresOff)) { *_ptrManipValue = _fLoLim; }; // below lower thres -> set to upper limit
     
     _fLastControlDev = f_control_deviation;
     _iLastComputeMillis = millis();
@@ -289,4 +289,20 @@ void PidCtrl::_initCoeffTable(size_t i_size_conv) {
   for(int i_row=0;i_row<_iSizeCoeffTbl;i_row++) {
     ptrConstants[i_row]=new float[4];
   }
+}
+
+
+float PidCtrl::getErrorIntegrator(){
+  /**
+   * @brief Get the sum error of the integrator part of the controller
+  */
+  return _fSumIntegrator;
+}
+
+
+float PidCtrl::getTargetValue(){
+  /**
+   * @brief Get the target value of the controller
+   */ 
+  return _fTargetValue;
 }

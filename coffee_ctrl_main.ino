@@ -84,7 +84,6 @@ config objConfig;
 
 // Sensor variables
 float fTemp = 0; // TODO -  need to use double for PID lib
-int iHeatingStatus = 0; // 0: off, 1:on
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -487,6 +486,21 @@ void configWebserver(){
     }
   });
 
+  server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
+      StaticJsonDocument<500> obj_json_values;
+      // send TargetPWM, Temperature, PID-values
+      obj_json_values["Temperature"] = fTemp;
+      
+      obj_json_values["PID"]["TargetPWM"] = fTarPwm;
+      obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
+      obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
+      
+      String str_response;
+      serializeJson(obj_json_values, str_response);
+      request->send(200, "application/json", str_response);
+    
+  });
+
   // Parameter file, available under http://coffee.local/params.json
   server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!bParamFileLocked){
@@ -565,6 +579,8 @@ void configWebserver(){
     response->addHeader("Connection", "close");
     response->addHeader("Access-Control-Allow-Origin", "*");
     request->send(response); // request->send is called when upload from client is finished
+    delay(1000);
+    request->redirect("/index.html")
     delay(1000);
     ESP.restart();
 
@@ -825,7 +841,7 @@ void setup(){
       obj_meas_file.print("Measurement File created on ");
       obj_meas_file.println(char_timestamp);
       obj_meas_file.println("");
-      obj_meas_file.println("Time,Temperature,Heating,TargetPWM");
+      obj_meas_file.println("Time,Temperature,TargetPWM");
       obj_meas_file.close();
       bMeasFileLocked = false;
     } else {
@@ -900,7 +916,6 @@ bool writeMeasFile(){
   bool b_success = false;
   portENTER_CRITICAL_ISR(&objTimerMux);
     float f_temp_local = fTemp;
-    int f_heating_status_local = iHeatingStatus;
     float f_tar_pwm = fTarPwm;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
@@ -911,8 +926,6 @@ bool writeMeasFile(){
     obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_heating_status_local);
     obj_meas_file.print(",");
     obj_meas_file.println(f_tar_pwm);
     obj_meas_file.close();
@@ -963,17 +976,14 @@ void loop(){
     if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
       setColor(165,0,165);     // purple 
-      iHeatingStatus = 1;
     } 
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal
       setColor(0,0,165);     // blue 
-      iHeatingStatus = 1;
     } 
     else {
       // temperature in range signal
       setColor(0,165,0);     // green 
-      iHeatingStatus = 0;
     }
     portENTER_CRITICAL_ISR(&objTimerMux);
       iInterruptCntLong = 0;
