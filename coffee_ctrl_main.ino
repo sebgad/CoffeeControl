@@ -712,7 +712,7 @@ bool configADS1115(){
   objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
   // set gain amplifier
-  objAds1115.setPGA(ADS1115_PGA_1P024);
+  objAds1115.setPGA(ADS1115_PGA_0P256);
 
   // set latching mode
   objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
