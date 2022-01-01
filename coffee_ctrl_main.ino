@@ -108,7 +108,7 @@ volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measu
 volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
 
 // define Counter for interrupt handling
-volatile int iInterruptCntLong = 0;
+volatile unsigned int iInterruptCntLong = 0;
 
 // enums for the status
 enum eStatusCtrl {
@@ -161,17 +161,19 @@ void IRAM_ATTR onTimerLong(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
+      // Interrupt counter
+      iInterruptCntLong++;
+
       if (iStatusMeas == IDLE_MEAS) {
         // Only change Status when idle to measurement running
         iStatusMeas = STORE_MEAS;
       }
 
-      if (iInterruptCntLong > 5) {
+      if (iInterruptCntLong % 5 == 0) {
         // Only write LED value when interrupt function is called 5 times
         iStatusLED = LED_SET;
-      } else {
-        iInterruptCntLong++;
       }
+
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
@@ -686,6 +688,12 @@ void configWebserver(){
     }
     );
 
+  server.on("/restartesp", HTTP_POST, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", "Parameters are updated to file and applied to system");
+    delay(200);
+    ESP.restart();
+  });
+
   // Start web server
   server.begin();
 }
@@ -745,6 +753,9 @@ bool configADS1115(){
       Serial.println(arrPt1000LookUpTbl[i_row][1], 4);
     }
   #endif
+
+  // Activate conversion monitoring for the last 5 conversions
+  objAds1115.activateMonitoring(5);
 
   objAds1115.printConfigReg();
   return true;
@@ -903,19 +914,26 @@ boolean readSensors(){
   // get physical value of sensor
   fTemp = objAds1115.getPhysVal();
   // get voltage level of sensor
-  
+
   b_result = true;
   return b_result;
 } //readSensors
+
 
 bool controlHeating(){
   /** PID regulator function for controling heating device
    *
    */
 
-  bool b_success = true;
+  bool b_success = false;
+  fTarPwm = 0.0;
   
-  objPid.compute();
+  if (objAds1115.getConvErrorStat() == ADS1115_CONV_STATUS_OK){
+    // Only calculate target PWM with PID controller when Temperature conversion is valid
+    objPid.compute();
+    b_success = true;
+  } 
+
   ledcWrite(objConfig.PwmSsrChannel, (int)fTarPwm);
 
   return b_success;
@@ -1000,7 +1018,6 @@ void loop(){
       setColor(0,165,0);     // green 
     }
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iInterruptCntLong = 0;
       iStatusLED = LED_IDLE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
