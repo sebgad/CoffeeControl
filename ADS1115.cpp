@@ -685,11 +685,11 @@ void ADS1115::activateMonitoring(int i_buf_len){
    */
 
   _iConversionBufLen = i_buf_len;
-  _iConversionBuf = new uint16_t[i_buf_len];
+  _iConversionBuf = new int16_t[i_buf_len];
 
-  // initialize buffer with zeros
-  for (int i_row=0; i_row<_iConversionBufLen; i_row++){
-    _iConversionBuf[i_row] = 0;
+  // initialize buffer with increasing numbers to prevent wrong diagnosis when buffer is not filled up
+  for (int i_row=0; i_row<_iConversionBufLen;i_row++){
+    _iConversionBuf[i_row] = i_row;
   }
 }
 

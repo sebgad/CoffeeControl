@@ -160,8 +160,8 @@ class ADS1115
     uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
-    uint16_t iConversionValue;
-    uint16_t * _iConversionBuf;
+    int16_t iConversionValue;
+    int16_t * _iConversionBuf;
     int _iConversionBufLen;
     int _iConversionBuffCnt;
     int16_t read16(byte);
