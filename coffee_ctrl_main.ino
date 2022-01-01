@@ -755,7 +755,7 @@ bool configADS1115(){
   #endif
 
   // Activate conversion monitoring for the last 5 conversions
-  objAds1115.activateMonitoring(5);
+  // objAds1115.activateMonitoring(5);
 
   objAds1115.printConfigReg();
   return true;
@@ -928,11 +928,12 @@ bool controlHeating(){
   bool b_success = false;
   fTarPwm = 0.0;
   
-  if (objAds1115.getConvErrorStat() == ADS1115_CONV_STATUS_OK){
+  // ISSUE_PENDING diagnosis is currently not working
+  //if (objAds1115.getConvErrorStat() == ADS1115_CONV_STATUS_OK){
     // Only calculate target PWM with PID controller when Temperature conversion is valid
-    objPid.compute();
-    b_success = true;
-  } 
+  objPid.compute();
+  b_success = true;
+  //} 
 
   ledcWrite(objConfig.PwmSsrChannel, (int)fTarPwm);
 

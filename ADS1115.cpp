@@ -499,14 +499,14 @@ void ADS1115::readConversionRegister() {
   iConversionValue = read16(ADS1115_CONVERSION_REG);
   
   // use ring buffer for conversion values
-  if (_iConversionBufLen) {
-    if (_iConversionBuffCnt<_iConversionBufLen) {
-      _iConversionBuffCnt++;
-    } else {
-      _iConversionBuffCnt = 0;
-    }
-    _iConversionBuf[_iConversionBuffCnt] = iConversionValue;
-  }
+  // if (_iConversionBufLen) {
+  //   if (_iConversionBuffCnt<_iConversionBufLen) {
+  //     _iConversionBuffCnt++;
+  //   } else {
+  //     _iConversionBuffCnt = 0;
+  //   }
+  //   _iConversionBuf[_iConversionBuffCnt] = iConversionValue;
+  // }
 }
 
 
