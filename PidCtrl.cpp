@@ -260,8 +260,8 @@ void PidCtrl::_calcControlEquation(){
             f_d_control_deviation = f_delta_sec * f_control_deviation;
             *_ptrManipValue += f_k_i_coeff * (_fSumIntegrator + f_d_control_deviation);
             
-            if ((*_ptrManipValue<_fUpLim) && (*_ptrManipValue>_fLoLim)){
-                // Antiwindup measure: only sum error if manipulation value is within allowed range
+            if ((*_ptrManipValue<_fUpLim) && (_fSumIntegrator+f_d_control_deviation>=0.0)){
+                // Antiwindup measure: only sum error if manipulation value is lower then upper limit and error sum is greater than 0 (no cooling possible)
                 _fSumIntegrator += f_d_control_deviation; // integrate deviation over time
             }
         }

@@ -497,16 +497,6 @@ void ADS1115::readConversionRegister() {
   */ 
   
   iConversionValue = read16(ADS1115_CONVERSION_REG);
-  
-  // use ring buffer for conversion values
-  // if (_iConversionBufLen) {
-  //   if (_iConversionBuffCnt<_iConversionBufLen) {
-  //     _iConversionBuffCnt++;
-  //   } else {
-  //     _iConversionBuffCnt = 0;
-  //   }
-  //   _iConversionBuf[_iConversionBuffCnt] = iConversionValue;
-  // }
 }
 
 
@@ -674,54 +664,4 @@ void ADS1115::initConvTable(size_t i_size_conv) {
   for(int i_row=0;i_row<_iSizeConvTable;i_row++) {
     _ptrConvTable[i_row]=new float[3];
   }
-}
-
-
-void ADS1115::activateMonitoring(int i_buf_len){
-  /**
-   * @brief Activate conversion monitoring for safety functionality
-   * 
-   * @param i_buf_len:  length of the conversion buffer which shall be monitored
-   */
-
-  _iConversionBufLen = i_buf_len;
-  _iConversionBuf = new int16_t[i_buf_len];
-
-  // initialize buffer with increasing numbers to prevent wrong diagnosis when buffer is not filled up
-  for (int i_row=0; i_row<_iConversionBufLen;i_row++){
-    _iConversionBuf[i_row] = i_row;
-  }
-}
-
-
-int ADS1115::getConvErrorStat(){
-  /**
-   * @brief returns the conversion error state
-   * 
-   */
-
-  int i_status;
-
-  if (_checkConvBuf()){
-    i_status = ADS1115_CONV_STATUS_OK;
-  } else {
-    i_status = ADS1115_CONV_STATUS_ERROR;
-  }
-
-  return i_status;
-}
-
-bool ADS1115::_checkConvBuf(){
-  /**
-   * @brief Check conversion buffer and return false if buffer is not changing (At least one buffer value must change)
-   * 
-   */
-  bool b_success = false;
-
-  for(int i_row=1;i_row<_iConversionBufLen;i_row++) {
-    if (_iConversionBuf[i_row-1] != _iConversionBuf[i_row]){
-      b_success = true;
-    }
-  }
-  return b_success;
 }

@@ -99,9 +99,6 @@
 
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
-#define ADS1115_CONV_STATUS_OK 0b011
-#define ADS1115_CONV_STATUS_ERROR 0b001
-
 #include "Arduino.h"
 
 class ADS1115
@@ -145,8 +142,6 @@ class ADS1115
     void setPhysConv(const float, const float);
     void setPhysConv(const float, const float, const float);
     void setPhysConv(const float[][2], size_t);
-    void activateMonitoring(int);
-    int getConvErrorStat();
         
   private:
     int _iSdaPin;
@@ -161,15 +156,11 @@ class ADS1115
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
     int16_t iConversionValue;
-    int16_t * _iConversionBuf;
-    int _iConversionBufLen;
-    int _iConversionBuffCnt;
     int16_t read16(byte);
     void write16(byte, uint16_t);
     void initConvTable(size_t);
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
-    bool _checkConvBuf();
 };
 
 #endif

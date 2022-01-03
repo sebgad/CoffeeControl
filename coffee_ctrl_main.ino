@@ -754,9 +754,6 @@ bool configADS1115(){
     }
   #endif
 
-  // Activate conversion monitoring for the last 5 conversions
-  // objAds1115.activateMonitoring(5);
-
   objAds1115.printConfigReg();
   return true;
 }
@@ -926,17 +923,11 @@ bool controlHeating(){
    */
 
   bool b_success = false;
-  fTarPwm = 0.0;
-  
-  // ISSUE_PENDING diagnosis is currently not working
-  //if (objAds1115.getConvErrorStat() == ADS1115_CONV_STATUS_OK){
-    // Only calculate target PWM with PID controller when Temperature conversion is valid
-  objPid.compute();
-  b_success = true;
-  //} 
 
+  objPid.compute();
   ledcWrite(objConfig.PwmSsrChannel, (int)fTarPwm);
 
+  b_success = true;
   return b_success;
 
 } // controlHeating
@@ -1013,11 +1004,12 @@ void loop(){
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal
       setColor(0,0,165);     // blue 
-    } 
+    }
     else {
       // temperature in range signal
       setColor(0,165,0);     // green 
     }
+
     portENTER_CRITICAL_ISR(&objTimerMux);
       iStatusLED = LED_IDLE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
