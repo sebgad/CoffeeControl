@@ -47,6 +47,11 @@ body {
   color: black;
 }
 
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
 /* Active/current link */
 .navbar a.active {
   background-color: #666;

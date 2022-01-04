@@ -8,6 +8,7 @@
 
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
   <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+  <script type="text/javascript" src="menubar.js"></script>
 
   <script type="text/javascript">
    google.charts.load('current', {'packages':['gauge', 'corechart']});
@@ -68,7 +69,7 @@
    }
  </script> 
 </head>
-<body>
+<body onload="onCreateMenu()">
   <style>
     p {
       display: flex;
@@ -92,7 +93,7 @@
   A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
 </div>
 
-<div class="navbar">
+<div id="navbar" class="navbar">
   <a href="/" class="active">Home</a>
   <a href="graphs">Graphs</a>
   <a href="settings">Settings</a>
