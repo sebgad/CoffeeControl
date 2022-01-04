@@ -1,9 +1,9 @@
 @echo off
 REM expected tool to be in  \Arduino\coffee_ctrl_main\tools
 REM 		  and build in  \Arduino\build
-:start
 cd..\..
 cd build
+:start
 REM FOR %%? IN ("C:\Programmieren\Arduino\build\coffee_ctrl_main.ino.bin") DO (
 FOR %%? IN (coffee_ctrl_main.ino.bin) DO (
     ECHO Fully File Path    : %%~f?
