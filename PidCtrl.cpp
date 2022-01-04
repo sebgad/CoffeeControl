@@ -218,7 +218,7 @@ void PidCtrl::_calcControlEquation(){
 
     float f_delta_sec;
     float f_control_deviation;
-    float f_d_control_deviation; // deviation of actual value TODO needed?
+    float f_d_control_deviation;
     float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
@@ -246,18 +246,24 @@ void PidCtrl::_calcControlEquation(){
     // setValue = Kp* (error + 1/Ti * integal(error) * dt + Td * diff(error)/dt)
     if (_bKpActivate){
         // Proportional component of the controler
-        *_ptrManipValue += f_k_p_coeff * f_control_deviation; 
+        *_ptrManipValue += f_k_p_coeff * f_control_deviation;
 
-        if (_bKiActivate){
-            // Integral part of the controler
-            _fSumIntegrator += f_delta_sec * f_control_deviation; // integrate deviation over time
-            *_ptrManipValue += f_k_i_coeff * _fSumIntegrator;
-        }
 
         if (_bKdActivate){
             // Differential component of the controler
-            f_d_control_deviation = (f_control_deviation - _fLastControlDev); // deviation of error
-            *_ptrManipValue += f_k_d_coeff * f_d_control_deviation / f_delta_sec;
+            _fErrDiff = (f_control_deviation - _fLastControlDev); // deviation of error
+            *_ptrManipValue += f_k_d_coeff * _fErrDiff / f_delta_sec;
+        }
+    
+        if (_bKiActivate){
+            // Integral part of the controler
+            f_d_control_deviation = f_delta_sec * f_control_deviation;
+            *_ptrManipValue += f_k_i_coeff * (_fSumIntegrator + f_d_control_deviation);
+            
+            if ((*_ptrManipValue<_fUpLim) && (_fSumIntegrator+f_d_control_deviation>=0.0)){
+                // Antiwindup measure: only sum error if manipulation value is lower then upper limit and error sum is greater than 0 (no cooling possible)
+                _fSumIntegrator += f_d_control_deviation; // integrate deviation over time
+            }
         }
     }
 
@@ -305,4 +311,11 @@ float PidCtrl::getTargetValue(){
    * @brief Get the target value of the controller
    */ 
   return _fTargetValue;
+}
+
+float PidCtrl::getErrorDiff(){
+  /**
+   * @brief Get the error difference between recent deviation and last deviation
+   */ 
+  return _fErrDiff;
 }

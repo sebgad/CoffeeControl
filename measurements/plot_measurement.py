@@ -8,12 +8,9 @@ Created on Mon Dec 20 19:13:36 2021
 import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
-import os
 import numpy as np
 
-
-lstFname = ["rancilio_silvia_stock_measurement.csv"
-            ]
+lstFname = []
 
 obj_f, ax = plt.subplots(nrows=2, sharex=True)
 ax_pwm = ax[0].twinx()

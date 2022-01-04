@@ -33,19 +33,21 @@
   }
 
   function onResetParameter(){
-    // initialize http request object for asynchronous file request
-    var obj_http_request=new XMLHttpRequest();
-    // request data.csv from http server
-    obj_http_request.open("GET","/paramReset");
-      
-    // define function which is executed when requested is fully loaded
-    obj_http_request.onload= function() {
-      var str_buf = obj_http_request.responseText;
-      alert(str_buf);
-    }
+    if (confirm("Are you sure you want to Reset all parameters?")){
+      // initialize http request object for asynchronous file request
+      var obj_http_request=new XMLHttpRequest();
+      // request data.csv from http server
+      obj_http_request.open("GET","/paramReset");
+        
+      // define function which is executed when requested is fully loaded
+      obj_http_request.onload= function() {
+        var str_buf = obj_http_request.responseText;
+        alert(str_buf);
+      }
 
-    obj_http_request.send();
-    onGetParameter();
+      obj_http_request.send();
+      onGetParameter();
+    }
   }
 
   function onGetParameter(){
@@ -177,6 +179,22 @@ function onFileDownload(){
   }
   obj_http_request.send();
 }
+
+function onRequestRestart(){
+  if (confirm("Are you sure you want to restart ESP?")){
+    var obj_http_request=new XMLHttpRequest();
+    // request data.csv from http server
+    obj_http_request.open("GET","restartesp");
+    // define function which is executed when requested is fully loaded
+    obj_http_request.onload= function() {
+      // get response as string from esp async webserver
+      var str_buf = obj_http_request.responseText;
+      alert(str_buf);
+    }
+    obj_http_request.send();
+  }
+}
+
   </script>
 </head>
 <body onload="onGetParameter()">
@@ -237,6 +255,7 @@ function onFileDownload(){
       <input type="button" onclick="onResetParameter()" value="Reset">
       <input type="button" onclick="document.getElementById('ConfigUpload').click();" value="Upload config">
       <input type="button" onclick="onFileDownload()" value="Download config">
+      <input type="button" onclick="onRequestRestart()" value="Restart ESP32">
       <input type="file" id="ConfigUpload" accept=".json" style="display:none;" onchange="onFileUpload(this.files)">
     </form>
 </div>

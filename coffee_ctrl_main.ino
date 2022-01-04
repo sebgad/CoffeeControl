@@ -108,7 +108,7 @@ volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measu
 volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
 
 // define Counter for interrupt handling
-volatile int iInterruptCntLong = 0;
+volatile unsigned int iInterruptCntLong = 0;
 
 // enums for the status
 enum eStatusCtrl {
@@ -161,17 +161,19 @@ void IRAM_ATTR onTimerLong(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
+      // Interrupt counter
+      iInterruptCntLong++;
+
       if (iStatusMeas == IDLE_MEAS) {
         // Only change Status when idle to measurement running
         iStatusMeas = STORE_MEAS;
       }
 
-      if (iInterruptCntLong > 5) {
+      if (iInterruptCntLong % 5 == 0) {
         // Only write LED value when interrupt function is called 5 times
         iStatusLED = LED_SET;
-      } else {
-        iInterruptCntLong++;
       }
+
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
@@ -287,30 +289,42 @@ bool loadConfiguration(){
     } else {
       // file could be read without issues and json document could be interpreted
       bParamFileLocked = false;
-      objConfig.wifiSSID = json_doc["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
-      objConfig.wifiPassword = json_doc["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
-      objConfig.CtrlTimeFactor = json_doc["CtrlTimeFactor"];
-      objConfig.CtrlPropActivate = json_doc["CtrlPropActivate"];
-      objConfig.CtrlPropFactor = json_doc["CtrlPropFactor"];
-      objConfig.CtrlIntActivate = json_doc["CtrlIntActivate"];
-      objConfig.CtrlIntFactor = json_doc["CtrlIntFactor"];
-      objConfig.CtrlDifActivate = json_doc["CtrlDifActivate"];
-      objConfig.CtrlDifFactor = json_doc["CtrlDifFactor"];
-      objConfig.CtrlTarget = json_doc["CtrlTarget"];
-      objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"];
-      objConfig.LowThresholdValue = json_doc["LowThresholdValue"];
-      objConfig.HighThresholdActivate = json_doc["HighThresholdActivate"];
-      objConfig.HighTresholdValue = json_doc["HighTresholdValue"];
-      objConfig.LowLimitManipulation = json_doc["LowLimitManipulation"];
-      objConfig.HighLimitManipulation = json_doc["HighLimitManipulation"];
-      objConfig.SsrFreq = json_doc["SsrFreq"];
-      objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"];
-      objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"];
-      objConfig.RwmRgbFreq = json_doc["RwmRgbFreq"];
-      objConfig.RwmRgbResolution = json_doc["RwmRgbResolution"];
-      objConfig.RwmRedChannel = json_doc["RwmRedChannel"];
-      objConfig.RwmGrnChannel = json_doc["RwmGrnChannel"];
-      objConfig.RwmBluChannel = json_doc["RwmBluChannel"];
+      // reset configuration struct before writing to get default values
+      resetConfiguration(false);
+      bool b_set_default_values = false; 
+      
+      // Assign Values from json-File to configuration struct. If Field does not exist in JSON-File write default value to JSON file.
+      (json_doc["wifiSSID"])?objConfig.wifiSSID = json_doc["wifiSSID"].as<String>():b_set_default_values = true; // issue #118 in ArduinoJson
+      (json_doc["wifiPassword"])?objConfig.wifiPassword = json_doc["wifiPassword"].as<String>():b_set_default_values = true; // issue #118 in ArduinoJson
+      (json_doc["CtrlTimeFactor"])?objConfig.CtrlTimeFactor = json_doc["CtrlTimeFactor"]:b_set_default_values = true;
+      (json_doc["CtrlPropActivate"])?objConfig.CtrlPropActivate = json_doc["CtrlPropActivate"]:b_set_default_values = true;
+      (json_doc["CtrlPropFactor"])?objConfig.CtrlPropFactor = json_doc["CtrlPropFactor"]:b_set_default_values = true;
+      (json_doc["CtrlIntActivate"])?objConfig.CtrlIntActivate = json_doc["CtrlIntActivate"]:b_set_default_values = true;
+      (json_doc["CtrlIntFactor"])?objConfig.CtrlIntFactor = json_doc["CtrlIntFactor"]:b_set_default_values = true;
+      (json_doc["CtrlDifActivate"])?objConfig.CtrlDifActivate = json_doc["CtrlDifActivate"]:b_set_default_values = true;
+      (json_doc["CtrlDifFactor"])?objConfig.CtrlDifFactor = json_doc["CtrlDifFactor"]:b_set_default_values = true;
+      (json_doc["CtrlTarget"])?objConfig.CtrlTarget = json_doc["CtrlTarget"]:b_set_default_values = true;
+      (json_doc["LowThresholdActivate"])?objConfig.LowThresholdActivate = json_doc["LowThresholdActivate"]:b_set_default_values = true;
+      (json_doc["LowThresholdValue"])?objConfig.LowThresholdValue = json_doc["LowThresholdValue"]:b_set_default_values = true;
+      (json_doc["HighThresholdActivate"])?objConfig.HighThresholdActivate = json_doc["HighThresholdActivate"]:b_set_default_values = true;
+      (json_doc["HighTresholdValue"])?objConfig.HighTresholdValue = json_doc["HighTresholdValue"]:b_set_default_values = true;
+      (json_doc["LowLimitManipulation"])?objConfig.LowLimitManipulation = json_doc["LowLimitManipulation"]:b_set_default_values = true;
+      (json_doc["HighLimitManipulation"])?objConfig.HighLimitManipulation = json_doc["HighLimitManipulation"]:b_set_default_values = true;
+      (json_doc["SsrFreq"])?objConfig.SsrFreq = json_doc["SsrFreq"]:b_set_default_values = true;
+      (json_doc["PwmSsrChannel"])?objConfig.PwmSsrChannel = json_doc["PwmSsrChannel"]:b_set_default_values = true;
+      (json_doc["PwmSsrResolution"])?objConfig.PwmSsrResolution = json_doc["PwmSsrResolution"]:b_set_default_values = true;
+      (json_doc["RwmRgbFreq"])?objConfig.RwmRgbFreq = json_doc["RwmRgbFreq"]:b_set_default_values = true;
+      (json_doc["RwmRgbResolution"])?objConfig.RwmRgbResolution = json_doc["RwmRgbResolution"]:b_set_default_values = true;
+      (json_doc["RwmRedChannel"])?objConfig.RwmRedChannel = json_doc["RwmRedChannel"]:b_set_default_values = true;
+      (json_doc["RwmGrnChannel"])?objConfig.RwmGrnChannel = json_doc["RwmGrnChannel"]:b_set_default_values = true;
+      (json_doc["RwmBluChannel"])?objConfig.RwmBluChannel = json_doc["RwmBluChannel"]:b_set_default_values = true;
+
+      if (b_set_default_values){
+        // default values are set to Json object -> write it back to file.
+        if (!saveConfiguration()){
+          Serial.println("Cannot write back to JSON file");
+        }
+      }
   }
     b_success = true;
   } else {
@@ -495,7 +509,8 @@ void configWebserver(){
       obj_json_values["PID"]["TargetPWM"] = fTarPwm;
       obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
       obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
-      
+      obj_json_values["PID"]["ErrorDiff"] = objPid.getErrorDiff();
+
       String str_response;
       serializeJson(obj_json_values, str_response);
       request->send(200, "application/json", str_response);
@@ -673,6 +688,12 @@ void configWebserver(){
     }
     );
 
+  server.on("/restartesp", HTTP_POST, [](AsyncWebServerRequest *request){
+    request->send(200, "text/plain", "Parameters are updated to file and applied to system");
+    delay(200);
+    ESP.restart();
+  });
+
   // Start web server
   server.begin();
 }
@@ -699,7 +720,7 @@ bool configADS1115(){
   objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
   // set gain amplifier
-  objAds1115.setPGA(ADS1115_PGA_1P024);
+  objAds1115.setPGA(ADS1115_PGA_0P256);
 
   // set latching mode
   objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
@@ -890,21 +911,23 @@ boolean readSensors(){
   // get physical value of sensor
   fTemp = objAds1115.getPhysVal();
   // get voltage level of sensor
-  
+
   b_result = true;
   return b_result;
 } //readSensors
+
 
 bool controlHeating(){
   /** PID regulator function for controling heating device
    *
    */
 
-  bool b_success = true;
-  
+  bool b_success = false;
+
   objPid.compute();
   ledcWrite(objConfig.PwmSsrChannel, (int)fTarPwm);
 
+  b_success = true;
   return b_success;
 
 } // controlHeating
@@ -981,13 +1004,13 @@ void loop(){
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal
       setColor(0,0,165);     // blue 
-    } 
+    }
     else {
       // temperature in range signal
       setColor(0,165,0);     // green 
     }
+
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iInterruptCntLong = 0;
       iStatusLED = LED_IDLE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }

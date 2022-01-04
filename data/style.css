@@ -1,7 +1,3 @@
-/* * {
-  box-sizing: border-box;
-} */
-
 /* Style the body */
 body {
   font-family: sans-serif, Arial, Helvetica;
@@ -99,11 +95,11 @@ body {
 
 .container{
   display: grid;
-  grid-template-columns: 150px 150px; 
-  grid-template-rows: 150px;
+  grid-template-columns: 20% 20%; 
+  /*grid-template-rows: 150px;*/
   grid-column-gap: 5px;
   vertical-align:middle;
-  text-align:center;
+  /*text-align:center;*/
 }
 
 .item{
@@ -140,8 +136,8 @@ ul {
   }
 }
 
-/* Responsive layout - when the screen is less than 400px wide, make the navigation links stack on top of each other instead of next to each other */
-@media screen and (max-width: 400px) {
+/* Responsive layout - when the screen is less than 300px wide, make the navigation links stack on top of each other instead of next to each other */
+@media screen and (max-width: 300px) {
   .navbar a {
     float: none;
     width: 100%;

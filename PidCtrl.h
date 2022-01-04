@@ -34,6 +34,7 @@ class PidCtrl
     void compute(const float &, float &);
     void addOutputLimits(const float, const float);
     float getErrorIntegrator();
+    float getErrorDiff();
     float getTargetValue();
 
   private:
@@ -45,6 +46,7 @@ class PidCtrl
     float * _ptrManipValue;
     float _fTargetValue;
     float _fSumIntegrator;
+    float _fErrDiff;
     float _fLoLim;
     float _fUpLim;
     float _fThresOn;

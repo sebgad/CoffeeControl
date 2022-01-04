@@ -495,6 +495,7 @@ void ADS1115::readConversionRegister() {
   /**
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
   */ 
+  
   iConversionValue = read16(ADS1115_CONVERSION_REG);
 }
 
