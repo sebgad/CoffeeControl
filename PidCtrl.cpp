@@ -128,7 +128,7 @@ void PidCtrl::changePidCoeffs(const float arr_coeff_table[][4], size_t i_size_co
     }
 }
 
-void PidCtrl::addOutputLimits(const float f_lower_lim, const float f_upper_lim){
+void PidCtrl::addOutputLimits(float f_lower_lim, float f_upper_lim){
     /**
      * lower and upper limit and data type (0=float, 1=integer)
      * TODO param
