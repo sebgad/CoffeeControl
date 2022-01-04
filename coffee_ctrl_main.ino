@@ -30,8 +30,8 @@
 // PWM defines
 #define P_SSR_PWM 21
 #define P_RED_LED_PWM 13
-#define P_GRN_LED_PWM 12
-#define P_BLU_LED_PWM 27
+#define P_GRN_LED_PWM 27 // TODO used to be 12
+#define P_BLU_LED_PWM 12 // TODO used to be 27
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
@@ -765,7 +765,7 @@ void setup(){
   Serial.println("Starting setup.");
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
-  setColor(170, 170, 170); // White 
+  setColor(165, 150, 165); // White
 
   if (configADS1115()){
     // configuration of analog digital converter is successfull
@@ -970,8 +970,8 @@ void setColor(int i_red_value, int i_green_value, int i_blue_value) {
    * setColor(0, 0, 255);     // Blue 
    * setColor(255, 255, 255); // White 
    * setColor(170, 0, 255);   // Purple 
-   * setColor(255,165,0);     // Orange 
-   * setColor(255,255,0);     // Yellow 
+   * setColor(255,10,0);     // Orange 
+   * setColor(255,20,0);     // Yellow 
    *
    * @param i_red_value    [0, 255] Red RGB value
    * @param i_green_value  [0, 255] Green RGB value
@@ -999,11 +999,11 @@ void loop(){
   if (iStatusLED == LED_SET) {
     if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
-      setColor(165,0,165);     // purple 
+      setColor(165,0,0);     // red
     } 
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal
-      setColor(0,0,165);     // blue 
+      setColor(0,0,165);     // blue
     }
     else {
       // temperature in range signal
