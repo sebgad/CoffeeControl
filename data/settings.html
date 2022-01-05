@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <link rel="stylesheet" type="text/css" href="style.css">
+  <script type="text/javascript" src="menubar.js"></script>
   <title>Silvia Control</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,19 +11,21 @@
   <script type="text/javascript">
 
   function onSubmitParams(){
+    var searchParams = new URLSearchParams(window.location.search);
+    var str_section = searchParams.get('section');
     var obj_div_elements = document.getElementById("id_input");
     var obj_div_input_children = obj_div_elements.getElementsByTagName("input");
     var obj_json_req = {};
 
     for (i = 0; i < obj_div_input_children.length; ++i) {
       if (obj_div_input_children[i].type === "text"){
-        obj_json_req[obj_div_input_children[i].id] = obj_div_input_children[i].value;
+        obj_json_req[str_section][obj_div_input_children[i].id] = obj_div_input_children[i].value;
       } else if (obj_div_input_children[i].type === "checkbox"){
-        obj_json_req[obj_div_input_children[i].id] = (obj_div_input_children[i].checked);
+        obj_json_req[str_section][obj_div_input_children[i].id] = (obj_div_input_children[i].checked);
       }
     }
     var obj_http_request = new XMLHttpRequest();
-    obj_http_request.open("POST", "/paramUpdate", true);
+    obj_http_request.open("POST", "/paramUpdate?section=" + str_section, true);
     obj_http_request.setRequestHeader("Content-Type", "application/json");
     obj_http_request.onload= function() {
         // assign response text from request to variable
@@ -51,13 +54,16 @@
   }
 
   function onGetParameter(){
+    onCreateMenu();
+    
     // initialize http request object for asynchronous file request
     var obj_http_request=new XMLHttpRequest();
     // request data.csv from http server
     obj_http_request.open("GET","params.json");
-      
+    
     // define function which is executed when requested is fully loaded
     obj_http_request.onload= function() {
+      var searchParams = new URLSearchParams(window.location.search);
       // get response as string from esp async webserver
       var str_buf = obj_http_request.responseText;
       // parse string response to json object
@@ -65,9 +71,10 @@
       
       // get form object in html side
       var obj_form = document.getElementById("id_input");
-      
+      var str_section = searchParams.get('section');
+
       // iterate over json object and create text inputs
-      for(var str_key in obj_json_req){
+      for(var str_key in obj_json_req[str_section]){
         var obj_input = document.getElementById(str_key);
 
         if (!obj_input){
@@ -238,12 +245,7 @@ function onRequestRestart(){
   A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
 </div>
 
-<div class="navbar">
-  <a href="/">Home</a>
-  <a href="graphs">Graphs</a>
-  <a href="settings" class="active">Settings</a>
-  <a href="ota">OTA</a>
-  <a href="#" class="right">About</a>
+<div id="navbar" class="navbar">
 </div>
 
 <div class="main">

@@ -531,37 +531,37 @@ void configWebserver(){
     bool b_restart_required = false;
     StaticJsonDocument<JSON_MEMORY> obj_json;
     obj_json = json.as<JsonObject>();
-    
-    if (objConfig.wifiSSID != obj_json["wifi"]["wifiSSID"].as<String>()) {
-      b_restart_required = true;
-    }
 
-    if (objConfig.wifiPassword != obj_json["wifi"]["wifiPassword"].as<String>()){
-      b_restart_required = true;
-    }
+    AsyncWebParameter* par_sec = request->getParam("section", true, false);
 
-    objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
-    objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
-    objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
-    objConfig.CtrlPropActivate = obj_json["PID"]["CtrlPropActivate"];
-    objConfig.CtrlPropFactor = obj_json["PID"]["CtrlPropFactor"];
-    objConfig.CtrlIntActivate = obj_json["PID"]["CtrlIntActivate"];
-    objConfig.CtrlIntFactor = obj_json["PID"]["CtrlIntFactor"];
-    objConfig.CtrlDifActivate = obj_json["PID"]["CtrlDifActivate"];
-    objConfig.CtrlDifFactor = obj_json["PID"]["CtrlDifFactor"];
-    objConfig.CtrlTarget = obj_json["PID"]["CtrlTarget"];
-    objConfig.LowThresholdActivate = obj_json["PID"]["LowThresholdActivate"];
-    objConfig.LowThresholdValue = obj_json["PID"]["LowThresholdValue"];
-    objConfig.HighThresholdActivate = obj_json["PID"]["HighThresholdActivate"];
-    objConfig.HighTresholdValue = obj_json["PID"]["HighTresholdValue"];
-    objConfig.SsrFreq = obj_json["SSR"]["SsrFreq"];
-    objConfig.PwmSsrChannel = obj_json["SSR"]["PwmSsrChannel"];
-    objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
-    objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
-    objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
-    objConfig.RwmRedChannel = obj_json["LED"]["RwmRedChannel"];
-    objConfig.RwmGrnChannel = obj_json["LED"]["RwmGrnChannel"];
-    objConfig.RwmBluChannel = obj_json["LED"]["RwmBluChannel"];
+    if (par_sec.c_str()=="Wifi"){
+      b_restart_required = true;
+      objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
+      objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
+    } else if (par_sec.c_str()=="PID") {
+      objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
+      objConfig.CtrlPropActivate = obj_json["PID"]["CtrlPropActivate"];
+      objConfig.CtrlPropFactor = obj_json["PID"]["CtrlPropFactor"];
+      objConfig.CtrlIntActivate = obj_json["PID"]["CtrlIntActivate"];
+      objConfig.CtrlIntFactor = obj_json["PID"]["CtrlIntFactor"];
+      objConfig.CtrlDifActivate = obj_json["PID"]["CtrlDifActivate"];
+      objConfig.CtrlDifFactor = obj_json["PID"]["CtrlDifFactor"];
+      objConfig.CtrlTarget = obj_json["PID"]["CtrlTarget"];
+      objConfig.LowThresholdActivate = obj_json["PID"]["LowThresholdActivate"];
+      objConfig.LowThresholdValue = obj_json["PID"]["LowThresholdValue"];
+      objConfig.HighThresholdActivate = obj_json["PID"]["HighThresholdActivate"];
+      objConfig.HighTresholdValue = obj_json["PID"]["HighTresholdValue"];
+    } else if (par_sec.c_str()=="SSR"){
+      objConfig.SsrFreq = obj_json["SSR"]["SsrFreq"];
+      objConfig.PwmSsrChannel = obj_json["SSR"]["PwmSsrChannel"];
+      objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
+    } else if (par_sec.c_str()=="LED") {
+      objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
+      objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
+      objConfig.RwmRedChannel = obj_json["LED"]["RwmRedChannel"];
+      objConfig.RwmGrnChannel = obj_json["LED"]["RwmGrnChannel"];
+      objConfig.RwmBluChannel = obj_json["LED"]["RwmBluChannel"];
+    }
 
     if (saveConfiguration()){
       if(b_restart_required){
