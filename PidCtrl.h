@@ -32,7 +32,7 @@ class PidCtrl
     void setOffThres(float f_tresh);
     void compute();
     void compute(const float &, float &);
-    void addOutputLimits(const float, const float);
+    void addOutputLimits(float, float);
     float getErrorIntegrator();
     float getErrorDiff();
     float getTargetValue();

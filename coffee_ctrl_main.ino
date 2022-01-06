@@ -535,6 +535,8 @@ void configWebserver(){
     objConfig.LowThresholdValue = obj_json["PID"]["LowThresholdValue"];
     objConfig.HighThresholdActivate = obj_json["PID"]["HighThresholdActivate"];
     objConfig.HighTresholdValue = obj_json["PID"]["HighTresholdValue"];
+    objConfig.HighLimitManipulation = obj_json["PID"]["HighLimitManipulation"];
+    objConfig.LowLimitManipulation = obj_json["PID"]["LowLimitManipulation"];
     objConfig.SsrFreq = obj_json["SSR"]["SsrFreq"];
     objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
     objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
@@ -555,6 +557,7 @@ void configWebserver(){
     // initialization of a new parameter file
     resetConfiguration(true);
     configPID();
+    configLED();
     request->send(200, "text/plain", "Parameters are set back to default values");
   });
 
@@ -735,7 +738,7 @@ void setup(){
   Serial.println("Starting setup.");
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
-  setColor(165, 150, 165); // White
+  setColor(165, 165, 165); // White
 
   if (configADS1115()){
     // configuration of analog digital converter is successfull
