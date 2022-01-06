@@ -37,6 +37,12 @@
 #define FORMAT_SPIFFS_IF_FAILED true
 #define JSON_MEMORY 1000
 
+// define timer related channels for PWM signals
+#define RwmRedChannel 13 //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
+#define RwmGrnChannel 14 //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
+#define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
+#define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
+
 // config structure for online calibration
 struct config {
   String wifiSSID;
@@ -56,14 +62,10 @@ struct config {
   float LowLimitManipulation;
   float HighLimitManipulation;
   uint32_t SsrFreq = 200; // Hz - PWM frequency
-  uint32_t PwmSsrChannel = 0; //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
   uint32_t PwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
   // RGB PWM config
   uint32_t RwmRgbFreq = 500; // Hz - PWM frequency
   uint32_t RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
-  uint32_t RwmRedChannel = 13; //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
-  uint32_t RwmGrnChannel = 14; //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
-  uint32_t RwmBluChannel = 15; //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 };
 
 
@@ -311,13 +313,9 @@ bool loadConfiguration(){
       (json_doc["PID"]["LowLimitManipulation"])?objConfig.LowLimitManipulation = json_doc["PID"]["LowLimitManipulation"]:b_set_default_values = true;
       (json_doc["PID"]["HighLimitManipulation"])?objConfig.HighLimitManipulation = json_doc["PID"]["HighLimitManipulation"]:b_set_default_values = true;
       (json_doc["SSR"]["SsrFreq"])?objConfig.SsrFreq = json_doc["SSR"]["SsrFreq"]:b_set_default_values = true;
-      (json_doc["SSR"]["PwmSsrChannel"])?objConfig.PwmSsrChannel = json_doc["SSR"]["PwmSsrChannel"]:b_set_default_values = true;
       (json_doc["SSR"]["PwmSsrResolution"])?objConfig.PwmSsrResolution = json_doc["SSR"]["PwmSsrResolution"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbFreq"])?objConfig.RwmRgbFreq = json_doc["LED"]["RwmRgbFreq"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbResolution"])?objConfig.RwmRgbResolution = json_doc["LED"]["RwmRgbResolution"]:b_set_default_values = true;
-      (json_doc["LED"]["RwmRedChannel"])?objConfig.RwmRedChannel = json_doc["LED"]["RwmRedChannel"]:b_set_default_values = true;
-      (json_doc["LED"]["RwmGrnChannel"])?objConfig.RwmGrnChannel = json_doc["LED"]["RwmGrnChannel"]:b_set_default_values = true;
-      (json_doc["LED"]["RwmBluChannel"])?objConfig.RwmBluChannel = json_doc["LED"]["RwmBluChannel"]:b_set_default_values = true;
 
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
@@ -358,13 +356,9 @@ bool saveConfiguration(){
   json_doc["PID"]["LowLimitManipulation"] = objConfig.LowLimitManipulation;
   json_doc["PID"]["HighLimitManipulation"] = objConfig.HighLimitManipulation;
   json_doc["SSR"]["SsrFreq"]  = objConfig.SsrFreq;
-  json_doc["SSR"]["PwmSsrChannel"] = objConfig.PwmSsrChannel;
   json_doc["SSR"]["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
   json_doc["LED"]["RwmRgbFreq"] = objConfig.RwmRgbFreq;
   json_doc["LED"]["RwmRgbResolution"] = objConfig.RwmRgbResolution;
-  json_doc["LED"]["RwmRedChannel"] = objConfig.RwmRedChannel;
-  json_doc["LED"]["RwmGrnChannel"] = objConfig.RwmGrnChannel;
-  json_doc["LED"]["RwmBluChannel"] = objConfig.RwmBluChannel;
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
@@ -396,12 +390,12 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.wifiPassword = strWifiPwFactory;
   objConfig.CtrlTimeFactor = true;
   objConfig.CtrlPropActivate = true;
-  objConfig.CtrlPropFactor = 3.1;
-  objConfig.CtrlIntActivate = false;
-  objConfig.CtrlIntFactor = 0.001;
+  objConfig.CtrlPropFactor = 10.0;
+  objConfig.CtrlIntActivate = true;
+  objConfig.CtrlIntFactor = 350.0;
   objConfig.CtrlDifActivate = false;
   objConfig.CtrlDifFactor = 0.0;
-  objConfig.CtrlTarget = 93.0;
+  objConfig.CtrlTarget = 91.0;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
   objConfig.HighThresholdActivate = false;
@@ -409,13 +403,9 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.LowLimitManipulation = 0;
   objConfig.HighLimitManipulation = 255;
   objConfig.SsrFreq = 15;
-  objConfig.PwmSsrChannel = 0;
   objConfig.PwmSsrResolution = 8;
   objConfig.RwmRgbFreq = 500; // Hz - PWM frequency
   objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
-  objConfig.RwmRedChannel = 13; //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
-  objConfig.RwmGrnChannel = 14; //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
-  objConfig.RwmBluChannel = 15; //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 
   if (b_safe_to_json){
     saveConfiguration();
@@ -427,13 +417,13 @@ void configLED(){
    * @brief Method to configure LED functionality
    * 
    */
-  ledcSetup(objConfig.RwmRedChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
-  ledcSetup(objConfig.RwmGrnChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
-  ledcSetup(objConfig.RwmBluChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
+  ledcSetup(RwmRedChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
+  ledcSetup(RwmGrnChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
+  ledcSetup(RwmBluChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
 
-  ledcAttachPin(P_RED_LED_PWM, objConfig.RwmRedChannel);
-  ledcAttachPin(P_GRN_LED_PWM, objConfig.RwmGrnChannel);
-  ledcAttachPin(P_BLU_LED_PWM, objConfig.RwmBluChannel);
+  ledcAttachPin(P_RED_LED_PWM, RwmRedChannel);
+  ledcAttachPin(P_GRN_LED_PWM, RwmGrnChannel);
+  ledcAttachPin(P_BLU_LED_PWM, RwmBluChannel);
 }
 
 void configPID(){
@@ -453,7 +443,7 @@ void configPID(){
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
 
   // configure PWM functionalitites
-  ledcSetup(objConfig.PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
+  ledcSetup(PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
 }
 
 void configWebserver(){
@@ -528,55 +518,35 @@ void configWebserver(){
 
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
-    bool b_restart_required = false;
     StaticJsonDocument<JSON_MEMORY> obj_json;
     obj_json = json.as<JsonObject>();
-
-    AsyncWebParameter* par_sec = request->getParam("section", true, false);
-
-    if (par_sec.c_str()=="Wifi"){
-      b_restart_required = true;
-      objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
-      objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
-    } else if (par_sec.c_str()=="PID") {
-      objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
-      objConfig.CtrlPropActivate = obj_json["PID"]["CtrlPropActivate"];
-      objConfig.CtrlPropFactor = obj_json["PID"]["CtrlPropFactor"];
-      objConfig.CtrlIntActivate = obj_json["PID"]["CtrlIntActivate"];
-      objConfig.CtrlIntFactor = obj_json["PID"]["CtrlIntFactor"];
-      objConfig.CtrlDifActivate = obj_json["PID"]["CtrlDifActivate"];
-      objConfig.CtrlDifFactor = obj_json["PID"]["CtrlDifFactor"];
-      objConfig.CtrlTarget = obj_json["PID"]["CtrlTarget"];
-      objConfig.LowThresholdActivate = obj_json["PID"]["LowThresholdActivate"];
-      objConfig.LowThresholdValue = obj_json["PID"]["LowThresholdValue"];
-      objConfig.HighThresholdActivate = obj_json["PID"]["HighThresholdActivate"];
-      objConfig.HighTresholdValue = obj_json["PID"]["HighTresholdValue"];
-    } else if (par_sec.c_str()=="SSR"){
-      objConfig.SsrFreq = obj_json["SSR"]["SsrFreq"];
-      objConfig.PwmSsrChannel = obj_json["SSR"]["PwmSsrChannel"];
-      objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
-    } else if (par_sec.c_str()=="LED") {
-      objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
-      objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
-      objConfig.RwmRedChannel = obj_json["LED"]["RwmRedChannel"];
-      objConfig.RwmGrnChannel = obj_json["LED"]["RwmGrnChannel"];
-      objConfig.RwmBluChannel = obj_json["LED"]["RwmBluChannel"];
-    }
+    
+    objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
+    objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
+    objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
+    objConfig.CtrlPropActivate = obj_json["PID"]["CtrlPropActivate"];
+    objConfig.CtrlPropFactor = obj_json["PID"]["CtrlPropFactor"];
+    objConfig.CtrlIntActivate = obj_json["PID"]["CtrlIntActivate"];
+    objConfig.CtrlIntFactor = obj_json["PID"]["CtrlIntFactor"];
+    objConfig.CtrlDifActivate = obj_json["PID"]["CtrlDifActivate"];
+    objConfig.CtrlDifFactor = obj_json["PID"]["CtrlDifFactor"];
+    objConfig.CtrlTarget = obj_json["PID"]["CtrlTarget"];
+    objConfig.LowThresholdActivate = obj_json["PID"]["LowThresholdActivate"];
+    objConfig.LowThresholdValue = obj_json["PID"]["LowThresholdValue"];
+    objConfig.HighThresholdActivate = obj_json["PID"]["HighThresholdActivate"];
+    objConfig.HighTresholdValue = obj_json["PID"]["HighTresholdValue"];
+    objConfig.SsrFreq = obj_json["SSR"]["SsrFreq"];
+    objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
+    objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
+    objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
 
     if (saveConfiguration()){
-      if(b_restart_required){
-        request->send(200, "text/plain", "Parameters are updated to file and applied to system. ESP restart.");
-        delay(500);
-        ESP.restart();
-      }else{
-        configPID();
-        configLED();
-        request->send(200, "text/plain", "Parameters are updated and changes applied.");
-      }
+      configPID();
+      configLED();
+      request->send(200, "text/plain", "Parameters are updated and changes applied.");
     } else {
       request->send(200, "text/plain", "Parameters are not updated due to write lock");
     }
-  
   });
 
   server.addHandler(obj_handler);
@@ -892,7 +862,7 @@ void setup(){
     configPID();
     
     // attach the channel to the GPIO to be controlled
-    ledcAttachPin(P_SSR_PWM, objConfig.PwmSsrChannel);
+    ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
 
 
   } else {
@@ -925,7 +895,7 @@ bool controlHeating(){
   bool b_success = false;
 
   objPid.compute();
-  ledcWrite(objConfig.PwmSsrChannel, (int)fTarPwm);
+  ledcWrite(PwmSsrChannel, (int)fTarPwm);
 
   b_success = true;
   return b_success;
@@ -977,9 +947,9 @@ void setColor(int i_red_value, int i_green_value, int i_blue_value) {
    * @param i_green_value  [0, 255] Green RGB value
    * @param i_blue_value   [0, 255] Blue RGB value
    */
-  ledcWrite(objConfig.RwmRedChannel, i_red_value);
-  ledcWrite(objConfig.RwmGrnChannel, i_green_value);
-  ledcWrite(objConfig.RwmBluChannel, i_blue_value);
+  ledcWrite(RwmRedChannel, i_red_value);
+  ledcWrite(RwmGrnChannel, i_green_value);
+  ledcWrite(RwmBluChannel, i_blue_value);
 
 }// setColor
 
@@ -999,7 +969,7 @@ void loop(){
   if (iStatusLED == LED_SET) {
     if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
-      setColor(165,0,0);     // red
+      setColor(255,10,0);     // red
     } 
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal

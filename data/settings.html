@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
   <link rel="stylesheet" type="text/css" href="style.css">
-  <script type="text/javascript" src="menubar.js"></script>
   <title>Silvia Control</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,21 +10,28 @@
   <script type="text/javascript">
 
   function onSubmitParams(){
-    var searchParams = new URLSearchParams(window.location.search);
-    var str_section = searchParams.get('section');
     var obj_div_elements = document.getElementById("id_input");
     var obj_div_input_children = obj_div_elements.getElementsByTagName("input");
     var obj_json_req = {};
 
     for (i = 0; i < obj_div_input_children.length; ++i) {
+      var lst_obj_div_input_children_id = obj_div_input_children[i].id.split("_");
+      var str_section = lst_obj_div_input_children_id[0];
+      var str_key = lst_obj_div_input_children_id[1];
+
+      if(!obj_json_req.hasOwnProperty(str_section)){
+        // define nested array if not exists already
+        obj_json_req[str_section] = {};
+      }
+
       if (obj_div_input_children[i].type === "text"){
-        obj_json_req[str_section][obj_div_input_children[i].id] = obj_div_input_children[i].value;
+        obj_json_req[str_section][str_key] = obj_div_input_children[i].value;
       } else if (obj_div_input_children[i].type === "checkbox"){
-        obj_json_req[str_section][obj_div_input_children[i].id] = (obj_div_input_children[i].checked);
+        obj_json_req[str_section][str_key] = (obj_div_input_children[i].checked);
       }
     }
     var obj_http_request = new XMLHttpRequest();
-    obj_http_request.open("POST", "/paramUpdate?section=" + str_section, true);
+    obj_http_request.open("POST", "/paramUpdate", true);
     obj_http_request.setRequestHeader("Content-Type", "application/json");
     obj_http_request.onload= function() {
         // assign response text from request to variable
@@ -54,8 +60,6 @@
   }
 
   function onGetParameter(){
-    onCreateMenu();
-    
     // initialize http request object for asynchronous file request
     var obj_http_request=new XMLHttpRequest();
     // request data.csv from http server
@@ -63,7 +67,6 @@
     
     // define function which is executed when requested is fully loaded
     obj_http_request.onload= function() {
-      var searchParams = new URLSearchParams(window.location.search);
       // get response as string from esp async webserver
       var str_buf = obj_http_request.responseText;
       // parse string response to json object
@@ -71,43 +74,53 @@
       
       // get form object in html side
       var obj_form = document.getElementById("id_input");
-      var str_section = searchParams.get('section');
 
       // iterate over json object and create text inputs
-      for(var str_key in obj_json_req[str_section]){
-        var obj_input = document.getElementById(str_key);
+      for(var str_section_key in obj_json_req){
+        var obj_heading = document.getElementById(str_section_key);
 
-        if (!obj_input){
-          // define label for text input and line break
-          var obj_label = document.createElement("Label");
-          var obj_br_label = document.createElement("BR");
-          obj_label.setAttribute("for", str_key);
-          obj_label.innerHTML = str_key;
+        if(!obj_heading){
+          // add heading if not exists already
+          obj_heading = document.createElement("h3");
+          obj_heading.innerHTML = str_section_key;
+          obj_heading.id = str_section_key;
+          obj_form.appendChild(obj_heading);
+        }
+
+        for(var str_key in obj_json_req[str_section_key]){
+          var obj_input = document.getElementById(str_section_key + "_" + str_key);
+
+          if (!obj_input){
+            // define label for text input and line break
+            var obj_label = document.createElement("Label");
+            var obj_br_label = document.createElement("BR");
+            obj_label.setAttribute("for", str_section_key + "_" + str_key);
+            obj_label.innerHTML = str_key;
           
-          // append label and line break form
-          obj_form.appendChild(obj_label);
-          obj_form.appendChild(obj_br_label);
+            // append label and line break form
+            obj_form.appendChild(obj_label);
+            obj_form.appendChild(obj_br_label);
           
-          // define text input and line break
-          var obj_input = document.createElement("Input");
-          var obj_br_input = document.createElement("BR");
-          if (typeof obj_json_req[str_key] === "boolean"){
-            obj_input.type = "checkbox";
-            obj_input.checked = obj_json_req[str_key];
+            // define text input and line break
+            var obj_input = document.createElement("Input");
+            var obj_br_input = document.createElement("BR");
+            if (typeof obj_json_req[str_section_key][str_key] === "boolean"){
+              obj_input.type = "checkbox";
+              obj_input.checked = obj_json_req[str_section_key][str_key];
+            } else {
+              obj_input.type="text";
+            }
+            obj_input.value=obj_json_req[str_section_key][str_key];
+            obj_input.id=str_section_key + "_" + str_key;
+          
+            // append input to form
+            obj_form.appendChild(obj_input);
+            obj_form.appendChild(obj_br_input);
           } else {
-            obj_input.type="text";
+            obj_input.value=obj_json_req[str_section_key][str_key];
           }
-          obj_input.value=obj_json_req[str_key];
-          obj_input.id=str_key;
-          
-          // append input to form
-          obj_form.appendChild(obj_input);
-          obj_form.appendChild(obj_br_input);
-        } else {
-          obj_input.value=obj_json_req[str_key];
         }
       }
-
     }
     obj_http_request.send();
   }
@@ -191,7 +204,7 @@ function onRequestRestart(){
   if (confirm("Are you sure you want to restart ESP?")){
     var obj_http_request=new XMLHttpRequest();
     // request data.csv from http server
-    obj_http_request.open("GET","restartesp");
+    obj_http_request.open("GET","/restartesp");
     // define function which is executed when requested is fully loaded
     obj_http_request.onload= function() {
       // get response as string from esp async webserver
@@ -245,7 +258,12 @@ function onRequestRestart(){
   A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
 </div>
 
-<div id="navbar" class="navbar">
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="graphs">Graphs</a>
+  <a href="settings" class="active">Settings</a>
+  <a href="ota">OTA</a>
+  <a href="#" class="right">About</a>
 </div>
 
 <div class="main">
