@@ -53,6 +53,6 @@ for i, row in df.iterrows():
     strOut+= "{%.17f, %.1f},\r\n" % (row['Umess'], row['Temp'])
 strOut +="}"
 
-fobj = open("array_cpp.txt")
-fobj.writelines(strOut, "w")
+fobj = open("array_cpp.txt", "w")
+fobj.writelines(strOut)
 fobj.close()

@@ -136,13 +136,19 @@ class ADS1115
     bool getPinRdyMode(void);
     bool conversionReady(void);
     void readConversionRegister(void);
+    float getConvVal(void);
     float getVoltVal(void);
     float getPhysVal(void);
+    int getLatestBufVal(void);
     void printConfigReg(void);
     void setPhysConv(const float, const float);
     void setPhysConv(const float, const float, const float);
     void setPhysConv(const float[][2], size_t);
-        
+    void activateFilter(int);
+    void deactivateFilter();
+    bool getFilterStatus(void);
+    bool getConnectionStatus(void);
+
   private:
     int _iSdaPin;
     int _iSclPin;
@@ -155,12 +161,16 @@ class ADS1115
     uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
-    int16_t iConversionValue;
     int16_t read16(byte);
     void write16(byte, uint16_t);
     void initConvTable(size_t);
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
+    int _iBuffCnt;
+    int _iBuffSize;
+    int16_t * _ptrConvBuff;
+    bool _bFilterActive;
+    bool _bConnectStatus;
 };
 
 #endif

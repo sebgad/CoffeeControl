@@ -66,6 +66,8 @@ struct config {
   // RGB PWM config
   uint32_t RwmRgbFreq = 500; // Hz - PWM frequency
   uint32_t RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
+  bool SigFilterActive;
+  int SigFilterSize;
 };
 
 
@@ -316,6 +318,8 @@ bool loadConfiguration(){
       (json_doc["SSR"]["PwmSsrResolution"])?objConfig.PwmSsrResolution = json_doc["SSR"]["PwmSsrResolution"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbFreq"])?objConfig.RwmRgbFreq = json_doc["LED"]["RwmRgbFreq"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbResolution"])?objConfig.RwmRgbResolution = json_doc["LED"]["RwmRgbResolution"]:b_set_default_values = true;
+      (json_doc["Signal"]["SigFilterActive"])?objConfig.SigFilterActive = json_doc["Signal"]["SigFilterActive"]:b_set_default_values = true;
+      (json_doc["Signal"]["SigFilterSize"])?objConfig.SigFilterSize = json_doc["Signal"]["SigFilterSize"]:b_set_default_values = true;
 
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
@@ -359,6 +363,8 @@ bool saveConfiguration(){
   json_doc["SSR"]["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
   json_doc["LED"]["RwmRgbFreq"] = objConfig.RwmRgbFreq;
   json_doc["LED"]["RwmRgbResolution"] = objConfig.RwmRgbResolution;
+  json_doc["Signal"]["SigFilterActive"] = objConfig.SigFilterActive;
+  json_doc["Signal"]["SigFilterSize"] = objConfig.SigFilterSize;
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
@@ -405,7 +411,9 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.SsrFreq = 15;
   objConfig.PwmSsrResolution = 8;
   objConfig.RwmRgbFreq = 500; // Hz - PWM frequency
-  objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
+  objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%.
+  objConfig.SigFilterActive = true;
+  objConfig.SigFilterSize = 5;
 
   if (b_safe_to_json){
     saveConfiguration();
@@ -541,10 +549,19 @@ void configWebserver(){
     objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
     objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
     objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
+    objConfig.SigFilterActive = obj_json["Signal"]["SigFilterActive"];
+    objConfig.SigFilterSize = obj_json["Signal"]["SigFilterSize"];
 
     if (saveConfiguration()){
       configPID();
       configLED();
+      
+      if(objConfig.SigFilterActive){
+        objAds1115.activateFilter(objConfig.SigFilterSize);
+      } else {
+        objAds1115.deactivateFilter();
+      }
+      
       request->send(200, "text/plain", "Parameters are updated and changes applied.");
     } else {
       request->send(200, "text/plain", "Parameters are not updated due to write lock");
@@ -683,6 +700,11 @@ bool configADS1115(){
     return false;
   }
 
+  // Set Signal Filter Status
+  if(objConfig.SigFilterActive){
+    objAds1115.activateFilter(objConfig.SigFilterSize);
+  }
+
   // set differential voltage: A0-A1
   objAds1115.setMux(ADS1115_MUX_AIN0_AIN1);
 
@@ -732,155 +754,150 @@ bool configADS1115(){
 }
 
 void setup(){
-  // Serial port for debugging purposes
+  // Initialize Serial port for debugging purposes
   Serial.begin(115200);
   delay(50);
   Serial.println("Starting setup.");
+
+  // initialize SPIFFs and load configuration files
+  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
+      // Initialization of SPIFFS failed, restart it
+      Serial.println("SPIFFS mount Failed, restart ESP");
+      delay(1000);
+      ESP.restart();
+  } else {
+    Serial.println("SPIFFS mount successfully.");
+    // initialize configuration before load json file
+    resetConfiguration(false);
+    
+    // load configuration from file in eeprom
+    if (!loadConfiguration()) {
+      Serial.println("Parameter file is locked on startup. Please reset to factory settings.");
+    }
+  }
+
+  // Initialization successfull, create csv file
+  unsigned int i_total_bytes = SPIFFS.totalBytes();
+  unsigned int i_used_bytes = SPIFFS.usedBytes();
+
+  Serial.println("File system info:");
+  Serial.print("Total space on SPIFFS: ");
+  Serial.print(i_total_bytes);
+  Serial.println(" bytes");
+
+  Serial.print("Total space used on SPIFFS: ");
+  Serial.print(i_used_bytes);
+  Serial.println(" bytes");
+  Serial.println("");
+
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
   setColor(165, 165, 165); // White
 
-  if (configADS1115()){
-    // configuration of analog digital converter is successfull
+  // Connect to wifi and create time stamp if device is Online
+  bEspOnline = connectWiFi();
+  char char_timestamp[50];
 
-    // Initialize SPIFFS
-    if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-        // Initialization of SPIFFS failed, restart it
-        Serial.println("SPIFFS mount Failed, restart ESP");
-        delay(1000);
-        ESP.restart();
-    } else{
-      Serial.println("SPIFFS mount successfully.");
-      // initialize configuration before load json file
-      resetConfiguration(false);
-      
-      // load configuration from file in eeprom
-      if (loadConfiguration()) {
-        Serial.println("Parameter file is locked on startup. Please reset to factory settings.");
-      }
-    }
+  if (bEspOnline == true) {
+    // ESP has wifi connection
 
-    // Initialization successfull, create csv file
-    unsigned int i_total_bytes = SPIFFS.totalBytes();
-    unsigned int i_used_bytes = SPIFFS.usedBytes();
+    // Define reconnect action when disconnecting from Wifi
+    WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
 
-    Serial.println("File system info:");
-    Serial.print("Total space on SPIFFS: ");
-    Serial.print(i_total_bytes);
-    Serial.println(" bytes");
+    // initialize NTP client
+    configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
 
-    Serial.print("Total space used on SPIFFS: ");
-    Serial.print(i_used_bytes);
-    Serial.println(" bytes");
-    Serial.println("");
-    
-    // Connect to wifi
-    bEspOnline = connectWiFi();
-    char char_timestamp[50];
-
-    if (bEspOnline == true) {
-      // ESP has wifi connection
-
-      // Define reconnect action when disconnecting from Wifi
-      WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
-
-      // initialize NTP client
-      configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
-
-      // get local time
-      struct tm obj_timeinfo;
-      if(!getLocalTime(&obj_timeinfo)){
-        Serial.println("Failed to obtain time stamp online");
-      } else {
-        // write time stamp into variable
-        strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
-      }
-
-      // print location to measurement file
-      Serial.print("Create File ");
-      Serial.print(WiFi.localIP());
-      Serial.println(strMeasFilePath);
-    
+    // get local time
+    struct tm obj_timeinfo;
+    if(!getLocalTime(&obj_timeinfo)){
+      Serial.println("Failed to obtain time stamp online");
     } else {
-      // No wifi connection possible start SoftAP
-      Serial.print("Connection to SSID '");
-      Serial.print(objConfig.wifiSSID);
-      Serial.println("' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'");
-      WiFi.softAP("SilviaCoffeeCtrl");
-      
-      // print location to measurement file
-      Serial.print("Create File ");
-      Serial.print(WiFi.softAPIP());
-      Serial.println(strMeasFilePath);
-
-      // set RGB-LED to purple to user knows whats up
-      setColor(170, 0, 255);   // Purple 
-
-    }
-    
-    // configure and start webserver
-    configWebserver();
-
-    // register mDNS. ESP is available under http://coffee.local
-    if (!MDNS.begin("coffee")) {
-      Serial.println("Error setting up MDNS responder!");
-    } else {
-      // add service to standart http connection
-      MDNS.addService("http", "tcp", 80);
+      // write time stamp into variable
+      strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
     }
 
-    if (!bMeasFileLocked){
-      bMeasFileLocked = true;
-      File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
-
-      obj_meas_file.print("Measurement File created on ");
-      obj_meas_file.println(char_timestamp);
-      obj_meas_file.println("");
-      obj_meas_file.println("Time,Temperature,TargetPWM");
-      obj_meas_file.close();
-      bMeasFileLocked = false;
-    } else {
-      Serial.println("Could not create measurement file due to active Lock");
-    }
-
-    // Initialize Timer 
-    // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
-    // true: increasing counter
-    objTimerLong = timerBegin(1, 80, true);
-
-    // Attach ISR function to timer
-    // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
-    timerAttachInterrupt(objTimerLong, &onTimerLong, true);
-    pinMode(CONV_RDY_PIN, INPUT);
-    attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
-    
-    // Define timer alarm
-    // factor is 100000, equals 100ms when prescaler is 80
-    // true: Alarm will be reseted automatically
-    timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
-    timerAlarmEnable(objTimerLong);
-    iTimeStart = millis();
-
-    // Configure PID library
-    configPID();
-    
-    // attach the channel to the GPIO to be controlled
-    ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
-
-
+    // print location to measurement file
+    Serial.print("Create File ");
+    Serial.print(WiFi.localIP());
+    Serial.println(strMeasFilePath);
+  
   } else {
+    // No wifi connection possible start SoftAP
+    Serial.print("Connection to SSID '");
+    Serial.print(objConfig.wifiSSID);
+    Serial.println("' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'");
+    WiFi.softAP("SilviaCoffeeCtrl");
+    
+    // print location to measurement file
+    Serial.print("Create File ");
+    Serial.print(WiFi.softAPIP());
+    Serial.println(strMeasFilePath);
+
+    // set RGB-LED to purple to user knows whats up
+    setColor(170, 0, 255);   // Purple 
+  }
+
+  // configure and start webserver
+  configWebserver();
+
+  // register mDNS. ESP is available under http://coffee.local
+  if (!MDNS.begin("coffee")) {
+    Serial.println("Error setting up MDNS responder!");
+  } else {
+    // add service to standart http connection
+    MDNS.addService("http", "tcp", 80);
+  }
+
+  // Write Measurement file header
+  if (!bMeasFileLocked){
+    bMeasFileLocked = true;
+    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
+
+    obj_meas_file.print("Measurement File created on ");
+    obj_meas_file.println(char_timestamp);
+    obj_meas_file.println("");
+    obj_meas_file.println("Time,Temperature,TargetPWM,FilterStatus");
+    obj_meas_file.close();
+    bMeasFileLocked = false;
+  } else {
+    Serial.println("Could not create measurement file due to active Lock");
+  }
+
+  // configure ADS1115
+  if(!configADS1115()) {
     // TODO add diagnosis when ADS1115 is not connected
     Serial.println("ADS1115 configuration not successful. System halt.");
-    while(1);
   }
+
+  // Initialize Timer 
+  // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
+  // true: increasing counter
+  objTimerLong = timerBegin(1, 80, true);
+
+  // Attach ISR function to timer
+  // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
+  timerAttachInterrupt(objTimerLong, &onTimerLong, true);
+  pinMode(CONV_RDY_PIN, INPUT);
+  attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
+  
+  // Define timer alarm
+  // factor is 100000, equals 100ms when prescaler is 80
+  // true: Alarm will be reseted automatically
+  timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
+  timerAlarmEnable(objTimerLong);
+  iTimeStart = millis();
+
+  // Configure PID library
+  configPID();
+  
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
 
 }// Setup
 
 boolean readSensors(){
   // Read out Sensor values
   bool b_result = false;
-  // read conversion register over i2c
-  objAds1115.readConversionRegister();
   // get physical value of sensor
   fTemp = objAds1115.getPhysVal();
   // get voltage level of sensor
@@ -914,6 +931,7 @@ bool writeMeasFile(){
   portENTER_CRITICAL_ISR(&objTimerMux);
     float f_temp_local = fTemp;
     float f_tar_pwm = fTarPwm;
+    bool b_filter_status = objAds1115.getFilterStatus();
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   if (!bMeasFileLocked){
@@ -924,7 +942,9 @@ bool writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
     obj_meas_file.print(",");
-    obj_meas_file.println(f_tar_pwm);
+    obj_meas_file.print(f_tar_pwm);
+    obj_meas_file.print(",");
+    obj_meas_file.println(b_filter_status);
     obj_meas_file.close();
     b_success = true;
     bMeasFileLocked = false;
@@ -964,7 +984,10 @@ void loop(){
 
     if (b_result_sensor == true) {
       portENTER_CRITICAL_ISR(&objTimerMux);
-        iStatusCtrl = CONTROL;
+        if(objAds1115.getConnectionStatus()){
+          // only control if connection to ADS1115 is successful
+          iStatusCtrl = CONTROL;
+        }
       portEXIT_CRITICAL_ISR(&objTimerMux);
     }
   }

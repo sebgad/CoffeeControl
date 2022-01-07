@@ -6,6 +6,10 @@
 
 ADS1115::ADS1115(TwoWire * _obj_i2c) {
   _objI2C = _obj_i2c;
+  
+  // Initialize Conversion buffer with 1 on default
+  _ptrConvBuff = new int16_t[1];
+  _iBuffCnt = 0;
 }
 
 bool ADS1115::begin() {
@@ -16,6 +20,9 @@ bool ADS1115::begin() {
   _objI2C->beginTransmission(_iI2cAddress);
   if (_objI2C->endTransmission()== 0) {
     b_success = true;
+    _bConnectStatus = true;
+  } else {
+    _bConnectStatus = false;
   }
   return b_success;
 }
@@ -28,6 +35,9 @@ bool ADS1115::begin(uint8_t i_i2c_address) {
   _objI2C->beginTransmission(_iI2cAddress);
   if (_objI2C->endTransmission()== 0) {
     b_success = true;
+    _bConnectStatus = true;
+  } else {
+    _bConnectStatus = false;
   }
   return b_success;
 }
@@ -40,6 +50,9 @@ bool ADS1115::begin(int i_sda_pin, int i_scl_pin) {
   _objI2C->beginTransmission(_iI2cAddress);
   if (_objI2C->endTransmission()== 0) {
     b_success = true;
+    _bConnectStatus = true;
+  } else {
+    _bConnectStatus = false;
   }
   return b_success;
 }
@@ -52,6 +65,9 @@ bool ADS1115::begin(int i_sda, int i_scl, uint8_t i_i2c_address) {
   _objI2C->beginTransmission(_iI2cAddress);
   if (_objI2C->endTransmission()== 0) {
     b_success = true;
+    _bConnectStatus = true;
+  } else {
+    _bConnectStatus = false;
   }
   return b_success;
 }
@@ -68,6 +84,7 @@ void ADS1115::setDefault() {
   setCompPolarity(ADS1115_CMP_POL_ACTIVE_LOW);
   setCompLatchingMode(ADS1115_CMP_LAT_NOT_ACTIVE);
   setCompQueueMode(ADS1115_CMP_DISABLE);
+  activateFilter(5);
 }
 
 
@@ -496,21 +513,33 @@ void ADS1115::readConversionRegister() {
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
   */ 
   
-  iConversionValue = read16(ADS1115_CONVERSION_REG);
+  if (_iBuffCnt >= (_iBuffSize - 1)){
+    _iBuffCnt = 0;
+  } else {
+    _iBuffCnt++;
+  }
+  _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG);
 }
 
 
 float ADS1115::getVoltVal() {
   /**
    * returns voltage level, based on the adc value of the ADS1115. 
-   * NOTE: readConversionRegister() must be called before to get adc value from ADS1115 register over I2C
    * @return measured voltage
   */ 
-  int16_t meas;
-  float meas_f;
-  meas = iConversionValue;
-  meas_f = meas * bitNumbering;  
-  return meas_f;
+  float f_conv_volt;
+
+  f_conv_volt = getConvVal() * bitNumbering;
+
+  return f_conv_volt;
+}
+
+int ADS1115::getLatestBufVal(){
+  /**
+   * @brief Get latest buffer value / latest conversion (unfiltered raw value)
+   * 
+   */
+  return (int)_ptrConvBuff[_iBuffCnt];
 }
 
 
@@ -664,4 +693,90 @@ void ADS1115::initConvTable(size_t i_size_conv) {
   for(int i_row=0;i_row<_iSizeConvTable;i_row++) {
     _ptrConvTable[i_row]=new float[3];
   }
+}
+
+
+void ADS1115::activateFilter(int i_size){
+  /**
+   * @brief Activate the conversion filter
+   * 
+   * @param i_size: size of the filter window in measurement points
+   */
+
+  if(_ptrConvBuff){
+    // delete allocated memory if pointer already initialized
+    delete[] _ptrConvBuff;
+    _ptrConvBuff = NULL;
+  }
+
+  _bFilterActive = true;
+  _iBuffSize = i_size;
+
+  // initialize pointer and allocate new memory
+  _ptrConvBuff = new int16_t[_iBuffSize];
+  _iBuffCnt = 0;
+}
+
+
+void ADS1115::deactivateFilter(){
+  /**
+   * @brief deactivat signal filter
+   * 
+   */
+
+  if(_ptrConvBuff){
+    // delete allocated memory if pointer already initialized
+    delete[] _ptrConvBuff;
+    _ptrConvBuff = NULL;
+  }
+
+  _bFilterActive = false;
+  _iBuffSize = 1;
+  _ptrConvBuff = new int16_t[_iBuffSize];
+  _iBuffCnt = 0;
+}
+
+
+bool ADS1115::getFilterStatus(){
+  /**
+   * @brief get actual filter status. True if filter is active
+   * 
+   */
+
+  return _bFilterActive;
+}
+
+
+float ADS1115::getConvVal(){
+  /**
+   * @brief get latest conversion value
+   * 
+   * 
+   */
+
+  float f_conversion_value;
+
+  readConversionRegister();
+
+  if (_bFilterActive){
+    // apply avg filter
+    for (int i_row = 0; i_row < _iBuffSize; i_row++){
+      f_conversion_value += _ptrConvBuff[i_row];
+    }
+    f_conversion_value /= (float)_iBuffSize;
+  } else {
+    f_conversion_value = (float)_ptrConvBuff[_iBuffCnt];
+  }
+
+  return f_conversion_value;
+}
+
+
+bool ADS1115::getConnectionStatus(){
+  /**
+   * @brief get Connection status of ADS1115. If true, connection is OK
+   * 
+   */
+
+  return _bConnectStatus;
 }
