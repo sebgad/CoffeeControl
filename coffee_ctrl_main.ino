@@ -728,6 +728,10 @@ bool configADS1115(){
   #endif
 
   objAds1115.printConfigReg();
+
+  objAds1115.preFillStorage(8);
+
+
   return true;
 }
 
@@ -879,10 +883,8 @@ void setup(){
 boolean readSensors(){
   // Read out Sensor values
   bool b_result = false;
-  // read conversion register over i2c
-  objAds1115.readConversionRegister();
   // get physical value of sensor
-  fTemp = objAds1115.getPhysVal();
+  fTemp = objAds1115.getPhysVal(false);
   // get voltage level of sensor
 
   b_result = true;

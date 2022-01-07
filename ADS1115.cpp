@@ -71,6 +71,7 @@ void ADS1115::setDefault() {
 }
 
 
+
 void ADS1115::startSingleShotMeas(bool b_status) {
   /**
    * Single-shot conversion start
@@ -500,7 +501,7 @@ void ADS1115::readConversionRegister() {
 }
 
 
-float ADS1115::getVoltVal() {
+float ADS1115::getVoltVal(bool b_filt = false) {
   /**
    * returns voltage level, based on the adc value of the ADS1115. 
    * NOTE: readConversionRegister() must be called before to get adc value from ADS1115 register over I2C
@@ -508,8 +509,28 @@ float ADS1115::getVoltVal() {
   */ 
   int16_t meas;
   float meas_f;
+  float f_meas_filt;
+  float f_meas_temp;
+  // read conversion register over i2c
+  readConversionRegister();
   meas = iConversionValue;
-  meas_f = meas * bitNumbering;  
+  meas_f = meas * bitNumbering; 
+
+
+  if (b_filt){
+    f_meas_filt = meas_f/(float)_iSizeStorage; // start with current value
+    f_meas_temp = f_meas_filt;
+
+    for (int i_elem=0;i_elem<(int)_iSizeStorage-1;i_elem++)
+    {
+      _ptrValueStorage[i_elem] = _ptrValueStorage[i_elem+1]; //move all element to the left except first one 
+      f_meas_filt += _ptrValueStorage[i_elem];
+    }
+    _ptrValueStorage[(int)_iSizeStorage-1]= f_meas_temp; // append newest value
+
+    meas_f = f_meas_filt; // final filtered value is set to te return value
+  }
+
   return meas_f;
 }
 
@@ -573,14 +594,14 @@ void ADS1115::setPhysConv(const float arr_conv_table[][2], size_t i_size_conv) {
 }
 
 
-float ADS1115::getPhysVal(void){
+float ADS1115::getPhysVal(bool b_filt = false){
   /**
    * calculate physical value based on defined conversion and adc value
    * NOTE: readConversionRegister() must be called before to get adc value from ADS1115 register over I2C
    * @return: physical value based on voltage read out
   */
   
-  float f_voltage = getVoltVal();
+  float f_voltage = getVoltVal(b_filt);
   float f_physical;
   int i_index = 0;
 
@@ -614,6 +635,31 @@ void ADS1115::printConfigReg() {
   iConfigReg = read16(ADS1115_CONFIG_REG);
   Serial.println(iConfigReg, BIN);
 }
+
+void ADS1115::preFillStorage(size_t i_size){
+  /**
+   * fill all values of _fValueStorage with the same initiial voltage value
+   * will also dump the contens of the storage to serial
+  */
+  float f_val;
+  f_val = getVoltVal();
+
+  // Make (row) size of conversion table in class available
+  _iSizeStorage=i_size;
+  // assign memory to the pointer, pointer in pointer element
+  _ptrValueStorage = new float [_iSizeStorage];
+  
+  // //store f_vall/_iSizeStorage to all
+  for(int i_row=0;i_row<_iSizeStorage;i_row++) {
+    _ptrValueStorage[i_row]=f_val/(float)_iSizeStorage;
+  }
+
+  Serial.println("ADS1115 initial filter storage value: ");
+  for(int i_row=0;i_row<_iSizeStorage;i_row++) {
+    Serial.println(_ptrValueStorage[i_row]);
+  }
+}
+
 
 
 void ADS1115::write16(byte reg, uint16_t val) {
