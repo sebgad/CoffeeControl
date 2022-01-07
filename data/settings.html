@@ -91,31 +91,33 @@
           var obj_input = document.getElementById(str_section_key + "_" + str_key);
 
           if (!obj_input){
+            // define paragraph for each input
+            var obj_para = document.createElement("p");
+
             // define label for text input and line break
             var obj_label = document.createElement("Label");
-            var obj_br_label = document.createElement("BR");
             obj_label.setAttribute("for", str_section_key + "_" + str_key);
             obj_label.innerHTML = str_key;
             
             // append label and line break form
-            obj_form.appendChild(obj_label);
-            obj_form.appendChild(obj_br_label);
+            obj_para.appendChild(obj_label);
           
             // define text input and line break
             var obj_input = document.createElement("Input");
-            var obj_br_input = document.createElement("BR");
             if (typeof obj_json_req[str_section_key][str_key] === "boolean"){
               obj_input.type = "checkbox";
               obj_input.checked = obj_json_req[str_section_key][str_key];
+              obj_label.append(obj_input);
             } else {
               obj_input.type="text";
+              // append input to form
+              obj_para.appendChild(obj_input);
             }
             obj_input.value=obj_json_req[str_section_key][str_key];
             obj_input.id=str_section_key + "_" + str_key;
           
-            // append input to form
-            obj_form.appendChild(obj_input);
-            obj_form.appendChild(obj_br_input);
+            // append paragraph to form
+            obj_form.appendChild(obj_para);
           } else {
             obj_input.value=obj_json_req[str_section_key][str_key];
           }
@@ -220,14 +222,15 @@ function onRequestRestart(){
 <body onload="onGetParameter()">
   <style>
     input[type=text] {
-      width: 20%;
-      padding: 12px 20px;
-      margin: 8px 0;
+      width: auto;
+      padding: 6px 10px;
+      margin: 4px 0;
       box-sizing: border-box;
-      border: 3px solid #ccc;
-      -webkit-transition: 0.5s;
-      transition: 0.5s;
+      border: 2px solid #ccc;
+      -webkit-transition: 0.2s;
+      transition: 0.2s;
       outline: none;
+      border-radius: 4px;
     }
 
     input[type=text]:focus {
@@ -251,6 +254,13 @@ function onRequestRestart(){
     input[type=button]:hover, input[type=submit]:hover, input[type=reset]:hover {
       background: #009e00;
     }
+
+    form label {
+      display: block;
+      font-size: 0.8em;
+      color: darkslategrey;
+      padding-left: 3px;  
+    }
     
   </style>
 <div class="header">
@@ -268,15 +278,22 @@ function onRequestRestart(){
 
 <div class="main">
   </p>
-    <h3>Parameter setup</h3>
+    <h2>Parameter setup for Coffee Control</h3>
     <form>
       <div id="id_input"></div>
-      <input type="button" onclick="onSubmitParams()" value="Submit">
-      <input type="button" onclick="onResetParameter()" value="Reset">
-      <input type="button" onclick="document.getElementById('ConfigUpload').click();" value="Upload config">
-      <input type="button" onclick="onFileDownload()" value="Download config">
-      <input type="button" onclick="onRequestRestart()" value="Restart ESP32">
-      <input type="file" id="ConfigUpload" accept=".json" style="display:none;" onchange="onFileUpload(this.files)">
+      <p>
+        <input type="button" onclick="onSubmitParams()" value="Submit">
+        <input type="button" onclick="onResetParameter()" value="Reset">
+      </p>
+      <p>
+        <input type="button" onclick="document.getElementById('ConfigUpload').click();" value="Upload config">
+        <input type="file" id="ConfigUpload" accept=".json" style="display:none;" onchange="onFileUpload(this.files)">
+        <input type="button" onclick="onFileDownload()" value="Download config">
+      </p>
+      <p>
+        <input type="button" onclick="onRequestRestart()" value="Restart ESP32">
+      </p>  
+      </p>
     </form>
 </div>
 
