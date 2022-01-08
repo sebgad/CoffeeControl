@@ -513,11 +513,7 @@ void ADS1115::readConversionRegister() {
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
   */ 
   
-  if (_iBuffCnt >= (_iBuffSize - 1)){
-    _iBuffCnt = 0;
-  } else {
-    _iBuffCnt++;
-  }
+  _iBuffCnt = (_iBuffCnt + 1) % _iBuffSize;
   _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG);
 }
 
@@ -759,17 +755,34 @@ float ADS1115::getConvVal(){
   readConversionRegister();
 
   if (_bFilterActive){
-    // apply avg filter
-    for (int i_row = 0; i_row < _iBuffSize; i_row++){
-      f_conversion_value += _ptrConvBuff[i_row];
+    if(_iBuffSize==5){
+      // Savitzky-Golay-Filter
+      // coefficient order: a2, a-2, a-1, a0, a1
+      float lst_coeffs[] = {-3.0f, -3.0f, 12.0f, 17.0f, 12.0f};
+      int i_index;
+
+      for (int i_row=0; i_row<_iBuffSize; i_row++){
+        // get the correct index in range
+        i_index = (_iBuffCnt+i_row) % _iBuffSize;
+        f_conversion_value += lst_coeffs[i_index]*_ptrConvBuff[i_index];
+      }
+      f_conversion_value/=35.0f;
+
+    } else  {
+      // apply avg filter
+      for (int i_row = 0; i_row < _iBuffSize; i_row++){
+        f_conversion_value += _ptrConvBuff[i_row];
+      }
+      f_conversion_value /= (float)_iBuffSize;
     }
-    f_conversion_value /= (float)_iBuffSize;
   } else {
     f_conversion_value = (float)_ptrConvBuff[_iBuffCnt];
   }
 
   return f_conversion_value;
 }
+
+
 
 
 bool ADS1115::getConnectionStatus(){
