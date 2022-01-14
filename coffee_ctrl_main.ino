@@ -319,7 +319,6 @@ bool loadConfiguration(){
       (json_doc["LED"]["RwmRgbFreq"])?objConfig.RwmRgbFreq = json_doc["LED"]["RwmRgbFreq"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbResolution"])?objConfig.RwmRgbResolution = json_doc["LED"]["RwmRgbResolution"]:b_set_default_values = true;
       (json_doc["Signal"]["SigFilterActive"])?objConfig.SigFilterActive = json_doc["Signal"]["SigFilterActive"]:b_set_default_values = true;
-      (json_doc["Signal"]["SigFilterSize"])?objConfig.SigFilterSize = json_doc["Signal"]["SigFilterSize"]:b_set_default_values = true;
 
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
@@ -364,7 +363,6 @@ bool saveConfiguration(){
   json_doc["LED"]["RwmRgbFreq"] = objConfig.RwmRgbFreq;
   json_doc["LED"]["RwmRgbResolution"] = objConfig.RwmRgbResolution;
   json_doc["Signal"]["SigFilterActive"] = objConfig.SigFilterActive;
-  json_doc["Signal"]["SigFilterSize"] = objConfig.SigFilterSize;
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
@@ -413,7 +411,6 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.RwmRgbFreq = 500; // Hz - PWM frequency
   objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%.
   objConfig.SigFilterActive = true;
-  objConfig.SigFilterSize = 5;
 
   if (b_safe_to_json){
     saveConfiguration();
@@ -502,12 +499,14 @@ void configWebserver(){
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
       StaticJsonDocument<500> obj_json_values;
       // send TargetPWM, Temperature, PID-values
-      obj_json_values["Temperature"] = fTemp;
-      
-      obj_json_values["PID"]["TargetPWM"] = fTarPwm;
-      obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
-      obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
-      obj_json_values["PID"]["ErrorDiff"] = objPid.getErrorDiff();
+      portENTER_CRITICAL_ISR(&objTimerMux);
+        obj_json_values["Temperature"] = fTemp;
+        
+        obj_json_values["PID"]["TargetPWM"] = fTarPwm;
+        obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
+        obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
+        obj_json_values["PID"]["ErrorDiff"] = objPid.getErrorDiff();
+      portEXIT_CRITICAL_ISR(&objTimerMux);
 
       String str_response;
       serializeJson(obj_json_values, str_response);
@@ -550,14 +549,13 @@ void configWebserver(){
     objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
     objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
     objConfig.SigFilterActive = obj_json["Signal"]["SigFilterActive"];
-    objConfig.SigFilterSize = obj_json["Signal"]["SigFilterSize"];
 
     if (saveConfiguration()){
       configPID();
       configLED();
       
       if(objConfig.SigFilterActive){
-        objAds1115.activateFilter(objConfig.SigFilterSize);
+        objAds1115.activateFilter();
       } else {
         objAds1115.deactivateFilter();
       }
@@ -679,7 +677,7 @@ void configWebserver(){
     );
 
   server.on("/restartesp", HTTP_POST, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", "Parameters are updated to file and applied to system");
+    request->send(200, "text/plain", "ESP is going to restart");
     delay(200);
     ESP.restart();
   });
@@ -702,7 +700,7 @@ bool configADS1115(){
 
   // Set Signal Filter Status
   if(objConfig.SigFilterActive){
-    objAds1115.activateFilter(objConfig.SigFilterSize);
+    objAds1115.activateFilter();
   }
 
   // set differential voltage: A0-A1

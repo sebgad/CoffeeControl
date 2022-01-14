@@ -8,7 +8,7 @@ ADS1115::ADS1115(TwoWire * _obj_i2c) {
   _objI2C = _obj_i2c;
   
   // Initialize Conversion buffer with 1 on default
-  _ptrConvBuff = new int16_t[1];
+  _ptrConvBuff = new int16_t[ADS1115_DELAY_AFTER_MUX_CHANGE];
   _iBuffCnt = 0;
 }
 
@@ -84,7 +84,6 @@ void ADS1115::setDefault() {
   setCompPolarity(ADS1115_CMP_POL_ACTIVE_LOW);
   setCompLatchingMode(ADS1115_CMP_LAT_NOT_ACTIVE);
   setCompQueueMode(ADS1115_CMP_DISABLE);
-  activateFilter(5);
 }
 
 
@@ -513,11 +512,7 @@ void ADS1115::readConversionRegister() {
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
   */ 
   
-  if (_iBuffCnt >= (_iBuffSize - 1)){
-    _iBuffCnt = 0;
-  } else {
-    _iBuffCnt++;
-  }
+  _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE;
   _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG);
 }
 
@@ -696,25 +691,65 @@ void ADS1115::initConvTable(size_t i_size_conv) {
 }
 
 
-void ADS1115::activateFilter(int i_size){
+void ADS1115::activateFilter(){
   /**
    * @brief Activate the conversion filter
    * 
-   * @param i_size: size of the filter window in measurement points
    */
 
-  if(_ptrConvBuff){
-    // delete allocated memory if pointer already initialized
-    delete[] _ptrConvBuff;
-    _ptrConvBuff = NULL;
-  }
-
   _bFilterActive = true;
-  _iBuffSize = i_size;
 
-  // initialize pointer and allocate new memory
-  _ptrConvBuff = new int16_t[_iBuffSize];
-  _iBuffCnt = 0;
+  if (ADS1115_CONV_BUF_SIZE == 5){
+      _ptrFilterCoeff = new float[5];
+      _ptrFilterCoeff[0] = -3.0F;
+      _ptrFilterCoeff[1] = 12.0F;
+      _ptrFilterCoeff[2] = 17.0F;
+      _ptrFilterCoeff[3] = 12.0F;
+      _ptrFilterCoeff[4] = -3.0F;
+      _fFilterNormCoeff = 35.F;
+      _bSavGolFilterActive = true;
+  } else if(ADS1115_CONV_BUF_SIZE == 7) {
+      _ptrFilterCoeff = new float[7];
+      _ptrFilterCoeff[0] = -2.0F;
+      _ptrFilterCoeff[1] = 3.0F;
+      _ptrFilterCoeff[2] = 6.0F;
+      _ptrFilterCoeff[3] = 7.0F;
+      _ptrFilterCoeff[4] = 6.0F;
+      _ptrFilterCoeff[5] = 3.0F;
+      _ptrFilterCoeff[6] = -2.0F;
+      _fFilterNormCoeff = 21.F;
+      _bSavGolFilterActive = true;
+  } else if(ADS1115_CONV_BUF_SIZE == 9) {
+      _ptrFilterCoeff = new float[9];
+      _ptrFilterCoeff[0] = -21.0F;
+      _ptrFilterCoeff[1] = 14.0F;
+      _ptrFilterCoeff[2] = 39.0F;
+      _ptrFilterCoeff[3] = 54.0F;
+      _ptrFilterCoeff[4] = 59.0F;
+      _ptrFilterCoeff[5] = 54.0F;
+      _ptrFilterCoeff[6] = 39.0F;
+      _ptrFilterCoeff[7] = 14.0F;
+      _ptrFilterCoeff[8] = -21.0F;
+      _fFilterNormCoeff = 231.F;
+      _bSavGolFilterActive = true;
+  } else if(ADS1115_CONV_BUF_SIZE == 11) {
+      _ptrFilterCoeff = new float[11];
+      _ptrFilterCoeff[0] = -36.0F;
+      _ptrFilterCoeff[1] = 9.0F;
+      _ptrFilterCoeff[2] = 44.0F;
+      _ptrFilterCoeff[3] = 69.0F;
+      _ptrFilterCoeff[4] = 84.0F;
+      _ptrFilterCoeff[5] = 89.0F;
+      _ptrFilterCoeff[6] = 84.0F;
+      _ptrFilterCoeff[7] = 69.0F;
+      _ptrFilterCoeff[8] = 44.0F;
+      _ptrFilterCoeff[8] = 9.0F;
+      _ptrFilterCoeff[8] = -36.0F;
+      _fFilterNormCoeff = 429.F;
+      _bSavGolFilterActive = true;
+  } else {
+      _bSavGolFilterActive = false;
+  }
 }
 
 
@@ -724,16 +759,7 @@ void ADS1115::deactivateFilter(){
    * 
    */
 
-  if(_ptrConvBuff){
-    // delete allocated memory if pointer already initialized
-    delete[] _ptrConvBuff;
-    _ptrConvBuff = NULL;
-  }
-
   _bFilterActive = false;
-  _iBuffSize = 1;
-  _ptrConvBuff = new int16_t[_iBuffSize];
-  _iBuffCnt = 0;
 }
 
 
@@ -744,6 +770,43 @@ bool ADS1115::getFilterStatus(){
    */
 
   return _bFilterActive;
+}
+
+
+float ADS1115::_getSavGolFilterVal(){
+  /**
+   * @brief get filter value
+   * 
+   */
+  
+  int i_index;
+  float f_filter_value = 0.0F;
+
+  for (int i_row=0; i_row<ADS1115_CONV_BUF_SIZE; i_row++){
+    i_index = (_iBuffCnt+i_row) % ADS1115_CONV_BUF_SIZE;
+    f_filter_value += (_ptrConvBuff[i_index]*_ptrFilterCoeff[i_index]);
+  }
+  f_filter_value /= _fFilterNormCoeff;
+  
+  return f_filter_value;
+}
+
+
+float ADS1115::_getAvgFilterVal(){
+  /**
+   * @brief get filter value
+   * 
+   */
+
+  float f_filter_value = 0.0F;
+
+  for (int i_row=0; i_row<ADS1115_CONV_BUF_SIZE; i_row++){
+    f_filter_value += _ptrConvBuff[i_row];
+  }
+
+  f_filter_value /= (float)ADS1115_CONV_BUF_SIZE;
+
+  return f_filter_value;
 }
 
 
@@ -759,15 +822,16 @@ float ADS1115::getConvVal(){
   readConversionRegister();
 
   if (_bFilterActive){
+    if (_bSavGolFilterActive){
+    // apply savitzky golay filter
+      f_conversion_value = _getSavGolFilterVal();
+    } else {
     // apply avg filter
-    for (int i_row = 0; i_row < _iBuffSize; i_row++){
-      f_conversion_value += _ptrConvBuff[i_row];
+      f_conversion_value = _getAvgFilterVal();
     }
-    f_conversion_value /= (float)_iBuffSize;
   } else {
     f_conversion_value = (float)_ptrConvBuff[_iBuffCnt];
   }
-
   return f_conversion_value;
 }
 

@@ -97,6 +97,8 @@
 #define ADS1115_CONV_READY_NOT_ACTIVE 0b000
 #define ADS1115_CONV_READY_ACTIVE 0b001
 
+#define ADS1115_CONV_BUF_SIZE 7
+
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
 #include "Arduino.h"
@@ -144,7 +146,7 @@ class ADS1115
     void setPhysConv(const float, const float);
     void setPhysConv(const float, const float, const float);
     void setPhysConv(const float[][2], size_t);
-    void activateFilter(int);
+    void activateFilter();
     void deactivateFilter();
     bool getFilterStatus(void);
     bool getConnectionStatus(void);
@@ -167,10 +169,14 @@ class ADS1115
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
     int _iBuffCnt;
-    int _iBuffSize;
     int16_t * _ptrConvBuff;
+    float * _ptrFilterCoeff;
+    float _fFilterNormCoeff;
     bool _bFilterActive;
+    bool _bSavGolFilterActive;
     bool _bConnectStatus;
+    float _getAvgFilterVal();
+    float _getSavGolFilterVal();
 };
 
 #endif
