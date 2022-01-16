@@ -30,8 +30,8 @@
 // PWM defines
 #define P_SSR_PWM 21
 #define P_RED_LED_PWM 13
-#define P_GRN_LED_PWM 27 // TODO used to be 12
-#define P_BLU_LED_PWM 12 // TODO used to be 27
+#define P_GRN_LED_PWM 27
+#define P_BLU_LED_PWM 12
 #define P_STAT_LED 33 // green status LED
 
 // File system definitions
@@ -62,13 +62,14 @@ struct config {
   float HighTresholdValue;
   float LowLimitManipulation;
   float HighLimitManipulation;
-  uint32_t SsrFreq = 200; // Hz - PWM frequency
-  uint32_t PwmSsrResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. -> required by PWM lib
-  // RGB PWM config
-  uint32_t RwmRgbFreq = 500; // Hz - PWM frequency
-  uint32_t RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. 
+  uint32_t SsrFreq;
+  uint32_t PwmSsrResolution;
+  uint32_t RwmRgbFreq;
+  uint32_t RwmRgbResolution; 
+  float RwmRgbGainFactorRed;
+  float RwmRgbGainFactorGreen;
+  float RwmRgbGainFactorBlue;
   bool SigFilterActive;
-  int SigFilterSize;
 };
 
 
@@ -130,6 +131,15 @@ enum eStatusMeas {
 enum eStatusLED {
   LED_IDLE,
   LED_SET
+};
+
+enum eLEDColor{
+  LED_COLOR_RED,
+  LED_COLOR_GREEN,
+  LED_COLOR_BLUE,
+  LED_COLOR_ORANGE,
+  LED_COLOR_PURPLE,
+  LED_COLOR_WHITE
 };
 
 // Initialisation of PID controler
@@ -319,6 +329,9 @@ bool loadConfiguration(){
       (json_doc["SSR"]["PwmSsrResolution"])?objConfig.PwmSsrResolution = json_doc["SSR"]["PwmSsrResolution"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbFreq"])?objConfig.RwmRgbFreq = json_doc["LED"]["RwmRgbFreq"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbResolution"])?objConfig.RwmRgbResolution = json_doc["LED"]["RwmRgbResolution"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorRed"])?objConfig.RwmRgbGainFactorRed = json_doc["LED"]["GainFactorRed"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorGreen"])?objConfig.RwmRgbGainFactorGreen = json_doc["LED"]["GainFactorGreen"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorBlue"])?objConfig.RwmRgbGainFactorBlue = json_doc["LED"]["GainFactorBlue"]:b_set_default_values = true;
       (json_doc["Signal"]["SigFilterActive"])?objConfig.SigFilterActive = json_doc["Signal"]["SigFilterActive"]:b_set_default_values = true;
 
       if (b_set_default_values){
@@ -363,6 +376,9 @@ bool saveConfiguration(){
   json_doc["SSR"]["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
   json_doc["LED"]["RwmRgbFreq"] = objConfig.RwmRgbFreq;
   json_doc["LED"]["RwmRgbResolution"] = objConfig.RwmRgbResolution;
+  json_doc["LED"]["GainFactorRed"] = objConfig.RwmRgbGainFactorRed;
+  json_doc["LED"]["GainFactorGreen"] = objConfig.RwmRgbGainFactorGreen;
+  json_doc["LED"]["GainFactorBlue"] = objConfig.RwmRgbGainFactorBlue;
   json_doc["Signal"]["SigFilterActive"] = objConfig.SigFilterActive;
 
   if (!bParamFileLocked){
@@ -411,6 +427,9 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.PwmSsrResolution = 8;
   objConfig.RwmRgbFreq = 500; // Hz - PWM frequency
   objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%.
+  objConfig.RwmRgbGainFactorRed = 1.0;
+  objConfig.RwmRgbGainFactorGreen = 1.0;
+  objConfig.RwmRgbGainFactorBlue = 1.0;
   objConfig.SigFilterActive = true;
 
   if (b_safe_to_json){
@@ -549,6 +568,9 @@ void configWebserver(){
     objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
     objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
     objConfig.RwmRgbResolution = obj_json["LED"]["RwmRgbResolution"];
+    objConfig.RwmRgbGainFactorRed = obj_json["LED"]["GainFactorRed"];
+    objConfig.RwmRgbGainFactorGreen = obj_json["LED"]["GainFactorGreen"];
+    objConfig.RwmRgbGainFactorBlue = obj_json["LED"]["GainFactorBlue"];
     objConfig.SigFilterActive = obj_json["Signal"]["SigFilterActive"];
 
     if (saveConfiguration()){
@@ -795,7 +817,7 @@ void setup(){
 
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
-  setColor(5, 5, 5); // White
+  setColor(LED_COLOR_WHITE, true); // White
 
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi();
@@ -837,7 +859,7 @@ void setup(){
     Serial.println(strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
-    setColor(5, 0, 7);   // Purple 
+    setColor(LED_COLOR_PURPLE, false);   // Purple 
   }
 
   // configure and start webserver
@@ -958,7 +980,7 @@ bool writeMeasFile(){
 }// writeMeasFile
 
 
-void setColor(int i_red_value, int i_green_value, int i_blue_value) {
+void setColor(int i_color, bool b_gain_active) {
   /** Function to output a RGB value to the LED
    * examples: (from https://www.rapidtables.com/web/color/RGB_Color.html)
    * setColor(255, 0, 0);     // Red 
@@ -966,16 +988,56 @@ void setColor(int i_red_value, int i_green_value, int i_blue_value) {
    * setColor(0, 0, 255);     // Blue 
    * setColor(255, 255, 255); // White 
    * setColor(170, 0, 255);   // Purple 
-   * setColor(255,10,0);     // Orange 
-   * setColor(255,20,0);     // Yellow 
+   * setColor(255,10,0);      // Orange 
+   * setColor(255,20,0);      // Yellow 
    *
-   * @param i_red_value    [0, 255] Red RGB value
-   * @param i_green_value  [0, 255] Green RGB value
-   * @param i_blue_value   [0, 255] Blue RGB value
+   * @param i_color        color to set for the RGB LED
+   * @param b_gain_active  gain factor is used for displaying LED
    */
-  ledcWrite(RwmRedChannel, i_red_value);
-  ledcWrite(RwmGrnChannel, i_green_value);
-  ledcWrite(RwmBluChannel, i_blue_value);
+
+  float f_red_value = 0.0F;
+  float f_green_value = 0.0F;
+  float f_blue_value = 0.0F;
+  float i_max_resolution = (1<<objConfig.RwmRgbResolution)-1;
+
+  if (i_color == LED_COLOR_RED){
+    f_red_value = 255.F;
+  } else if (i_color == LED_COLOR_BLUE) {
+    f_blue_value = 255.F;
+  } else if (i_color == LED_COLOR_GREEN) {
+    f_green_value = 255.F;
+  } else if (i_color == LED_COLOR_ORANGE) {
+    f_red_value = 255.F;
+    f_green_value = 10.F;
+  } else if (i_color == LED_COLOR_PURPLE) {
+    f_red_value = 170.F;
+    f_blue_value = 255.F;
+  } else if (i_color == LED_COLOR_WHITE) {
+    f_red_value = 100.F;
+    f_green_value = 100.F;
+    f_blue_value = 100.F;
+  }
+
+  if (b_gain_active){
+    // gain is active
+    f_red_value *= objConfig.RwmRgbGainFactorRed;
+    f_green_value *= objConfig.RwmRgbGainFactorGreen;
+    f_blue_value *= objConfig.RwmRgbGainFactorBlue;
+  }
+
+  // Value saturation check
+  f_red_value = (f_red_value>i_max_resolution) ? i_max_resolution : f_red_value;
+  f_red_value = (f_red_value<0.F) ? 0.F: f_red_value;
+
+  f_green_value = (f_green_value>i_max_resolution) ? i_max_resolution : f_green_value;
+  f_green_value = (f_green_value<0.F) ? 0.F : f_green_value;
+
+  f_blue_value = (f_blue_value>i_max_resolution) ? i_max_resolution : f_blue_value;
+  f_blue_value = (f_blue_value<0.F) ? 0.F : f_blue_value;
+
+  ledcWrite(RwmRedChannel, (int)f_red_value);
+  ledcWrite(RwmGrnChannel, (int)f_green_value);
+  ledcWrite(RwmBluChannel, (int)f_blue_value);
 
 }// setColor
 
@@ -998,15 +1060,15 @@ void loop(){
   if (iStatusLED == LED_SET) {
     if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
-      setColor(20,1,0);     // red
+      setColor(LED_COLOR_ORANGE, true);
     } 
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal
-      setColor(0,0,5);     // blue
+      setColor(LED_COLOR_BLUE, true);
     }
     else {
       // temperature in range signal
-      setColor(0,5,0);     // green 
+      setColor(LED_COLOR_GREEN, true);
     }
 
     portENTER_CRITICAL_ISR(&objTimerMux);
