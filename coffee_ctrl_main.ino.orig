@@ -787,7 +787,7 @@ void setup(){
   
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
-  setColor(LED_COLOR_WHITE, true); // White
+  setColor(100, 100, 100); // White
 
   // initialize SPIFFs and load configuration files
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
@@ -820,6 +820,13 @@ void setup(){
   Serial.println(" bytes");
   Serial.println("");
 
+<<<<<<< HEAD
+  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
+  configLED();
+  setColor(LED_COLOR_WHITE, true); // White
+
+=======
+>>>>>>> 73ae2a386826a54d077d7ef72f75cf80a0cea939
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi();
   char char_timestamp[50];
@@ -860,7 +867,11 @@ void setup(){
     Serial.println(strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
+<<<<<<< HEAD
     setColor(LED_COLOR_PURPLE, false);   // Purple 
+=======
+    setColor(170, 0, 255);   // Purple 
+>>>>>>> 73ae2a386826a54d077d7ef72f75cf80a0cea939
   }
 
   // configure and start webserver
@@ -1059,11 +1070,25 @@ void loop(){
   }
 
   if (iStatusLED == LED_SET) {
+<<<<<<< HEAD
+    if (fTemp < objConfig.CtrlTarget - 1.0) {
+      // Heat up signal
+      setColor(LED_COLOR_ORANGE, true);
+    } 
+    else if (fTemp > objConfig.CtrlTarget + 1.0){
+      // Cool down signal
+      setColor(LED_COLOR_BLUE, true);
+    }
+    else {
+      // temperature in range signal
+      setColor(LED_COLOR_GREEN, true);
+    }
+=======
 
     if(objAds1115.getConnectionStatus()){
           // only check for frozen values if connection to ADS1115 is successful
           if(objAds1115.isValueFrozen()){
-            setColor(LED_COLOR_PURPLE, false);
+            setColor(170, 0, 255);
             Serial.println("ADS1115 Sensor value frozen");
             // configure ADS1115 again
             //configADS1115(); // error occured reconfigure ADC?
@@ -1074,18 +1099,19 @@ void loop(){
 
             if (fTemp < objConfig.CtrlTarget - 1.0) {
               // Heat up signal
-              setColor(LED_COLOR_ORANGE, true);
+              setColor(255,15,0);     // orange
             } 
             else if (fTemp > objConfig.CtrlTarget + 1.0){
               // Cool down signal
-              setColor(LED_COLOR_BLUE, true);
+              setColor(0,0,5);     // blue
             }
             else {
               // temperature in range signal
-              setColor(LED_COLOR_GREEN, true); 
+              setColor(0,5,0);     // green 
             }
           }
         }// if objAds1115.getConnectionStatus()
+>>>>>>> 73ae2a386826a54d077d7ef72f75cf80a0cea939
 
     portENTER_CRITICAL_ISR(&objTimerMux);
       iStatusLED = LED_IDLE;
