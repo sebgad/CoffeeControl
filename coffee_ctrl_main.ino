@@ -884,7 +884,7 @@ boolean readSensors(){
   // Read out Sensor values
   bool b_result = false;
   // get physical value of sensor
-  fTemp = objAds1115.getPhysVal(false);
+  fTemp = objAds1115.getPhysVal(true);
   // get voltage level of sensor
 
   b_result = true;

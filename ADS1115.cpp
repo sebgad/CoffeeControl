@@ -656,7 +656,7 @@ void ADS1115::preFillStorage(size_t i_size){
 
   Serial.println("ADS1115 initial filter storage value: ");
   for(int i_row=0;i_row<_iSizeStorage;i_row++) {
-    Serial.println(_ptrValueStorage[i_row]);
+    Serial.println(_ptrValueStorage[i_row],4);
   }
 }
 
