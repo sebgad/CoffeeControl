@@ -32,6 +32,7 @@
 #define P_RED_LED_PWM 13
 #define P_GRN_LED_PWM 27 // TODO used to be 12
 #define P_BLU_LED_PWM 12 // TODO used to be 27
+#define P_STAT_LED 33 // green status LED
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
@@ -757,6 +758,10 @@ void setup(){
   delay(50);
   Serial.println("Starting setup.");
 
+  // turn green status LED on
+  pinMode(P_STAT_LED, OUTPUT);
+  digitalWrite(P_STAT_LED, HIGH);
+
   // initialize SPIFFs and load configuration files
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       // Initialization of SPIFFS failed, restart it
@@ -790,7 +795,7 @@ void setup(){
 
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
-  setColor(165, 165, 165); // White
+  setColor(5, 5, 5); // White
 
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi();
@@ -832,7 +837,7 @@ void setup(){
     Serial.println(strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
-    setColor(170, 0, 255);   // Purple 
+    setColor(5, 0, 7);   // Purple 
   }
 
   // configure and start webserver
@@ -993,15 +998,15 @@ void loop(){
   if (iStatusLED == LED_SET) {
     if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
-      setColor(255,10,0);     // red
+      setColor(20,1,0);     // red
     } 
     else if (fTemp > objConfig.CtrlTarget + 1.0){
       // Cool down signal
-      setColor(0,0,165);     // blue
+      setColor(0,0,5);     // blue
     }
     else {
       // temperature in range signal
-      setColor(0,165,0);     // green 
+      setColor(0,5,0);     // green 
     }
 
     portENTER_CRITICAL_ISR(&objTimerMux);
