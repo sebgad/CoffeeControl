@@ -784,6 +784,11 @@ void setup(){
   pinMode(P_STAT_LED, OUTPUT);
   digitalWrite(P_STAT_LED, HIGH);
 
+  
+  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
+  configLED();
+  setColor(LED_COLOR_WHITE, true); // White
+
   // initialize SPIFFs and load configuration files
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       // Initialization of SPIFFS failed, restart it
@@ -814,10 +819,6 @@ void setup(){
   Serial.print(i_used_bytes);
   Serial.println(" bytes");
   Serial.println("");
-
-  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
-  configLED();
-  setColor(LED_COLOR_WHITE, true); // White
 
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi();
@@ -1058,18 +1059,33 @@ void loop(){
   }
 
   if (iStatusLED == LED_SET) {
-    if (fTemp < objConfig.CtrlTarget - 1.0) {
-      // Heat up signal
-      setColor(LED_COLOR_ORANGE, true);
-    } 
-    else if (fTemp > objConfig.CtrlTarget + 1.0){
-      // Cool down signal
-      setColor(LED_COLOR_BLUE, true);
-    }
-    else {
-      // temperature in range signal
-      setColor(LED_COLOR_GREEN, true);
-    }
+
+    if(objAds1115.getConnectionStatus()){
+          // only check for frozen values if connection to ADS1115 is successful
+          if(objAds1115.isValueFrozen()){
+            setColor(170, 0, 255);
+            Serial.println("ADS1115 Sensor value frozen");
+            // configure ADS1115 again
+            //configADS1115(); // error occured reconfigure ADC?
+
+          }
+          else{
+            // sensor is OK-> displya heating status
+
+            if (fTemp < objConfig.CtrlTarget - 1.0) {
+              // Heat up signal
+              setColor(LED_COLOR_ORANGE, true);
+            } 
+            else if (fTemp > objConfig.CtrlTarget + 1.0){
+              // Cool down signal
+              setColor(LED_COLOR_BLUE, true);
+            }
+            else {
+              // temperature in range signal
+              setColor(LED_COLOR_GREEN, true); 
+            }
+          }
+        }// if objAds1115.getConnectionStatus()
 
     portENTER_CRITICAL_ISR(&objTimerMux);
       iStatusLED = LED_IDLE;
