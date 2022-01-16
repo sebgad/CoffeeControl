@@ -97,7 +97,7 @@
 #define ADS1115_CONV_READY_NOT_ACTIVE 0b000
 #define ADS1115_CONV_READY_ACTIVE 0b001
 
-#define ADS1115_CONV_BUF_SIZE 7
+#define ADS1115_CONV_BUF_SIZE 20
 
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
@@ -138,6 +138,7 @@ class ADS1115
     bool getPinRdyMode(void);
     bool conversionReady(void);
     void readConversionRegister(void);
+    bool isValueFrozen(void);
     float getConvVal(void);
     float getVoltVal(void);
     float getPhysVal(void);
@@ -169,6 +170,7 @@ class ADS1115
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
     int _iBuffCnt;
+    int _iBufferFillLevel;
     int16_t * _ptrConvBuff;
     float * _ptrFilterCoeff;
     float _fFilterNormCoeff;
