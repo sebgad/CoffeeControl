@@ -829,7 +829,7 @@ bool ADS1115::isValueFrozen(){
     int16_t i_max = -32768;  // init max value with the smalest value possible
     int16_t i_min = 32767;  // init min value with the largest value possible
 
-    for (int i_row=0; i_row<=_iBufferFillLevel; i_row++){
+    for (int i_row=0; i_row<_iBufferFillLevel; i_row++){
       // get min and max of the buffer
       i_max = max(i_max, _ptrConvBuff[i_row]);
       i_min = min(i_min, _ptrConvBuff[i_row]);

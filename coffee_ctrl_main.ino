@@ -999,7 +999,7 @@ void setColor(int i_color, bool b_gain_active) {
   float f_red_value = 0.0F;
   float f_green_value = 0.0F;
   float f_blue_value = 0.0F;
-  float i_max_resolution = (1<<objConfig.RwmRgbResolution)-1;
+  float f_max_resolution = (float)(1<<objConfig.RwmRgbResolution)-1.0F;
 
   if (i_color == LED_COLOR_RED){
     f_red_value = 255.F;
@@ -1027,13 +1027,13 @@ void setColor(int i_color, bool b_gain_active) {
   }
 
   // Value saturation check
-  f_red_value = (f_red_value>i_max_resolution) ? i_max_resolution : f_red_value;
+  f_red_value = (f_red_value>f_max_resolution) ? f_max_resolution : f_red_value;
   f_red_value = (f_red_value<0.F) ? 0.F: f_red_value;
 
-  f_green_value = (f_green_value>i_max_resolution) ? i_max_resolution : f_green_value;
+  f_green_value = (f_green_value>f_max_resolution) ? f_max_resolution : f_green_value;
   f_green_value = (f_green_value<0.F) ? 0.F : f_green_value;
 
-  f_blue_value = (f_blue_value>i_max_resolution) ? i_max_resolution : f_blue_value;
+  f_blue_value = (f_blue_value>f_max_resolution) ? f_max_resolution : f_blue_value;
   f_blue_value = (f_blue_value<0.F) ? 0.F : f_blue_value;
 
   ledcWrite(RwmRedChannel, (int)f_red_value);
