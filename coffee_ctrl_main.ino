@@ -784,11 +784,6 @@ void setup(){
   pinMode(P_STAT_LED, OUTPUT);
   digitalWrite(P_STAT_LED, HIGH);
 
-  
-  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
-  configLED();
-  setColor(LED_COLOR_WHITE, true); // White
-
   // initialize SPIFFs and load configuration files
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       // Initialization of SPIFFS failed, restart it
@@ -819,6 +814,10 @@ void setup(){
   Serial.print(i_used_bytes);
   Serial.println(" bytes");
   Serial.println("");
+
+  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
+  configLED();
+  setColor(LED_COLOR_WHITE, false); // White
 
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi();
