@@ -19,6 +19,7 @@
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
 #include <Update.h>
+#include <esp_task_wdt.h>
 
 // PIN definitions
 
@@ -43,6 +44,8 @@
 #define RwmGrnChannel 14 //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
+
+#define WDT_Timeout 1 // WatchDog Timeout in seconds
 
 // config structure for online calibration
 struct config {
@@ -913,6 +916,10 @@ void setup(){
   timerAlarmEnable(objTimerLong);
   iTimeStart = millis();
 
+  // Enable Hardware Watchdog with Kernel panic reaction
+  esp_task_wdt_init(WDT_Timeout, true);
+  esp_task_wdt_add(NULL); // add current thread to watchdog
+
   // Configure PID library
   configPID();
   
@@ -1056,6 +1063,9 @@ void loop(){
         }
       portEXIT_CRITICAL_ISR(&objTimerMux);
     }
+
+    // reset watchdog timer every time a sensor value is read
+    esp_task_wdt_reset();
   }
 
   if (iStatusLED == LED_SET) {
@@ -1070,7 +1080,7 @@ void loop(){
 
           }
           else{
-            // sensor is OK-> displya heating status
+            // sensor is OK-> display heating status
 
             if (fTemp < objConfig.CtrlTarget - 1.0) {
               // Heat up signal
