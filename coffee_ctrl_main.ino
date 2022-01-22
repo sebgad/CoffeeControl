@@ -45,7 +45,11 @@
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
-#define WDT_Timeout 1 // WatchDog Timeout in seconds
+#define WDT_Timeout 5 // WatchDog Timeout in seconds
+
+// Use Core 1 for Async Webserver
+#define CONFIG_ASYNC_TCP_RUNNING_CORE 1
+#define CONFIG_ASYNC_TCP_USE_WDT 1
 
 // config structure for online calibration
 struct config {
@@ -93,7 +97,8 @@ float fTarPwm;
 config objConfig;
 
 // Sensor variables
-float fTemp = 0; // TODO -  need to use double for PID lib
+float fTime = 0.F;
+float fTemp = 0.F; // TODO -  need to use double for PID lib
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -117,7 +122,7 @@ volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measu
 volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
 
 // define Counter for interrupt handling
-volatile unsigned int iInterruptCntLong = 0;
+volatile unsigned long iInterruptCntLong = 0;
 
 // enums for the status
 enum eStatusCtrl {
@@ -479,50 +484,21 @@ void configWebserver(){
    * Configure and start asynchronous webserver
    */
 
-  // Route for root / web page
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html");
-  });
-
-  // Route for graphs web page
-  server.on("/graphs", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/graphs.html");
-  });
-
-  // Route for settings web page
-  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/settings.html");
-  });
-  
-  // Route for ota web page
-  server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/ota.html");
-  });
-
-  // Route for stylesheets.css
-  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/style.css");
-  });
-
-  // Route for java script navigation menu
-  server.on("/menubar.js", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/menubar.js");
-  });
-
+  // initialize server static for faster response to client (only because files in SPIFFS are not changing during runtime)
+  server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");;
 
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!bMeasFileLocked){
-      bMeasFileLocked = true;
       request->send(SPIFFS, strMeasFilePath, "text/plain");
-      bMeasFileLocked = false;
     }
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
-      StaticJsonDocument<500> obj_json_values;
+      StaticJsonDocument<200> obj_json_values;
       // send TargetPWM, Temperature, PID-values
       portENTER_CRITICAL_ISR(&objTimerMux);
+        obj_json_values["Time"] = fTime;
         obj_json_values["Temperature"] = fTemp;
         
         obj_json_values["PID"]["TargetPWM"] = fTarPwm;
@@ -545,7 +521,6 @@ void configWebserver(){
       bParamFileLocked = false;
     }
   });
-
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
     StaticJsonDocument<JSON_MEMORY> obj_json;
@@ -704,7 +679,7 @@ void configWebserver(){
 
   server.on("/restartesp", HTTP_POST, [](AsyncWebServerRequest *request){
     request->send(200, "text/plain", "ESP is going to restart");
-    delay(200);
+    delay(2000);
     ESP.restart();
   });
 
@@ -783,15 +758,6 @@ void setup(){
   delay(50);
   Serial.println("Starting setup.");
 
-  // turn green status LED on
-  pinMode(P_STAT_LED, OUTPUT);
-  digitalWrite(P_STAT_LED, HIGH);
-
-  
-  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
-  configLED();
-  setColor(LED_COLOR_WHITE, true); // White
-
   // initialize SPIFFs and load configuration files
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
       // Initialization of SPIFFS failed, restart it
@@ -822,6 +788,14 @@ void setup(){
   Serial.print(i_used_bytes);
   Serial.println(" bytes");
   Serial.println("");
+
+    // turn green status LED on
+  pinMode(P_STAT_LED, OUTPUT);
+  digitalWrite(P_STAT_LED, HIGH);
+  
+  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
+  configLED();
+  setColor(LED_COLOR_WHITE, true); // White
 
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi();
@@ -895,7 +869,7 @@ void setup(){
   // configure ADS1115
   if(!configADS1115()) {
     // TODO add diagnosis when ADS1115 is not connected
-    Serial.println("ADS1115 configuration not successful. System halt.");
+    Serial.println("ADS1115 configuration not successful.");
   }
 
   // Initialize Timer 
@@ -931,6 +905,7 @@ void setup(){
 boolean readSensors(){
   // Read out Sensor values
   bool b_result = false;
+  fTime = (float)(millis() - iTimeStart) / 1000.0;
   // get physical value of sensor
   fTemp = objAds1115.getPhysVal();
   // get voltage level of sensor
@@ -964,13 +939,13 @@ bool writeMeasFile(){
   portENTER_CRITICAL_ISR(&objTimerMux);
     float f_temp_local = fTemp;
     float f_tar_pwm = fTarPwm;
+    float f_time = fTime;
     bool b_filter_status = objAds1115.getFilterStatus();
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   if (!bMeasFileLocked){
     bMeasFileLocked = true;
     File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
-    float f_time = (float)(millis() - iTimeStart) / 1000.0;
     obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
@@ -1048,6 +1023,7 @@ void setColor(int i_color, bool b_gain_active) {
   ledcWrite(RwmBluChannel, (int)f_blue_value);
 
 }// setColor
+
 
 void loop(){
   if (iStatusCtrl == MEASURE) {
