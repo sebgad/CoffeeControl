@@ -76,6 +76,12 @@ struct config {
   float RwmRgbGainFactorRed;
   float RwmRgbGainFactorGreen;
   float RwmRgbGainFactorBlue;
+  float RwmRgbColorRedFactor;
+  float RwmRgbColorGreenFactor;
+  float RwmRgbColorBlueFactor;
+  float RwmRgbColorOrangeFactor;
+  float RwmRgbColorPurpleFactor;
+  float RwmRgbColorWhiteFactor;
   bool SigFilterActive;
 };
 
@@ -340,6 +346,12 @@ bool loadConfiguration(){
       (json_doc["LED"]["GainFactorRed"])?objConfig.RwmRgbGainFactorRed = json_doc["LED"]["GainFactorRed"]:b_set_default_values = true;
       (json_doc["LED"]["GainFactorGreen"])?objConfig.RwmRgbGainFactorGreen = json_doc["LED"]["GainFactorGreen"]:b_set_default_values = true;
       (json_doc["LED"]["GainFactorBlue"])?objConfig.RwmRgbGainFactorBlue = json_doc["LED"]["GainFactorBlue"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorColorRed"])?objConfig.RwmRgbColorRedFactor = json_doc["LED"]["GainFactorColorRed"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorColorGreen"])?objConfig.RwmRgbColorGreenFactor = json_doc["LED"]["GainFactorColorGreen"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorColorBlue"])?objConfig.RwmRgbColorBlueFactor = json_doc["LED"]["GainFactorColorBlue"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorColorOrange"])?objConfig.RwmRgbColorOrangeFactor = json_doc["LED"]["GainFactorColorOrange"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorColorPurple"])?objConfig.RwmRgbColorPurpleFactor = json_doc["LED"]["GainFactorColorPurple"]:b_set_default_values = true;
+      (json_doc["LED"]["GainFactorColorWhite"])?objConfig.RwmRgbColorWhiteFactor = json_doc["LED"]["GainFactorColorWhite"]:b_set_default_values = true;
       (json_doc["Signal"]["SigFilterActive"])?objConfig.SigFilterActive = json_doc["Signal"]["SigFilterActive"]:b_set_default_values = true;
 
       if (b_set_default_values){
@@ -387,6 +399,12 @@ bool saveConfiguration(){
   json_doc["LED"]["GainFactorRed"] = objConfig.RwmRgbGainFactorRed;
   json_doc["LED"]["GainFactorGreen"] = objConfig.RwmRgbGainFactorGreen;
   json_doc["LED"]["GainFactorBlue"] = objConfig.RwmRgbGainFactorBlue;
+  json_doc["LED"]["GainFactorColorRed"] = objConfig.RwmRgbColorRedFactor;
+  json_doc["LED"]["GainFactorColorGreen"] = objConfig.RwmRgbColorGreenFactor;
+  json_doc["LED"]["GainFactorColorBlue"] = objConfig.RwmRgbColorBlueFactor;
+  json_doc["LED"]["GainFactorColorOrange"] = objConfig.RwmRgbColorOrangeFactor;
+  json_doc["LED"]["GainFactorColorPurple"] = objConfig.RwmRgbColorPurpleFactor;
+  json_doc["LED"]["GainFactorColorWhite"] = objConfig.RwmRgbColorWhiteFactor;
   json_doc["Signal"]["SigFilterActive"] = objConfig.SigFilterActive;
 
   if (!bParamFileLocked){
@@ -438,6 +456,12 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.RwmRgbGainFactorRed = 1.0;
   objConfig.RwmRgbGainFactorGreen = 1.0;
   objConfig.RwmRgbGainFactorBlue = 1.0;
+  objConfig.RwmRgbColorRedFactor = 1.0;
+  objConfig.RwmRgbColorGreenFactor = 1.0;
+  objConfig.RwmRgbColorBlueFactor = 1.0;
+  objConfig.RwmRgbColorOrangeFactor = 1.0;
+  objConfig.RwmRgbColorPurpleFactor = 1.0;
+  objConfig.RwmRgbColorWhiteFactor = 1.0;
   objConfig.SigFilterActive = true;
 
   if (b_safe_to_json){
@@ -549,6 +573,12 @@ void configWebserver(){
     objConfig.RwmRgbGainFactorRed = obj_json["LED"]["GainFactorRed"];
     objConfig.RwmRgbGainFactorGreen = obj_json["LED"]["GainFactorGreen"];
     objConfig.RwmRgbGainFactorBlue = obj_json["LED"]["GainFactorBlue"];
+    objConfig.RwmRgbColorRedFactor = obj_json["LED"]["GainFactorColorRed"];
+    objConfig.RwmRgbColorGreenFactor = obj_json["LED"]["GainFactorColorGreen"];
+    objConfig.RwmRgbColorBlueFactor = obj_json["LED"]["GainFactorColorBlue"];
+    objConfig.RwmRgbColorOrangeFactor = obj_json["LED"]["GainFactorColorOrange"];
+    objConfig.RwmRgbColorPurpleFactor = obj_json["LED"]["GainFactorColorPurple"];
+    objConfig.RwmRgbColorWhiteFactor = obj_json["LED"]["GainFactorColorWhite"];
     objConfig.SigFilterActive = obj_json["Signal"]["SigFilterActive"];
 
     if (saveConfiguration()){
@@ -984,21 +1014,21 @@ void setColor(int i_color, bool b_gain_active) {
   float f_max_resolution = (float)(1<<objConfig.RwmRgbResolution)-1.0F;
 
   if (i_color == LED_COLOR_RED){
-    f_red_value = 255.F;
+    f_red_value = 255.F * objConfig.RwmRgbColorRedFactor;
   } else if (i_color == LED_COLOR_BLUE) {
-    f_blue_value = 255.F;
+    f_blue_value = 255.F * objConfig.RwmRgbColorBlueFactor;
   } else if (i_color == LED_COLOR_GREEN) {
-    f_green_value = 255.F;
+    f_green_value = 255.F * objConfig.RwmRgbColorGreenFactor;
   } else if (i_color == LED_COLOR_ORANGE) {
-    f_red_value = 255.F;
-    f_green_value = 10.F;
+    f_red_value = 255.F * objConfig.RwmRgbColorOrangeFactor;
+    f_green_value = 10.F * objConfig.RwmRgbColorOrangeFactor;
   } else if (i_color == LED_COLOR_PURPLE) {
-    f_red_value = 170.F;
-    f_blue_value = 255.F;
+    f_red_value = 170.F * objConfig.RwmRgbColorPurpleFactor;
+    f_blue_value = 255.F * objConfig.RwmRgbColorPurpleFactor;
   } else if (i_color == LED_COLOR_WHITE) {
-    f_red_value = 100.F;
-    f_green_value = 100.F;
-    f_blue_value = 100.F;
+    f_red_value = 100.F * objConfig.RwmRgbColorWhiteFactor;
+    f_green_value = 100.F * objConfig.RwmRgbColorWhiteFactor;
+    f_blue_value = 100.F * objConfig.RwmRgbColorWhiteFactor;
   }
 
   if (b_gain_active){
