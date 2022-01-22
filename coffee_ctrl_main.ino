@@ -37,7 +37,7 @@
 
 // File system definitions
 #define FORMAT_SPIFFS_IF_FAILED true
-#define JSON_MEMORY 1000
+#define JSON_MEMORY 1600
 
 // define timer related channels for PWM signals
 #define RwmRedChannel 13 //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
@@ -707,7 +707,7 @@ void configWebserver(){
     }
     );
 
-  server.on("/restartesp", HTTP_POST, [](AsyncWebServerRequest *request){
+  server.on("/restartesp", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(200, "text/plain", "ESP is going to restart");
     delay(2000);
     ESP.restart();
