@@ -170,7 +170,7 @@ class ADS1115
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
     int _iBuffCnt;
-    int _iBufferFillLevel;
+    int _iBuffMaxFillIndex;
     int16_t * _ptrConvBuff;
     float * _ptrFilterCoeff;
     float _fFilterNormCoeff;
