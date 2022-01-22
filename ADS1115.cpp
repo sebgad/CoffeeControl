@@ -10,7 +10,7 @@ ADS1115::ADS1115(TwoWire * _obj_i2c) {
   // Initialize Conversion buffer with 1 on default
   _ptrConvBuff = new int16_t[ADS1115_DELAY_AFTER_MUX_CHANGE];
   _iBuffCnt = 0;
-  _iBufferFillLevel =0;
+  _iBuffMaxFillIndex =0;
 }
 
 bool ADS1115::begin() {
@@ -514,7 +514,7 @@ void ADS1115::readConversionRegister() {
   */ 
   
   _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE;
-  _iBufferFillLevel = max(_iBufferFillLevel,_iBuffCnt);
+  _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt);
   _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG);
 }
 
@@ -700,7 +700,7 @@ void ADS1115::activateFilter(){
    */
 
   _bFilterActive = true;
-  _iBufferFillLevel=0;
+  _iBuffMaxFillIndex=0;
 
   if (ADS1115_CONV_BUF_SIZE == 5){
       _ptrFilterCoeff = new float[5];
@@ -824,20 +824,21 @@ bool ADS1115::isValueFrozen(){
 
   bool b_status = false;
 
-  if (_iBufferFillLevel>=9){
-    // filter is active -> check if value is frozen
-    int16_t i_max = -32768;  // init max value with the smalest value possible
-    int16_t i_min = 32767;  // init min value with the largest value possible
+  if (_iBuffMaxFillIndex>=9){
+    // filter is active and filled enough -> check if value is frozen
 
-    for (int i_row=0; i_row<_iBufferFillLevel; i_row++){
-      // get min and max of the buffer
-      i_max = max(i_max, _ptrConvBuff[i_row]);
-      i_min = min(i_min, _ptrConvBuff[i_row]);
-    }
+    int16_t i_last_val = _ptrConvBuff[0];
+    b_status = true;
 
-    if (i_min==i_max){
-      // max value is equal to min value
-      b_status = true;
+    for (int i_row=1; i_row<=_iBuffMaxFillIndex; i_row++){
+      // if two values are not the smae break the for loop and return false
+      // _iBuffMaxFillIndex is a index not a counter
+      if (_ptrConvBuff[i_row] != i_last_val){
+        // values are different -> found change -> ok
+        b_status = false;
+        break;
+      }
+      i_last_val = _ptrConvBuff[i_row]; // set last value to current value
     }
   }
 
