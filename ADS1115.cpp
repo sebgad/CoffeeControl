@@ -10,7 +10,7 @@ ADS1115::ADS1115(TwoWire * _obj_i2c) {
   // Initialize Conversion buffer
   _ptrConvBuff = new int16_t[ADS1115_CONV_BUF_SIZE];
   _iBuffCnt = 0;
-  _iBufferFillLevel = 0;
+  _iBuffMaxFillIndex = 0;
 }
 
 bool ADS1115::begin() {
