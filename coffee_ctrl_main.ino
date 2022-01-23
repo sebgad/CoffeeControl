@@ -129,6 +129,9 @@ volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
 
 // define Counter for interrupt handling
 volatile unsigned long iInterruptCntLong = 0;
+volatile unsigned long iInterruptCntAlert = 0;
+volatile unsigned long iInterruptCntAlertCatch = 0;
+
 
 // enums for the status
 enum eStatusCtrl {
@@ -176,10 +179,14 @@ void IRAM_ATTR onAlertRdy(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
-      if (iStatusCtrl == IDLE) {
-        // Only change Status when idle to measurement running
-        iStatusCtrl = MEASURE;
+      if (iInterruptCntAlert % 16 == 0) {
+        if (iStatusCtrl == IDLE) {
+          // Only change Status when idle to measurement running
+          iStatusCtrl = MEASURE;
+          iInterruptCntAlertCatch++;
+        }
       }
+      iInterruptCntAlert++;
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
@@ -508,8 +515,30 @@ void configWebserver(){
    * Configure and start asynchronous webserver
    */
 
-  // initialize server static for faster response to client (only because files in SPIFFS are not changing during runtime)
-  server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");;
+  // Route for root / web page
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html");
+  });
+
+  // Route for graphs web page
+  server.on("/graphs.html", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/graphs.html");
+  });
+
+  // Route for settings web page
+  server.on("/settings.html", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/settings.html");
+  });
+  
+  // Route for ota web page
+  server.on("/ota.html", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/ota.html");
+  });
+
+  // Route for stylesheets.css
+  server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/style.css");
+  });
 
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -734,6 +763,8 @@ bool configADS1115(){
     objAds1115.activateFilter();
   }
 
+  objAds1115.setCompPolarity(ADS1115_CMP_POL_ACTIVE_HIGH);
+
   // set differential voltage: A0-A1
   objAds1115.setMux(ADS1115_MUX_AIN0_AIN1);
 
@@ -750,7 +781,7 @@ bool configADS1115(){
   objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
 
   // assert after one conversion
-  objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
+  objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_4_CONV);
   #ifdef Pt1000_CONV_LINEAR
     objAds1115.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
     Serial.print("Applying linear regression function for Pt1000 conversion: ");
@@ -889,7 +920,7 @@ void setup(){
     obj_meas_file.print("Measurement File created on ");
     obj_meas_file.println(char_timestamp);
     obj_meas_file.println("");
-    obj_meas_file.println("Time,Temperature,TargetPWM,FilterStatus");
+    obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
     obj_meas_file.close();
     bMeasFileLocked = false;
   } else {
@@ -935,10 +966,10 @@ void setup(){
 boolean readSensors(){
   // Read out Sensor values
   bool b_result = false;
+  
   fTime = (float)(millis() - iTimeStart) / 1000.0;
   // get physical value of sensor
   fTemp = objAds1115.getPhysVal();
-  // get voltage level of sensor
 
   b_result = true;
   return b_result;
@@ -971,6 +1002,7 @@ bool writeMeasFile(){
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
     bool b_filter_status = objAds1115.getFilterStatus();
+    unsigned long i_int_count = iInterruptCntAlertCatch;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   if (!bMeasFileLocked){
@@ -982,7 +1014,7 @@ bool writeMeasFile(){
     obj_meas_file.print(",");
     obj_meas_file.print(f_tar_pwm);
     obj_meas_file.print(",");
-    obj_meas_file.println(b_filter_status);
+    obj_meas_file.println(i_int_count);
     obj_meas_file.close();
     b_success = true;
     bMeasFileLocked = false;
@@ -1059,16 +1091,16 @@ void loop(){
   if (iStatusCtrl == MEASURE) {
     // Call sensor read out function
     bool b_result_sensor;
-    b_result_sensor = readSensors();
+      b_result_sensor = readSensors();
 
-    if (b_result_sensor == true) {
-      portENTER_CRITICAL_ISR(&objTimerMux);
-        if(objAds1115.getConnectionStatus()){
-          // only control if connection to ADS1115 is successful
-          iStatusCtrl = CONTROL;
-        }
-      portEXIT_CRITICAL_ISR(&objTimerMux);
-    }
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      if (b_result_sensor == true) {
+          if(objAds1115.getConnectionStatus()){
+            // only control if connection to ADS1115 is successful
+            iStatusCtrl = CONTROL;
+          }
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+      }
 
     // reset watchdog timer every time a sensor value is read
     esp_task_wdt_reset();
