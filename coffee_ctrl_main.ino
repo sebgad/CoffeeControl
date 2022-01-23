@@ -730,7 +730,7 @@ void configWebserver(){
           if (b_final) {
             // close the file handle as the upload is now done
             ptr_request->_tempFile.close();
-            ptr_request->redirect("/ota");
+            ptr_request->redirect("/ota.html");
             Serial.println("File upload finished.");
           }
     }
