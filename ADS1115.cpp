@@ -458,10 +458,11 @@ void ADS1115::setPinRdyMode(bool b_activate, byte b_comp_queue_mode){
    *    ADS1115_CONV_READY_ACTIVE     : pin ready mode is activated
    *    ADS1115_CONV_READY_NOT_ACTIVE : pin ready mode is deactivated
   */
+  
+  setCompQueueMode(b_comp_queue_mode);
+  
   setCompLowThreshBit(0, 15);
   setCompHighThreshBit(1, 15);
-
-  setCompQueueMode(b_comp_queue_mode);
 }
 
 
@@ -746,8 +747,8 @@ void ADS1115::activateFilter(){
       _ptrFilterCoeff[6] = 84.0F;
       _ptrFilterCoeff[7] = 69.0F;
       _ptrFilterCoeff[8] = 44.0F;
-      _ptrFilterCoeff[8] = 9.0F;
-      _ptrFilterCoeff[8] = -36.0F;
+      _ptrFilterCoeff[9] = 9.0F;
+      _ptrFilterCoeff[10] = -36.0F;
       _fFilterNormCoeff = 429.F;
       _bSavGolFilterActive = true;
   } else {

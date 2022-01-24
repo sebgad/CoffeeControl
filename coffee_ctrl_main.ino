@@ -542,9 +542,7 @@ void configWebserver(){
 
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (!bMeasFileLocked){
-      request->send(SPIFFS, strMeasFilePath, "text/plain");
-    }
+    request->send(SPIFFS, strMeasFilePath, "text/plain");
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -568,11 +566,7 @@ void configWebserver(){
 
   // Parameter file, available under http://coffee.local/params.json
   server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (!bParamFileLocked){
-      bParamFileLocked = true;
       request->send(SPIFFS, strParamFilePath, "text/plain");
-      bParamFileLocked = false;
-    }
   });
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
@@ -763,6 +757,7 @@ bool configADS1115(){
     objAds1115.activateFilter();
   }
 
+  // set Comparator Polarity to active high
   objAds1115.setCompPolarity(ADS1115_CMP_POL_ACTIVE_HIGH);
 
   // set differential voltage: A0-A1
@@ -774,14 +769,6 @@ bool configADS1115(){
   // set to continues conversion method
   objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
 
-  // set gain amplifier
-  objAds1115.setPGA(ADS1115_PGA_0P256);
-
-  // set latching mode
-  objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
-
-  // assert after one conversion
-  objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_4_CONV);
   #ifdef Pt1000_CONV_LINEAR
     objAds1115.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
     Serial.print("Applying linear regression function for Pt1000 conversion: ");
@@ -808,6 +795,15 @@ bool configADS1115(){
       Serial.println(arrPt1000LookUpTbl[i_row][1], 4);
     }
   #endif
+
+  // set gain amplifier
+  objAds1115.setPGA(ADS1115_PGA_0P256);
+
+  // set latching mode
+  objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
+
+  // assert after one conversion
+  objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_4_CONV);
 
   objAds1115.printConfigReg();
   return true;
@@ -913,8 +909,8 @@ void setup(){
   }
 
   // Write Measurement file header
-  if (!bMeasFileLocked){
-    bMeasFileLocked = true;
+  //if (!bMeasFileLocked){
+  //  bMeasFileLocked = true;
     File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
 
     obj_meas_file.print("Measurement File created on ");
@@ -922,10 +918,10 @@ void setup(){
     obj_meas_file.println("");
     obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
     obj_meas_file.close();
-    bMeasFileLocked = false;
-  } else {
-    Serial.println("Could not create measurement file due to active Lock");
-  }
+  //  bMeasFileLocked = false;
+  //} else {
+  //  Serial.println("Could not create measurement file due to active Lock");
+  //}
 
   // configure ADS1115
   if(!configADS1115()) {
@@ -1005,8 +1001,8 @@ bool writeMeasFile(){
     unsigned long i_int_count = iInterruptCntAlertCatch;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
-  if (!bMeasFileLocked){
-    bMeasFileLocked = true;
+  //if (!bMeasFileLocked){
+  //  bMeasFileLocked = true;
     File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
     obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");
@@ -1017,10 +1013,10 @@ bool writeMeasFile(){
     obj_meas_file.println(i_int_count);
     obj_meas_file.close();
     b_success = true;
-    bMeasFileLocked = false;
-  } else {
-    b_success = false;
-  }
+  //  bMeasFileLocked = false;
+  //} else {
+  //  b_success = false;
+  //}
   return b_success;
 }// writeMeasFile
 
