@@ -12,7 +12,7 @@
 #include <time.h>
 #include <string>
 #include "Pt1000.h"
-#include "ADS1115.h"
+#include "ADS1015.h"
 #include "PidCtrl.h"
 #include "WifiAccess.h"
 #include <Wire.h>
@@ -115,9 +115,9 @@ const char* charNtpServerUrl = "europe.pool.ntp.org";
 const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
 const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 
-// Initialize ADS1115 I2C connection
+// Initialize ADS1015 I2C connection
 TwoWire objI2cBus = TwoWire(0);
-ADS1115 objAds1115(&objI2cBus);
+ADS1015 objADS1015(&objI2cBus);
 
 // timer object for ISR
 hw_timer_t * objTimerLong = NULL;
@@ -179,7 +179,15 @@ void IRAM_ATTR onAlertRdy(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
+    // Define State machine transition and oversampling
       if (iInterruptCntAlert % 16 == 0) {
+        if (iStatusCtrl == IDLE){
+          // Only change Status when idle to measurement running
+          iStatusCtrl = CONTROL;
+          iInterruptCntAlertCatch++;
+        }
+      } else if (iInterruptCntAlert % 2 == 0) {
+        // every second interrupt one measurement shall be performed
         if (iStatusCtrl == IDLE) {
           // Only change Status when idle to measurement running
           iStatusCtrl = MEASURE;
@@ -609,9 +617,9 @@ void configWebserver(){
       configLED();
       
       if(objConfig.SigFilterActive){
-        objAds1115.activateFilter();
+        objADS1015.activateFilter();
       } else {
-        objAds1115.deactivateFilter();
+        objADS1015.deactivateFilter();
       }
       
       request->send(200, "text/plain", "Parameters are updated and changes applied.");
@@ -741,43 +749,43 @@ void configWebserver(){
 }
 
 
-bool configADS1115(){
+bool configADS1015(){
   /**
-   * Configure Analog digital converter ADS1115
+   * Configure Analog digital converter ADS1015
    */
   
   // Initialize I2c on defined pins with default adress
-  if (!objAds1115.begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
+  if (!objADS1015.begin(SDA_0, SCL_0, ADS1015_I2CADD_DEFAULT)){
     Serial.println("Failed to initialize I2C sensor connection, stop working.");
     return false;
   }
 
   // Set Signal Filter Status
   if(objConfig.SigFilterActive){
-    objAds1115.activateFilter();
+    objADS1015.activateFilter();
   }
 
   // set Comparator Polarity to active high
-  objAds1115.setCompPolarity(ADS1115_CMP_POL_ACTIVE_HIGH);
+  objADS1015.setCompPolarity(ADS1015_CMP_POL_ACTIVE_HIGH);
 
   // set differential voltage: A0-A1
-  objAds1115.setMux(ADS1115_MUX_AIN0_AIN1);
+  objADS1015.setMux(ADS1015_MUX_AIN0_AIN1);
 
   // set data rate (samples per second)
-  objAds1115.setRate(ADS1115_RATE_8);
+  objADS1015.setRate(ADS1015_RATE_128);
 
   // set to continues conversion method
-  objAds1115.setOpMode(ADS1115_MODE_CONTINUOUS);
+  objADS1015.setOpMode(ADS1015_MODE_CONTINUOUS);
 
   #ifdef Pt1000_CONV_LINEAR
-    objAds1115.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
+    objADS1015.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
     Serial.print("Applying linear regression function for Pt1000 conversion: ");
     Serial.print(fPt1000LinCoeffX1, 4);
     Serial.print(" * Umess + ");
     Serial.println(fPt1000LinCoeffX0, 4);
   #endif
   #ifdef Pt1000_CONV_SQUARE
-    objAds1115.setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
+    objADS1015.setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
     Serial.print("Applying square regression function for Pt1000 conversion: ");
     Serial.print(fPt1000SquareCoeffX2, 4);
     Serial.print(" * Umess² + ");
@@ -787,7 +795,7 @@ bool configADS1115(){
   #endif
   #ifdef Pt1000_CONV_LOOK_UP_TABLE
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
-    objAds1115.setPhysConv(arrPt1000LookUpTbl, size_1d_map);
+    objADS1015.setPhysConv(arrPt1000LookUpTbl, size_1d_map);
     Serial.println("Applying Lookuptable for Pt1000 conversion:");
     for(int i_row=0; i_row<size_1d_map; i_row++){
       Serial.print(arrPt1000LookUpTbl[i_row][0], 4);
@@ -797,15 +805,15 @@ bool configADS1115(){
   #endif
 
   // set gain amplifier
-  objAds1115.setPGA(ADS1115_PGA_0P256);
+  objADS1015.setPGA(ADS1015_PGA_0P256);
 
   // set latching mode
-  objAds1115.setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
+  objADS1015.setCompLatchingMode(ADS1015_CMP_LAT_ACTIVE);
 
   // assert after one conversion
-  objAds1115.setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_4_CONV);
+  objADS1015.setPinRdyMode(ADS1015_CONV_READY_ACTIVE, ADS1015_CMP_QUE_ASSERT_4_CONV);
 
-  objAds1115.printConfigReg();
+  objADS1015.printConfigReg();
   return true;
 }
 
@@ -923,10 +931,10 @@ void setup(){
   //  Serial.println("Could not create measurement file due to active Lock");
   //}
 
-  // configure ADS1115
-  if(!configADS1115()) {
-    // TODO add diagnosis when ADS1115 is not connected
-    Serial.println("ADS1115 configuration not successful.");
+  // configure ADS1015
+  if(!configADS1015()) {
+    // TODO add diagnosis when ADS1015 is not connected
+    Serial.println("ADS1015 configuration not successful.");
   }
 
   // Initialize Timer 
@@ -965,7 +973,7 @@ boolean readSensors(){
   
   fTime = (float)(millis() - iTimeStart) / 1000.0;
   // get physical value of sensor
-  fTemp = objAds1115.getPhysVal();
+  fTemp = objADS1015.getPhysVal();
 
   b_result = true;
   return b_result;
@@ -997,7 +1005,7 @@ bool writeMeasFile(){
     float f_temp_local = fTemp;
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
-    bool b_filter_status = objAds1115.getFilterStatus();
+    bool b_filter_status = objADS1015.getFilterStatus();
     unsigned long i_int_count = iInterruptCntAlertCatch;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
@@ -1084,33 +1092,35 @@ void setColor(int i_color, bool b_gain_active) {
 
 
 void loop(){
-  if (iStatusCtrl == MEASURE) {
+  if ((iStatusCtrl == MEASURE) || (iStatusCtrl == CONTROL)) {
     // Call sensor read out function
     bool b_result_sensor;
+    
+    if(objADS1015.getConnectionStatus()){
+      // Only read out sensor if connection status is true
       b_result_sensor = readSensors();
+    }
 
-    portENTER_CRITICAL_ISR(&objTimerMux);
-      if (b_result_sensor == true) {
-          if(objAds1115.getConnectionStatus()){
-            // only control if connection to ADS1115 is successful
-            iStatusCtrl = CONTROL;
-          }
-    portEXIT_CRITICAL_ISR(&objTimerMux);
+    if (b_result_sensor == true) {
+      if (iStatusCtrl == MEASURE) {
+        // Only change to IDLE if Measurement is requested and readout was successfully
+        portENTER_CRITICAL_ISR(&objTimerMux);
+          iStatusCtrl = IDLE;
+        portEXIT_CRITICAL_ISR(&objTimerMux);
       }
-
-    // reset watchdog timer every time a sensor value is read
-    esp_task_wdt_reset();
+      // reset watchdog timer every time a sensor value is read
+      esp_task_wdt_reset();
+    }
   }
 
   if (iStatusLED == LED_SET) {
-
-    if(objAds1115.getConnectionStatus()){
-          // only check for frozen values if connection to ADS1115 is successful
-          if(objAds1115.isValueFrozen()){
+    if(objADS1015.getConnectionStatus()){
+          // only check for frozen values if connection to ADS1015 is successful
+          if(objADS1015.isValueFrozen()){
             setColor(LED_COLOR_PURPLE, false);
-            Serial.println("ADS1115 Sensor value frozen");
-            // configure ADS1115 again
-            //configADS1115(); // error occured reconfigure ADC?
+            Serial.println("ADS1015 Sensor value frozen");
+            // configure ADS1015 again
+            //configADS1015(); // error occured reconfigure ADC?
 
           }
           else{
@@ -1129,7 +1139,7 @@ void loop(){
               setColor(LED_COLOR_GREEN, true); 
             }
           }
-        }// if objAds1115.getConnectionStatus()
+        }// if objADS1015.getConnectionStatus()
 
     portENTER_CRITICAL_ISR(&objTimerMux);
       iStatusLED = LED_IDLE;
@@ -1148,13 +1158,14 @@ void loop(){
   }
  
   if (iStatusMeas==STORE_MEAS) {
-      bool b_result_meas_write;
-      b_result_meas_write = writeMeasFile();
+    // Write values to measurement file
+    bool b_result_meas_write;
+    b_result_meas_write = writeMeasFile();
+    if (b_result_meas_write){
       portENTER_CRITICAL_ISR(&objTimerMux);
-        if (b_result_meas_write){
-          iStatusMeas = IDLE_MEAS;
-        }
+        iStatusMeas = IDLE_MEAS;
       portEXIT_CRITICAL_ISR(&objTimerMux);
+    }
   }
 }// loop
 

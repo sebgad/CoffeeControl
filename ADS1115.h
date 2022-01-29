@@ -77,7 +77,7 @@
 
 // Comparator mode
 #define ADS1115_CMP_MODE_TRADITIONAL  0b000 // default
-#define ADS1115_CMP_MODE_WINDOW       0b000 
+#define ADS1115_CMP_MODE_WINDOW       0b001 
 
 // Comparator polarity
 #define ADS1115_CMP_POL_ACTIVE_LOW  0b000 // default
@@ -179,6 +179,7 @@ class ADS1115
     bool _bConnectStatus;
     float _getAvgFilterVal();
     float _getSavGolFilterVal();
+    
 };
 
 #endif
