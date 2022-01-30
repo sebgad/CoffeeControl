@@ -8,7 +8,8 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
-#include <SPIFFS.h>
+#include "FS.h"
+#include <LittleFS.h>
 #include <time.h>
 #include <string>
 #include "Pt1000.h"
@@ -48,8 +49,8 @@
 #define WDT_Timeout 5 // WatchDog Timeout in seconds
 
 // Use Core 1 for Async Webserver
-#define CONFIG_ASYNC_TCP_RUNNING_CORE 1
-#define CONFIG_ASYNC_TCP_USE_WDT 1
+// #define CONFIG_ASYNC_TCP_RUNNING_CORE 1
+// #define CONFIG_ASYNC_TCP_USE_WDT 1
 
 // config structure for online calibration
 struct config {
@@ -296,7 +297,7 @@ void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
     
   Serial.println("Disconnected from WiFi access point");
   Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.disconnected.reason);
+  Serial.println(info.wifi_sta_disconnected.reason);
   Serial.println("Trying to Reconnect");
   connectWiFi(3, 1000);
 } // reconnectWiFi
@@ -311,7 +312,7 @@ bool loadConfiguration(){
   if (!bParamFileLocked){
     // file is not locked by another process ->  save to read or write
     bParamFileLocked = true;
-    File obj_param_file = SPIFFS.open(strParamFilePath, "r");
+    File obj_param_file = LittleFS.open(strParamFilePath, "r");
     StaticJsonDocument<JSON_MEMORY> json_doc;
     DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
@@ -424,7 +425,7 @@ bool saveConfiguration(){
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
-    File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+    File obj_param_file = LittleFS.open(strParamFilePath, "w");
   
     if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
       Serial.println(F("Failed to write configuration to file"));
@@ -525,32 +526,32 @@ void configWebserver(){
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html");
+    request->send(LittleFS, "/index.html");
   });
 
   // Route for graphs web page
   server.on("/graphs.html", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/graphs.html");
+    request->send(LittleFS, "/graphs.html");
   });
 
   // Route for settings web page
   server.on("/settings.html", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/settings.html");
+    request->send(LittleFS, "/settings.html");
   });
   
   // Route for ota web page
   server.on("/ota.html", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/ota.html");
+    request->send(LittleFS, "/ota.html");
   });
 
   // Route for stylesheets.css
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/style.css");
+    request->send(LittleFS, "/style.css");
   });
 
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, strMeasFilePath, "text/plain");
+    request->send(LittleFS, strMeasFilePath, "text/plain");
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -574,7 +575,7 @@ void configWebserver(){
 
   // Parameter file, available under http://coffee.local/params.json
   server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, strParamFilePath, "text/plain");
+      request->send(LittleFS, strParamFilePath, "text/plain");
   });
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
@@ -674,7 +675,7 @@ void configWebserver(){
                 return ptr_request->send(400, "text/plain", "MD5 parameter invalid");
               } 
               
-              // MD5 precheck done, creating temp file on spiffs file system
+              // MD5 precheck done, creating temp file on LittleFS file system
               if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
                 // Update cannot be started for reasons
                 Update.printError(Serial);
@@ -719,7 +720,7 @@ void configWebserver(){
           */
           if (!i_index) {
             // open the file on first call and store the file handle in the request object
-            ptr_request->_tempFile = SPIFFS.open("/" + str_filename, "w");
+            ptr_request->_tempFile = LittleFS.open("/" + str_filename, "w");
             Serial.print("Start uploading file: ");
             Serial.println(str_filename);
           }
@@ -823,14 +824,14 @@ void setup(){
   delay(50);
   Serial.println("Starting setup.");
 
-  // initialize SPIFFs and load configuration files
-  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-      // Initialization of SPIFFS failed, restart it
-      Serial.println("SPIFFS mount Failed, restart ESP");
+  // initialize LittleFS and load configuration files
+  if(!LittleFS.begin(FORMAT_SPIFFS_IF_FAILED)){
+      // Initialization of LittleFS failed, restart it
+      Serial.println("LittleFS mount Failed, restart ESP");
       delay(1000);
       ESP.restart();
   } else {
-    Serial.println("SPIFFS mount successfully.");
+    Serial.println("LittleFS mount successfully.");
     // initialize configuration before load json file
     resetConfiguration(false);
     
@@ -841,15 +842,15 @@ void setup(){
   }
 
   // Initialization successfull, create csv file
-  unsigned int i_total_bytes = SPIFFS.totalBytes();
-  unsigned int i_used_bytes = SPIFFS.usedBytes();
+  unsigned int i_total_bytes = LittleFS.totalBytes();
+  unsigned int i_used_bytes = LittleFS.usedBytes();
 
   Serial.println("File system info:");
-  Serial.print("Total space on SPIFFS: ");
+  Serial.print("Total space on LittleFS: ");
   Serial.print(i_total_bytes);
   Serial.println(" bytes");
 
-  Serial.print("Total space used on SPIFFS: ");
+  Serial.print("Total space used on LittleFS: ");
   Serial.print(i_used_bytes);
   Serial.println(" bytes");
   Serial.println("");
@@ -870,7 +871,8 @@ void setup(){
     // ESP has wifi connection
 
     // Define reconnect action when disconnecting from Wifi
-    WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
+    // ISSUE_PENDING: No corresponding onEvent yet discovered for Core version 2
+    //WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
 
     // initialize NTP client
     configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
@@ -919,7 +921,7 @@ void setup(){
   // Write Measurement file header
   //if (!bMeasFileLocked){
   //  bMeasFileLocked = true;
-    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
+    File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
 
     obj_meas_file.print("Measurement File created on ");
     obj_meas_file.println(char_timestamp);
@@ -1011,7 +1013,7 @@ bool writeMeasFile(){
   
   //if (!bMeasFileLocked){
   //  bMeasFileLocked = true;
-    File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
+    File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
     obj_meas_file.print(f_time, 4);
     obj_meas_file.print(",");
     obj_meas_file.print(f_temp_local);
@@ -1168,4 +1170,3 @@ void loop(){
     }
   }
 }// loop
-

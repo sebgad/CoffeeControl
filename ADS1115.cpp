@@ -61,7 +61,7 @@ bool ADS1115::begin(int i_sda_pin, int i_scl_pin) {
 bool ADS1115::begin(int i_sda, int i_scl, uint8_t i_i2c_address) {
   bool b_success = false;
   _iI2cAddress  = i_i2c_address;
-  _objI2C->begin(i_sda, i_scl, _iI2cAddress);
+  _objI2C->begin(_iI2cAddress, i_sda, i_scl, 400000);
 
   _objI2C->beginTransmission(_iI2cAddress);
   if (_objI2C->endTransmission()== 0) {
@@ -516,7 +516,7 @@ void ADS1115::readConversionRegister() {
   
   _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE;
   _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt);
-  _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG) >> 4;
+  _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG);
 }
 
 
