@@ -237,8 +237,8 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   
   bool b_successful = false;
   
-  WiFi.disconnect(true);
-  delay(100);
+  //WiFi.disconnect(true);
+  //delay(100);
 
   Serial.print("Device ");
   Serial.print(WiFi.macAddress());
@@ -248,18 +248,21 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   delay(100);
 
   int i_run_cnt_fail = 0;
-  int i_wifi_status = WL_IDLE_STATUS;
+  int i_wifi_status;
 
   WiFi.mode(WIFI_STA);
 
   // Connect to WPA/WPA2 network:
   WiFi.begin(objConfig.wifiSSID.c_str(), objConfig.wifiPassword.c_str());
+  i_wifi_status = WiFi.status();
 
   while ((i_wifi_status != WL_CONNECTED) && (i_run_cnt_fail<i_total_fail)) {
     // wait for connection establish
     delay(i_timout_attemp);
     i_run_cnt_fail++;
     i_wifi_status = WiFi.status();
+    Serial.print("Connection Attemp: ");
+    Serial.println(i_run_cnt_fail);
   }
 
   if (i_wifi_status == WL_CONNECTED) {
@@ -864,7 +867,7 @@ void setup(){
   setColor(LED_COLOR_WHITE, true); // White
 
   // Connect to wifi and create time stamp if device is Online
-  bEspOnline = connectWiFi();
+  bEspOnline = connectWiFi(3, 3000);
   char char_timestamp[50];
 
   if (bEspOnline == true) {
@@ -958,8 +961,8 @@ void setup(){
   iTimeStart = millis();
 
   // Enable Hardware Watchdog with Kernel panic reaction
-  esp_task_wdt_init(WDT_Timeout, true);
-  esp_task_wdt_add(NULL); // add current thread to watchdog
+  //esp_task_wdt_init(WDT_Timeout, true);
+  //esp_task_wdt_add(NULL); // add current thread to watchdog
 
   // Configure PID library
   configPID();
@@ -1111,7 +1114,7 @@ void loop(){
         portEXIT_CRITICAL_ISR(&objTimerMux);
       }
       // reset watchdog timer every time a sensor value is read
-      esp_task_wdt_reset();
+      //esp_task_wdt_reset();
     }
   }
 
