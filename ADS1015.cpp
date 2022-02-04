@@ -4,9 +4,7 @@
 #include "Arduino.h"
 #include "ADS1015.h"
 
-ADS1015::ADS1015(TwoWire * _obj_i2c) {
-  _objI2C = _obj_i2c;
-  
+ADS1015::ADS1015() {
   // Initialize Conversion buffer
   _ptrConvBuff = new int16_t[ADS1015_CONV_BUF_SIZE];
   _iBuffCnt = 0;
@@ -14,64 +12,33 @@ ADS1015::ADS1015(TwoWire * _obj_i2c) {
 }
 
 bool ADS1015::begin() {
-  bool b_success = false;
+  bool b_success = true;
   _iI2cAddress = ADS1015_I2CADD_DEFAULT;
-  _objI2C->begin(_iI2cAddress);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
-    b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
-  }
   return b_success;
 }
 
 bool ADS1015::begin(uint8_t i_i2c_address) {
-  bool b_success = false;
+  bool b_success = true;
   _iI2cAddress  = i_i2c_address;
-  _objI2C->begin(_iI2cAddress);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
-    b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
-  }
   return b_success;
 }
 
 bool ADS1015::begin(int i_sda_pin, int i_scl_pin) {
-  bool b_success = false;
+  bool b_success = true;
+  _iSdaPin = i_sda_pin;
+  _iSclPin = i_scl_pin;
   _iI2cAddress = ADS1015_I2CADD_DEFAULT;
-  _objI2C->begin(i_sda_pin, i_scl_pin);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
-    b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
-  }
   return b_success;
 }
 
 bool ADS1015::begin(int i_sda, int i_scl, uint8_t i_i2c_address) {
-  bool b_success = false;
+  bool b_success = true;
   _iI2cAddress  = i_i2c_address;
-  _objI2C->begin(_iI2cAddress, i_sda, i_scl, 300000);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
-    b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
-  }
+  _iSdaPin = i_sda;
+  _iSclPin = i_scl;
   return b_success;
 }
+
 
 void ADS1015::setDefault() {
   /**
@@ -98,9 +65,10 @@ void ADS1015::startSingleShotMeas(bool b_status) {
    * 
   */
   if (b_status) {
-    iConfigReg = read16(ADS1015_CONFIG_REG);
+
+    i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
     bitWrite(iConfigReg, ADS1015_OS, b_status);
-    write16(ADS1015_CONFIG_REG, iConfigReg);
+    i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
   }
   
 };
@@ -110,7 +78,9 @@ bool ADS1015::getOpStatus(void){
    * Get Operational status
    * @return: 0 : Device is currently performing a conversion, 1 : Device is not currently performing a conversion
   */
-  return (read16(ADS1015_CONFIG_REG) & 1<<ADS1015_OS) >> ADS1015_OS;
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & 1<<ADS1015_OS) >> ADS1015_OS;
 }
 
 
@@ -127,7 +97,7 @@ void ADS1015::setMux(byte b_mux) {
    *    ADS1015_MUX_AIN2_GND AINp = AIN2 and AINn = GND
    *    ADS1015_MUX_AIN3_GND AINp = AIN3 and AINn = GND
   */ 
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
   bool b2 = readBit(b_mux, 2);
   bool b1 = readBit(b_mux, 1);
   bool b0 = readBit(b_mux, 0);
@@ -136,7 +106,7 @@ void ADS1015::setMux(byte b_mux) {
   writeBit(iConfigReg, ADS1015_MUX1, b1);
   writeBit(iConfigReg, ADS1015_MUX0, b0);
 
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
   delay(ADS1015_DELAY_AFTER_MUX_CHANGE);
 }
 
@@ -153,8 +123,9 @@ byte ADS1015::getMux() {
    *    0b101 AINp = AIN1 and AINn = GND
    *    0b110 AINp = AIN2 and AINn = GND
    *    0b111 AINp = AIN3 and AINn = GND
-  */ 
-  return (read16(ADS1015_CONFIG_REG) & 0b111<<ADS1015_MUX0) >> ADS1015_MUX0;
+  */
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg); 
+  return (iConfigReg & 0b111<<ADS1015_MUX0) >> ADS1015_MUX0;
 }
 
 
@@ -169,7 +140,9 @@ void ADS1015::setPGA(byte b_gain) {
    *    ADS1015_PGA_0P512 : FSR = +-0.512V
    *    ADS1015_PGA_0P256 : FSR = +-0.256V
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
   bool b2 = readBit(b_gain, 2);
   bool b1 = readBit(b_gain, 1);
   bool b0 = readBit(b_gain, 0);
@@ -177,7 +150,7 @@ void ADS1015::setPGA(byte b_gain) {
   writeBit(iConfigReg, ADS1015_PGA2, b2);
   writeBit(iConfigReg, ADS1015_PGA1, b1);
   writeBit(iConfigReg, ADS1015_PGA0, b0);
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 
   switch (b_gain) {
     case ADS1015_PGA_6P144:
@@ -214,7 +187,10 @@ byte ADS1015::getPGA() {
    *    0b100 : FSR = +-0.512V
    *    0b101 : FSR = +-0.256V
   */
-  return (read16(ADS1015_CONFIG_REG) & 0b111<<ADS1015_PGA0) >> ADS1015_PGA0;
+
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & 0b111<<ADS1015_PGA0) >> ADS1015_PGA0;
 }
 
 
@@ -225,9 +201,11 @@ void ADS1015::setOpMode(bool b_mode) {
    *    ADS1015_MODE_CONTINUOUS : Continuous-conversion mode
    *    ADS1015_MODE_SINGLESHOT : Single-shot mode or power-down state (default)
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+  
   writeBit(iConfigReg, ADS1015_MODE, b_mode);
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 }
 
 
@@ -238,7 +216,10 @@ byte ADS1015::getOpMode() {
    *    0 : Continuous-conversion mode
    *    1 : Single-shot mode or power-down state (default)
   */
-  return (read16(ADS1015_CONFIG_REG) & 1<<ADS1015_MODE) >> ADS1015_MODE;
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & 1<<ADS1015_MODE) >> ADS1015_MODE;
 }
 
 void ADS1015::setRate(byte b_rate) {
@@ -254,7 +235,9 @@ void ADS1015::setRate(byte b_rate) {
    *    ADS1015_RATE_2400 : 2400 SPS
    *    ADS1015_RATE_3300 : 3300 SPS
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+  
   bool b2 = readBit(b_rate, 2);
   bool b1 = readBit(b_rate, 1);
   bool b0 = readBit(b_rate, 0);
@@ -263,7 +246,7 @@ void ADS1015::setRate(byte b_rate) {
   writeBit(iConfigReg, ADS1015_DR1, b1);
   writeBit(iConfigReg, ADS1015_DR0, b0);
 
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 }
 
 
@@ -279,7 +262,10 @@ byte ADS1015::getRate() {
    *    0b101 : 2400 SPS
    *    0b110 : 3300 SPS
   */
-  return (read16(ADS1015_CONFIG_REG) & 0b111<<ADS1015_DR0) >> ADS1015_DR0;
+
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & 0b111<<ADS1015_DR0) >> ADS1015_DR0;
 }
 
 
@@ -290,9 +276,11 @@ void ADS1015::setCompMode(bool b_mode) {
    *    ADS1015_CMP_MODE_TRADITIONAL  : Traditional comparator (default)
    *    ADS1015_CMP_MODE_WINDOW       : Window comparator
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+  
   writeBit(iConfigReg, ADS1015_CMP_MDE, b_mode);
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 }
 
 
@@ -303,7 +291,10 @@ byte ADS1015::getCompMode() {
    *    0  : Traditional comparator (default)
    *    1  : Window comparator
   */
-  return (read16(ADS1015_CONFIG_REG) & 1<<ADS1015_CMP_MDE) >> ADS1015_CMP_MDE;
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & 1<<ADS1015_CMP_MDE) >> ADS1015_CMP_MDE;
 }
 
 
@@ -314,9 +305,11 @@ void ADS1015::setCompPolarity(bool b_polarity) {
    *    ADS1015_CMP_POL_ACTIVE_LOW  : Active low (default)
    *    ADS1015_CMP_POL_ACTIVE_HIGH : Active high
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
   writeBit(iConfigReg, ADS1015_CMP_POL, b_polarity);
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 }
 
 
@@ -327,7 +320,10 @@ byte ADS1015::getCompPolarity() {
    *    0  : Active low (default)
    *    1  : Active high
   */
-  return (read16(ADS1015_CONFIG_REG) & (1<<ADS1015_CMP_POL)) >> ADS1015_CMP_POL;
+
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & (1<<ADS1015_CMP_POL)) >> ADS1015_CMP_POL;
 }
 
 void ADS1015::setCompLatchingMode(bool b_mode) {
@@ -341,9 +337,11 @@ void ADS1015::setCompLatchingMode(bool b_mode) {
    *                                 The device responds with its address, and it is the lowest address currently asserting the 
    *                                 ALERT/RDY bus line.
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
   writeBit(iConfigReg, ADS1015_CMP_LAT, b_mode);
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 }
 
 
@@ -358,7 +356,10 @@ byte ADS1015::getCompLatchingMode() {
    *        The device responds with its address, and it is the lowest address currently asserting the 
    *        ALERT/RDY bus line.
   */
-  return (read16(ADS1015_CONFIG_REG) & (1<<ADS1015_CMP_LAT)) >> ADS1015_CMP_LAT;
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & (1<<ADS1015_CMP_LAT)) >> ADS1015_CMP_LAT;
 }
 
 
@@ -373,14 +374,16 @@ void ADS1015::setCompQueueMode(byte b_mode) {
    *    ADS1015_CMP_QUE_ASSERT_4_CONV : Assert after four conversions
    *    ADS1015_CMP_DISABLE           : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
-  iConfigReg = read16(ADS1015_CONFIG_REG);
+  
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+  
   bool b1 = readBit(b_mode, 1);
   bool b0 = readBit(b_mode, 0);
 
   writeBit(iConfigReg, ADS1015_CMP_QUE1, b1);
   writeBit(iConfigReg, ADS1015_CMP_QUE0, b0);
 
-  write16(ADS1015_CONFIG_REG, iConfigReg);
+  i2c_write_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
 }
 
 
@@ -395,7 +398,10 @@ byte ADS1015::getCompQueueMode() {
    *    0b10 : Assert after four conversions
    *    0b11 : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
-  return (read16(ADS1015_CONFIG_REG) & (0b11<<ADS1015_CMP_QUE0)>>ADS1015_CMP_QUE0);
+
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg);
+
+  return (iConfigReg & (0b11<<ADS1015_CMP_QUE0)>>ADS1015_CMP_QUE0);
 }
 
 
@@ -406,9 +412,11 @@ void ADS1015::setCompLowThreshBit(bool b_value, int i_bit_num){
    * @param b_value: value for the low threshold register
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
-  iLowThreshReg = read16(ADS1015_LOW_THRESH_REG);
+
+  i2c_read_16(ADS1015_LOW_THRESH_REG, (uint8_t *)&iLowThreshReg);
+
   writeBit(iLowThreshReg, i_bit_num, b_value);
-  write16(ADS1015_LOW_THRESH_REG, iLowThreshReg);
+  i2c_write_16(ADS1015_LOW_THRESH_REG, (uint8_t *)&iLowThreshReg);
 }
 
 byte ADS1015::getCompLowThreshBit(int i_bit_num){
@@ -418,12 +426,12 @@ byte ADS1015::getCompLowThreshBit(int i_bit_num){
    * @param i_bit_num: bit number to read, LSF bit is 0
    * @return bit value on i_bit_num
   */
-  iLowThreshReg = read16(ADS1015_LOW_THRESH_REG);
-  readBit(iLowThreshReg, i_bit_num);
-  return iLowThreshReg;
+
+  i2c_read_16(ADS1015_LOW_THRESH_REG, (uint8_t *)&iLowThreshReg);
+  return readBit(iLowThreshReg, i_bit_num);
 }
 
-
+// TODO: Continue here
 void ADS1015::setCompHighThreshBit(bool b_value, int i_bit_num){
   /**
    * Set the higher threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore, 
@@ -431,9 +439,10 @@ void ADS1015::setCompHighThreshBit(bool b_value, int i_bit_num){
    * @param b_value: value for the high threshold register
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
-  iHighThreshReg = read16(ADS1015_HIGH_THRESH_REG);
+
+  i2c_read_16(ADS1015_HIGH_THRESH_REG, (uint8_t *)&iHighThreshReg);
   writeBit(iHighThreshReg, i_bit_num, b_value);
-  write16(ADS1015_HIGH_THRESH_REG, iHighThreshReg);
+  i2c_write_16(ADS1015_HIGH_THRESH_REG, (uint8_t *)&iHighThreshReg);
 }
 
 byte ADS1015::getCompHighThreshBit(int i_bit_num){
@@ -443,9 +452,9 @@ byte ADS1015::getCompHighThreshBit(int i_bit_num){
    * @param i_bit_num: bit number to read, LSF bit is 0
    * @return bit value on i_bit_num
   */
-  iHighThreshReg = read16(ADS1015_HIGH_THRESH_REG);
-  readBit(iHighThreshReg, i_bit_num);
-  return iHighThreshReg;
+  
+  i2c_read_16(ADS1015_HIGH_THRESH_REG, (uint8_t *)&iHighThreshReg);
+  return readBit(iHighThreshReg, i_bit_num);
 }
 
 
@@ -475,8 +484,8 @@ bool ADS1015::getPinRdyMode() {
   */
   byte b_cmp_queue_mode = getCompQueueMode();
 
-  iLowThreshReg = read16(ADS1015_LOW_THRESH_REG);
-  iHighThreshReg = read16(ADS1015_HIGH_THRESH_REG);
+  i2c_read_16(ADS1015_LOW_THRESH_REG, (uint8_t *)&iLowThreshReg);
+  i2c_read_16(ADS1015_HIGH_THRESH_REG, (uint8_t *)&iHighThreshReg);
 
   if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1015_CMP_DISABLE)) {
     return true;
@@ -513,10 +522,11 @@ void ADS1015::readConversionRegister() {
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1015
    * 4 LSBs are ignored, because Comparator only returns 10bit.
   */ 
-  
+  uint16_t i_conv_value;
   _iBuffCnt = (_iBuffCnt+1) % ADS1015_CONV_BUF_SIZE;
   _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt);
-  _ptrConvBuff[_iBuffCnt] = read16(ADS1015_CONVERSION_REG) >> 4;
+  i2c_read_16(ADS1015_CONVERSION_REG, (uint8_t *)&i_conv_value);
+  _ptrConvBuff[_iBuffCnt] = (int16_t)i_conv_value >> 4;
 }
 
 
@@ -637,42 +647,63 @@ void ADS1015::printConfigReg() {
   /**
    * Dump Config register to Serial output
   */
+  uint16_t i_config_reg;
   Serial.print("ADS1015 Conf.Reg.: ");
-  iConfigReg = read16(ADS1015_CONFIG_REG);
-  Serial.println(iConfigReg, BIN);
+  i2c_read_16(ADS1015_CONFIG_REG, (uint8_t *)&i_config_reg);
+  Serial.println(i_config_reg, BIN);
 }
 
 
-void ADS1015::write16(byte reg, uint16_t val) {
-  byte _reg = reg;
+void ADS1015::i2c_read_16(uint8_t i2c_reg, uint8_t* data_rd)
+{
+    // Link i2c ressource
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    // Change address register pointer of ADS
+    // Put Start command in queue
+    i2c_master_start(cmd);
+    // Initiate communication with start address and indicating read request, no Acknoledgement
+    i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
+    // specify register to read out, Acknoledgement expected
+    i2c_master_write_byte(cmd, i2c_reg, I2C_MASTER_ACK);
+    i2c_master_stop(cmd);
 
-  _objI2C->beginTransmission(_iI2cAddress);
-  _objI2C->write(_reg);
-  _objI2C->write((byte)highByte(val));
-  _objI2C->write((byte)lowByte(val));
-  _objI2C->endTransmission();
+    // Read out register
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_READ, I2C_MASTER_NACK);
+
+    // Read MSB from ADS1015 and acknowledge it
+    i2c_master_read(cmd, data_rd, 2, I2C_MASTER_ACK);
+    // Put Stop command in queue
+    i2c_master_stop(cmd);
+
+    // Execute all queued commands, 25ms timeout according Datasheet
+    esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 25 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
 }
 
+void ADS1015::i2c_write_16(uint8_t i2c_reg, uint8_t* data_write)
+{
+    // Link i2c ressource
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 
-int16_t ADS1015::read16(byte reg) {
-  byte _reg = reg;
-  byte hByte, lByte;
-  int16_t i_conv;
-  String str_conv;
+    // Change address register pointer of ADS
+    // Put Start command in queue
+    i2c_master_start(cmd);
+    // Initiate communication with start address and indicating read request, no Acknoledgement
+    i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
+    // specify register to read out, Acknoledgement expected
+    i2c_master_write_byte(cmd, i2c_reg, I2C_MASTER_ACK);
+    
+    // Write to address register
+    i2c_master_start(cmd);
+    // Write MSB from ADS1015 and acknowledge it
+    i2c_master_write(cmd, data_write, 2, I2C_MASTER_ACK);
+    // Put Stop command in queue
+    i2c_master_stop(cmd);
 
-  _objI2C->beginTransmission(_iI2cAddress);
-  _objI2C->write(_reg);
-  _objI2C->endTransmission();
-  delay(1);
-  _objI2C->requestFrom((int)_iI2cAddress, 2);
-  if (_objI2C->available())
-  {
-    hByte = _objI2C->read();
-    lByte = _objI2C->read();
-
-    i_conv = (hByte << 8) | lByte;
-  }
-  return i_conv;
+    // Execute all queued commands, 25ms timeout according Datasheet
+    esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 25 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
 }
 
 

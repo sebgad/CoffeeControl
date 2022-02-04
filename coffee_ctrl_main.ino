@@ -16,7 +16,6 @@
 #include "ADS1015.h"
 #include "PidCtrl.h"
 #include "WifiAccess.h"
-#include <Wire.h>
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
 #include <Update.h>
@@ -117,8 +116,7 @@ const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
 const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 
 // Initialize ADS1015 I2C connection
-TwoWire objI2cBus = TwoWire(0);
-ADS1015 objADS1015(&objI2cBus);
+ADS1015 objADS1015;
 
 // timer object for ISR
 hw_timer_t * objTimerLong = NULL;

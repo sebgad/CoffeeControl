@@ -4,7 +4,9 @@
 #ifndef ADS1015_h
 #define ADS1015_h
 
-#include <Wire.h>
+#include "driver/i2c.h"
+
+#define ADS1015_I2C_PORT_NUM I2C_NUM_1 // I2C port number
 
 #define ADS1015_I2CADD_DEFAULT  0x48 //ADDR-Pin on GND
 #define ADS1015_I2CADD_ADDR_VDD 0x49 //ADDR-Pin on VDD
@@ -105,7 +107,7 @@
 class ADS1015
 {
   public:
-    ADS1015(TwoWire*);
+    ADS1015();
     bool begin(void);
     bool begin(uint8_t);
     bool begin(int, int);
@@ -155,7 +157,7 @@ class ADS1015
     int _iSdaPin;
     int _iSclPin;
     uint8_t _iI2cAddress;
-    TwoWire * _objI2C;
+    uint8_t _iI2cRegPointer;
     float ** _ptrConvTable;
     size_t _iSizeConvTable;
     int _iConvMethod;
@@ -163,8 +165,9 @@ class ADS1015
     uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
-    int16_t read16(byte);
-    void write16(byte, uint16_t);
+    void _initI2c();
+    void i2c_write_16(uint8_t, uint8_t*);
+    void i2c_read_16(uint8_t, uint8_t*);
     void initConvTable(size_t);
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
