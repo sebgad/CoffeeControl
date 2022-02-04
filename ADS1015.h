@@ -165,7 +165,7 @@ class ADS1015
     uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
-    void _initI2c();
+    static esp_err_t i2c_master_init();
     void i2c_write_16(uint8_t, uint8_t*);
     void i2c_read_16(uint8_t, uint8_t*);
     void initConvTable(size_t);

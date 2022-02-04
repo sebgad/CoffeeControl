@@ -14,12 +14,22 @@ ADS1015::ADS1015() {
 bool ADS1015::begin() {
   bool b_success = true;
   _iI2cAddress = ADS1015_I2CADD_DEFAULT;
+  if (i2c_master_init() == ESP_OK){
+    b_success = true;
+  } else{
+    b_success = false;
+  }
   return b_success;
 }
 
 bool ADS1015::begin(uint8_t i_i2c_address) {
   bool b_success = true;
   _iI2cAddress  = i_i2c_address;
+  if (i2c_master_init() == ESP_OK){
+    b_success = true;
+  } else{
+    b_success = false;
+  }
   return b_success;
 }
 
@@ -28,6 +38,11 @@ bool ADS1015::begin(int i_sda_pin, int i_scl_pin) {
   _iSdaPin = i_sda_pin;
   _iSclPin = i_scl_pin;
   _iI2cAddress = ADS1015_I2CADD_DEFAULT;
+  if (i2c_master_init() == ESP_OK){
+    b_success = true;
+  } else{
+    b_success = false;
+  }
   return b_success;
 }
 
@@ -36,6 +51,11 @@ bool ADS1015::begin(int i_sda, int i_scl, uint8_t i_i2c_address) {
   _iI2cAddress  = i_i2c_address;
   _iSdaPin = i_sda;
   _iSclPin = i_scl;
+  if (i2c_master_init() == ESP_OK){
+    b_success = true;
+  } else{
+    b_success = false;
+  }
   return b_success;
 }
 
@@ -654,56 +674,76 @@ void ADS1015::printConfigReg() {
 }
 
 
+static esp_err_t ADS1015::i2c_master_init(void)
+{
+  int i2c_master_port = I2C_NUM_0;
+
+  i2c_config_t conf;
+    
+  conf.mode = I2C_MODE_MASTER;
+  conf.sda_io_num = 23;
+  conf.scl_io_num = 22;
+  conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+  conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+  conf.master.clk_speed = 400000;
+  conf.clk_flags = 0;
+
+  i2c_param_config(i2c_master_port, &conf);
+
+  return i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
+}
+
+
 void ADS1015::i2c_read_16(uint8_t i2c_reg, uint8_t* data_rd)
 {
-    // Link i2c ressource
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    // Change address register pointer of ADS
-    // Put Start command in queue
-    i2c_master_start(cmd);
-    // Initiate communication with start address and indicating read request, no Acknoledgement
-    i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
-    // specify register to read out, Acknoledgement expected
-    i2c_master_write_byte(cmd, i2c_reg, I2C_MASTER_ACK);
-    i2c_master_stop(cmd);
+  // Link i2c ressource
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  // Change address register pointer of ADS
+  // Put Start command in queue
+  i2c_master_start(cmd);
+  // Initiate communication with start address and indicating read request, no Acknoledgement
+  i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
+  // specify register to read out, Acknoledgement expected
+  i2c_master_write_byte(cmd, i2c_reg, I2C_MASTER_ACK);
+  i2c_master_stop(cmd);
 
-    // Read out register
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_READ, I2C_MASTER_NACK);
+  // Read out register
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_READ, I2C_MASTER_NACK);
 
-    // Read MSB from ADS1015 and acknowledge it
-    i2c_master_read(cmd, data_rd, 2, I2C_MASTER_ACK);
-    // Put Stop command in queue
-    i2c_master_stop(cmd);
+  // Read MSB from ADS1015 and acknowledge it
+  i2c_master_read(cmd, data_rd, 2, I2C_MASTER_ACK);
+  // Put Stop command in queue
+  i2c_master_stop(cmd);
 
-    // Execute all queued commands, 25ms timeout according Datasheet
-    esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 25 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
+  // Execute all queued commands, 25ms timeout according Datasheet
+  esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 25 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(cmd);
 }
 
 void ADS1015::i2c_write_16(uint8_t i2c_reg, uint8_t* data_write)
 {
-    // Link i2c ressource
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  // Link i2c ressource
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 
-    // Change address register pointer of ADS
-    // Put Start command in queue
-    i2c_master_start(cmd);
-    // Initiate communication with start address and indicating read request, no Acknoledgement
-    i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
-    // specify register to read out, Acknoledgement expected
-    i2c_master_write_byte(cmd, i2c_reg, I2C_MASTER_ACK);
-    
-    // Write to address register
-    i2c_master_start(cmd);
-    // Write MSB from ADS1015 and acknowledge it
-    i2c_master_write(cmd, data_write, 2, I2C_MASTER_ACK);
-    // Put Stop command in queue
-    i2c_master_stop(cmd);
+  // Change address register pointer of ADS
+  // Put Start command in queue
+  i2c_master_start(cmd);
+  // Initiate communication with start address and indicating read request, no Acknoledgement
+  i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_NACK);
+  // specify register to read out, Acknoledgement expected
+  i2c_master_write_byte(cmd, i2c_reg, I2C_MASTER_ACK);
+  
+  // Write to address register
+  i2c_master_start(cmd);
+  // Write MSB from ADS1015 and acknowledge it
+  i2c_master_write(cmd, data_write, 2, I2C_MASTER_ACK);
+  // Put Stop command in queue
+  i2c_master_stop(cmd);
 
-    // Execute all queued commands, 25ms timeout according Datasheet
-    esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 25 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
+  // Execute all queued commands, 25ms timeout according Datasheet
+  esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 25 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(cmd);
 }
 
 
