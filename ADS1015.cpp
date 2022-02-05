@@ -674,9 +674,10 @@ void ADS1015::printConfigReg() {
 }
 
 
-static esp_err_t ADS1015::i2c_master_init(void)
+esp_err_t ADS1015::i2c_master_init(void)
 {
-  int i2c_master_port = I2C_NUM_0;
+  int i2c_master_port = ADS1015_I2C_PORT_NUM;
+  esp_err_t esp_err;
 
   i2c_config_t conf;
     
@@ -689,8 +690,10 @@ static esp_err_t ADS1015::i2c_master_init(void)
   conf.clk_flags = 0;
 
   i2c_param_config(i2c_master_port, &conf);
-
-  return i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
+  esp_err = i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
+  Serial.print("ESP error: ");
+  Serial.println(esp_err);
+  return esp_err;
 }
 
 
