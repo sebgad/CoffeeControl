@@ -813,7 +813,7 @@ bool configADS1015(){
   objADS1015->setCompLatchingMode(ADS1015_CMP_LAT_ACTIVE);
 
   // assert after one conversion
-  objADS1015->setPinRdyMode(ADS1015_CONV_READY_ACTIVE, ADS1015_CMP_QUE_ASSERT_4_CONV);
+  objADS1015->setPinRdyMode(ADS1015_CONV_READY_ACTIVE, ADS1015_CMP_QUE_ASSERT_1_CONV);
 
   objADS1015->printConfigReg();
   return true;
@@ -919,13 +919,29 @@ void setup(){
     MDNS.addService("http", "tcp", 80);
   }
 
+    // configure ADS1015
+  if(!configADS1015()) {
+    // TODO add diagnosis when ADS1015 is not connected
+    Serial.println("ADS1015 configuration not successful.");
+  }
+
   // Write Measurement file header
   //if (!bMeasFileLocked){
   //  bMeasFileLocked = true;
     File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
-
+    uint16_t i_config_reg = objADS1015->getRegisterValue(ADS1015_CONFIG_REG);
+    uint16_t i_low_reg = objADS1015->getRegisterValue(ADS1015_LOW_THRESH_REG);
+    uint16_t i_high_reg = objADS1015->getRegisterValue(ADS1015_HIGH_THRESH_REG);
     obj_meas_file.print("Measurement File created on ");
     obj_meas_file.println(char_timestamp);
+    obj_meas_file.println("ADS1015 Register Settings");
+    obj_meas_file.print("Config Register: 0b");
+    obj_meas_file.println(i_config_reg, BIN);
+    obj_meas_file.print("Low Threshold Register: 0b");
+    obj_meas_file.println(i_low_reg, BIN);
+    obj_meas_file.print("High Threshold Register: 0b");
+    obj_meas_file.println(i_high_reg, BIN);
+    
     obj_meas_file.println("");
     obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
     obj_meas_file.close();
@@ -933,12 +949,6 @@ void setup(){
   //} else {
   //  Serial.println("Could not create measurement file due to active Lock");
   //}
-
-  // configure ADS1015
-  if(!configADS1015()) {
-    // TODO add diagnosis when ADS1015 is not connected
-    Serial.println("ADS1015 configuration not successful.");
-  }
 
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
@@ -1009,7 +1019,7 @@ bool writeMeasFile(){
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
     bool b_filter_status = objADS1015->getFilterStatus();
-    unsigned long i_int_count = iInterruptCntAlertCatch;
+    unsigned long i_int_count = iInterruptCntAlert;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   //if (!bMeasFileLocked){

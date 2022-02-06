@@ -145,6 +145,8 @@ class ADS1015
     float getPhysVal(void);
     int getLatestBufVal(void);
     void printConfigReg(void);
+    uint16_t getRegisterValue(uint8_t);
+    void setRegisterValue(uint8_t, uint16_t);
     void setPhysConv(const float, const float);
     void setPhysConv(const float, const float, const float);
     void setPhysConv(const float[][2], size_t);
@@ -152,6 +154,7 @@ class ADS1015
     void deactivateFilter();
     bool getFilterStatus(void);
     bool getConnectionStatus(void);
+    uint16_t iConfigReg;
 
   private:
     int _iSdaPin;
@@ -162,12 +165,11 @@ class ADS1015
     size_t _iSizeConvTable;
     int _iConvMethod;
     float bitNumbering;
-    uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
     esp_err_t i2c_master_init();
-    void i2c_write_16(uint8_t, uint8_t*);
-    void i2c_read_16(uint8_t, uint8_t*);
+    void i2c_write(uint8_t, uint8_t*, size_t);
+    void i2c_read(uint8_t, uint8_t*, size_t);
     void initConvTable(size_t);
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);
