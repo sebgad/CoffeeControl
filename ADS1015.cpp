@@ -678,7 +678,7 @@ uint16_t ADS1015::getRegisterValue(uint8_t i_reg) {
   i2c_master_write_read_device(ADS1015_I2C_PORT_NUM, _iI2cAddress, &i_reg, 1, ptr_data, 2, 50 / portTICK_RATE_MS);
 
   i_ret_value = (uint16_t)(ptr_data[0]<<8) | ptr_data[1];
-  
+
   return i_ret_value;
 }
 

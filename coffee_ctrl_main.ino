@@ -20,6 +20,7 @@
 #include "AsyncJson.h"
 #include <Update.h>
 #include <esp_task_wdt.h>
+#include "ota.h"
 
 // PIN definitions
 
@@ -45,11 +46,7 @@
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
-#define WDT_Timeout 5 // WatchDog Timeout in seconds
-
-// Use Core 1 for Async Webserver
-// #define CONFIG_ASYNC_TCP_RUNNING_CORE 1
-// #define CONFIG_ASYNC_TCP_USE_WDT 1
+#define WDT_Timeout 6 // WatchDog Timeout in seconds
 
 // config structure for online calibration
 struct config {
@@ -104,7 +101,7 @@ config objConfig;
 
 // Sensor variables
 float fTime = 0.F;
-float fTemp = 0.F; // TODO -  need to use double for PID lib
+float fTemp = 0.F;
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -545,6 +542,13 @@ void configWebserver(){
     request->send(LittleFS, "/ota.html");
   });
 
+  // Route for ota web page
+  server.on("/failsafe", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ota_html_gz, ota_html_gz_len);
+    response->addHeader("Content-Encoding", "gzip");
+    request->send(response);
+  });
+
   // Route for stylesheets.css
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/style.css");
@@ -905,7 +909,7 @@ void setup(){
     Serial.println(strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
-    setColor(LED_COLOR_PURPLE, false);   // Purple 
+    setColor(LED_COLOR_PURPLE, false); 
   }
 
   // configure and start webserver
@@ -926,29 +930,23 @@ void setup(){
   }
 
   // Write Measurement file header
-  //if (!bMeasFileLocked){
-  //  bMeasFileLocked = true;
-    File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
-    uint16_t i_config_reg = objADS1015->getRegisterValue(ADS1015_CONFIG_REG);
-    uint16_t i_low_reg = objADS1015->getRegisterValue(ADS1015_LOW_THRESH_REG);
-    uint16_t i_high_reg = objADS1015->getRegisterValue(ADS1015_HIGH_THRESH_REG);
-    obj_meas_file.print("Measurement File created on ");
-    obj_meas_file.println(char_timestamp);
-    obj_meas_file.println("ADS1015 Register Settings");
-    obj_meas_file.print("Config Register: 0b");
-    obj_meas_file.println(i_config_reg, BIN);
-    obj_meas_file.print("Low Threshold Register: 0b");
-    obj_meas_file.println(i_low_reg, BIN);
-    obj_meas_file.print("High Threshold Register: 0b");
-    obj_meas_file.println(i_high_reg, BIN);
-    
-    obj_meas_file.println("");
-    obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
-    obj_meas_file.close();
-  //  bMeasFileLocked = false;
-  //} else {
-  //  Serial.println("Could not create measurement file due to active Lock");
-  //}
+  File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
+  uint16_t i_config_reg = objADS1015->getRegisterValue(ADS1015_CONFIG_REG);
+  uint16_t i_low_reg = objADS1015->getRegisterValue(ADS1015_LOW_THRESH_REG);
+  uint16_t i_high_reg = objADS1015->getRegisterValue(ADS1015_HIGH_THRESH_REG);
+  obj_meas_file.print("Measurement File created on ");
+  obj_meas_file.println(char_timestamp);
+  obj_meas_file.println("ADS1015 Register Settings");
+  obj_meas_file.print("Config Register: 0b");
+  obj_meas_file.println(i_config_reg, BIN);
+  obj_meas_file.print("Low Threshold Register: 0b");
+  obj_meas_file.println(i_low_reg, BIN);
+  obj_meas_file.print("High Threshold Register: 0b");
+  obj_meas_file.println(i_high_reg, BIN);
+  
+  obj_meas_file.println("");
+  obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
+  obj_meas_file.close();
 
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
@@ -969,8 +967,8 @@ void setup(){
   iTimeStart = millis();
 
   // Enable Hardware Watchdog with Kernel panic reaction
-  //esp_task_wdt_init(WDT_Timeout, true);
-  //esp_task_wdt_add(NULL); // add current thread to watchdog
+  esp_task_wdt_init(WDT_Timeout, true);
+  esp_task_wdt_add(NULL); // add current thread to watchdog
 
   // Configure PID library
   configPID();
@@ -1018,26 +1016,20 @@ bool writeMeasFile(){
     float f_temp_local = fTemp;
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
-    bool b_filter_status = objADS1015->getFilterStatus();
-    unsigned long i_int_count = iInterruptCntAlert;
+    unsigned long i_int_count = iInterruptCntAlertCatch;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
-  //if (!bMeasFileLocked){
-  //  bMeasFileLocked = true;
-    File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
-    obj_meas_file.print(f_time, 4);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_local);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_tar_pwm);
-    obj_meas_file.print(",");
-    obj_meas_file.println(i_int_count);
-    obj_meas_file.close();
-    b_success = true;
-  //  bMeasFileLocked = false;
-  //} else {
-  //  b_success = false;
-  //}
+  File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
+  obj_meas_file.print(f_time, 4);
+  obj_meas_file.print(",");
+  obj_meas_file.print(f_temp_local);
+  obj_meas_file.print(",");
+  obj_meas_file.print(f_tar_pwm);
+  obj_meas_file.print(",");
+  obj_meas_file.println(i_int_count);
+  obj_meas_file.close();
+  
+  b_success = true;
   return b_success;
 }// writeMeasFile
 
@@ -1122,7 +1114,7 @@ void loop(){
         portEXIT_CRITICAL_ISR(&objTimerMux);
       }
       // reset watchdog timer every time a sensor value is read
-      //esp_task_wdt_reset();
+      esp_task_wdt_reset();
     }
   }
 
