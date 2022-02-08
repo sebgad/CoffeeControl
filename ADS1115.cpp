@@ -4,9 +4,7 @@
 #include "Arduino.h"
 #include "ADS1115.h"
 
-ADS1115::ADS1115(TwoWire * _obj_i2c) {
-  _objI2C = _obj_i2c;
-  
+ADS1115::ADS1115() {
   // Initialize Conversion buffer
   _ptrConvBuff = new int16_t[ADS1115_CONV_BUF_SIZE];
   _iBuffCnt = 0;
@@ -14,61 +12,49 @@ ADS1115::ADS1115(TwoWire * _obj_i2c) {
 }
 
 bool ADS1115::begin() {
-  bool b_success = false;
+  bool b_success = true;
   _iI2cAddress = ADS1115_I2CADD_DEFAULT;
-  _objI2C->begin(_iI2cAddress);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
+  if (i2c_master_init() == ESP_OK){
     b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
+  } else{
+    b_success = false;
   }
   return b_success;
 }
 
 bool ADS1115::begin(uint8_t i_i2c_address) {
-  bool b_success = false;
+  bool b_success = true;
   _iI2cAddress  = i_i2c_address;
-  _objI2C->begin(_iI2cAddress);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
+  if (i2c_master_init() == ESP_OK){
     b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
+  } else{
+    b_success = false;
   }
   return b_success;
 }
 
 bool ADS1115::begin(int i_sda_pin, int i_scl_pin) {
-  bool b_success = false;
+  bool b_success = true;
+  _iSdaPin = i_sda_pin;
+  _iSclPin = i_scl_pin;
   _iI2cAddress = ADS1115_I2CADD_DEFAULT;
-  _objI2C->begin(i_sda_pin, i_scl_pin);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
+  if (i2c_master_init() == ESP_OK){
     b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
+  } else{
+    b_success = false;
   }
   return b_success;
 }
 
 bool ADS1115::begin(int i_sda, int i_scl, uint8_t i_i2c_address) {
-  bool b_success = false;
+  bool b_success = true;
   _iI2cAddress  = i_i2c_address;
-  _objI2C->begin(_iI2cAddress, i_sda, i_scl, 400000);
-
-  _objI2C->beginTransmission(_iI2cAddress);
-  if (_objI2C->endTransmission()== 0) {
+  _iSdaPin = i_sda;
+  _iSclPin = i_scl;
+  if (i2c_master_init() == ESP_OK){
     b_success = true;
-    _bConnectStatus = true;
-  } else {
-    _bConnectStatus = false;
+  } else{
+    b_success = false;
   }
   return b_success;
 }
@@ -98,9 +84,10 @@ void ADS1115::startSingleShotMeas(bool b_status) {
    * 
   */
   if (b_status) {
-    iConfigReg = read16(ADS1115_CONFIG_REG);
+
+    iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
     bitWrite(iConfigReg, ADS1115_OS, b_status);
-    write16(ADS1115_CONFIG_REG, iConfigReg);
+    setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
   }
   
 };
@@ -110,7 +97,8 @@ bool ADS1115::getOpStatus(void){
    * Get Operational status
    * @return: 0 : Device is currently performing a conversion, 1 : Device is not currently performing a conversion
   */
-  return (read16(ADS1115_CONFIG_REG) & 1<<ADS1115_OS) >> ADS1115_OS;
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & 1<<ADS1115_OS) >> ADS1115_OS;
 }
 
 
@@ -127,7 +115,7 @@ void ADS1115::setMux(byte b_mux) {
    *    ADS1115_MUX_AIN2_GND AINp = AIN2 and AINn = GND
    *    ADS1115_MUX_AIN3_GND AINp = AIN3 and AINn = GND
   */ 
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   bool b2 = readBit(b_mux, 2);
   bool b1 = readBit(b_mux, 1);
   bool b0 = readBit(b_mux, 0);
@@ -136,7 +124,7 @@ void ADS1115::setMux(byte b_mux) {
   writeBit(iConfigReg, ADS1115_MUX1, b1);
   writeBit(iConfigReg, ADS1115_MUX0, b0);
 
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
   delay(ADS1115_DELAY_AFTER_MUX_CHANGE);
 }
 
@@ -153,8 +141,9 @@ byte ADS1115::getMux() {
    *    0b101 AINp = AIN1 and AINn = GND
    *    0b110 AINp = AIN2 and AINn = GND
    *    0b111 AINp = AIN3 and AINn = GND
-  */ 
-  return (read16(ADS1115_CONFIG_REG) & 0b111<<ADS1115_MUX0) >> ADS1115_MUX0;
+  */
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & 0b111<<ADS1115_MUX0) >> ADS1115_MUX0;
 }
 
 
@@ -169,7 +158,9 @@ void ADS1115::setPGA(byte b_gain) {
    *    ADS1115_PGA_0P512 : FSR = +-0.512V
    *    ADS1115_PGA_0P256 : FSR = +-0.256V
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+  
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+
   bool b2 = readBit(b_gain, 2);
   bool b1 = readBit(b_gain, 1);
   bool b0 = readBit(b_gain, 0);
@@ -177,7 +168,8 @@ void ADS1115::setPGA(byte b_gain) {
   writeBit(iConfigReg, ADS1115_PGA2, b2);
   writeBit(iConfigReg, ADS1115_PGA1, b1);
   writeBit(iConfigReg, ADS1115_PGA0, b0);
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 
   switch (b_gain) {
     case ADS1115_PGA_6P144:
@@ -214,7 +206,9 @@ byte ADS1115::getPGA() {
    *    0b100 : FSR = +-0.512V
    *    0b101 : FSR = +-0.256V
   */
-  return (read16(ADS1115_CONFIG_REG) & 0b111<<ADS1115_PGA0) >> ADS1115_PGA0;
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+
+  return (iConfigReg & 0b111<<ADS1115_PGA0) >> ADS1115_PGA0;
 }
 
 
@@ -225,9 +219,11 @@ void ADS1115::setOpMode(bool b_mode) {
    *    ADS1115_MODE_CONTINUOUS : Continuous-conversion mode
    *    ADS1115_MODE_SINGLESHOT : Single-shot mode or power-down state (default)
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+  
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  
   writeBit(iConfigReg, ADS1115_MODE, b_mode);
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -238,7 +234,9 @@ byte ADS1115::getOpMode() {
    *    0 : Continuous-conversion mode
    *    1 : Single-shot mode or power-down state (default)
   */
-  return (read16(ADS1115_CONFIG_REG) & 1<<ADS1115_MODE) >> ADS1115_MODE;
+  
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & 1<<ADS1115_MODE) >> ADS1115_MODE;
 }
 
 void ADS1115::setRate(byte b_rate) {
@@ -254,7 +252,9 @@ void ADS1115::setRate(byte b_rate) {
    *    ADS1115_RATE_475  : 475 SPS
    *    ADS1115_RATE_860  : 860 SPS
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  
   bool b2 = readBit(b_rate, 2);
   bool b1 = readBit(b_rate, 1);
   bool b0 = readBit(b_rate, 0);
@@ -263,7 +263,7 @@ void ADS1115::setRate(byte b_rate) {
   writeBit(iConfigReg, ADS1115_DR1, b1);
   writeBit(iConfigReg, ADS1115_DR0, b0);
 
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -280,7 +280,9 @@ byte ADS1115::getRate() {
    *    0b110 : 475 SPS
    *    0b111 : 860 SPS
   */
-  return (read16(ADS1115_CONFIG_REG) & 0b111<<ADS1115_DR0) >> ADS1115_DR0;
+
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & 0b111<<ADS1115_DR0) >> ADS1115_DR0;
 }
 
 
@@ -291,9 +293,10 @@ void ADS1115::setCompMode(bool b_mode) {
    *    ADS1115_CMP_MODE_TRADITIONAL  : Traditional comparator (default)
    *    ADS1115_CMP_MODE_WINDOW       : Window comparator
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  
   writeBit(iConfigReg, ADS1115_CMP_MDE, b_mode);
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -304,7 +307,9 @@ byte ADS1115::getCompMode() {
    *    0  : Traditional comparator (default)
    *    1  : Window comparator
   */
-  return (read16(ADS1115_CONFIG_REG) & 1<<ADS1115_CMP_MDE) >> ADS1115_CMP_MDE;
+  
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & 1<<ADS1115_CMP_MDE) >> ADS1115_CMP_MDE;
 }
 
 
@@ -315,9 +320,11 @@ void ADS1115::setCompPolarity(bool b_polarity) {
    *    ADS1115_CMP_POL_ACTIVE_LOW  : Active low (default)
    *    ADS1115_CMP_POL_ACTIVE_HIGH : Active high
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+
   writeBit(iConfigReg, ADS1115_CMP_POL, b_polarity);
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -328,7 +335,9 @@ byte ADS1115::getCompPolarity() {
    *    0  : Active low (default)
    *    1  : Active high
   */
-  return (read16(ADS1115_CONFIG_REG) & (1<<ADS1115_CMP_POL)) >> ADS1115_CMP_POL;
+
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & (1<<ADS1115_CMP_POL)) >> ADS1115_CMP_POL;
 }
 
 void ADS1115::setCompLatchingMode(bool b_mode) {
@@ -342,9 +351,11 @@ void ADS1115::setCompLatchingMode(bool b_mode) {
    *                                 The device responds with its address, and it is the lowest address currently asserting the 
    *                                 ALERT/RDY bus line.
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+
   writeBit(iConfigReg, ADS1115_CMP_LAT, b_mode);
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -359,7 +370,9 @@ byte ADS1115::getCompLatchingMode() {
    *        The device responds with its address, and it is the lowest address currently asserting the 
    *        ALERT/RDY bus line.
   */
-  return (read16(ADS1115_CONFIG_REG) & (1<<ADS1115_CMP_LAT)) >> ADS1115_CMP_LAT;
+  
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & (1<<ADS1115_CMP_LAT)) >> ADS1115_CMP_LAT;
 }
 
 
@@ -374,14 +387,15 @@ void ADS1115::setCompQueueMode(byte b_mode) {
    *    ADS1115_CMP_QUE_ASSERT_4_CONV : Assert after four conversions
    *    ADS1115_CMP_DISABLE           : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+  
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   bool b1 = readBit(b_mode, 1);
   bool b0 = readBit(b_mode, 0);
 
   writeBit(iConfigReg, ADS1115_CMP_QUE1, b1);
   writeBit(iConfigReg, ADS1115_CMP_QUE0, b0);
 
-  write16(ADS1115_CONFIG_REG, iConfigReg);
+  setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
@@ -396,7 +410,9 @@ byte ADS1115::getCompQueueMode() {
    *    0b10 : Assert after four conversions
    *    0b11 : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
-  return (read16(ADS1115_CONFIG_REG) & (0b11<<ADS1115_CMP_QUE0)>>ADS1115_CMP_QUE0);
+
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
+  return (iConfigReg & (0b11<<ADS1115_CMP_QUE0)>>ADS1115_CMP_QUE0);
 }
 
 
@@ -407,9 +423,11 @@ void ADS1115::setCompLowThreshBit(bool b_value, int i_bit_num){
    * @param b_value: value for the low threshold register
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
-  iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
+
+  iLowThreshReg = getRegisterValue(ADS1115_LOW_THRESH_REG);
+
   writeBit(iLowThreshReg, i_bit_num, b_value);
-  write16(ADS1115_LOW_THRESH_REG, iLowThreshReg);
+  setRegisterValue(ADS1115_LOW_THRESH_REG, iLowThreshReg);
 }
 
 byte ADS1115::getCompLowThreshBit(int i_bit_num){
@@ -419,9 +437,9 @@ byte ADS1115::getCompLowThreshBit(int i_bit_num){
    * @param i_bit_num: bit number to read, LSF bit is 0
    * @return bit value on i_bit_num
   */
-  iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
-  readBit(iLowThreshReg, i_bit_num);
-  return iLowThreshReg;
+
+  iLowThreshReg = getRegisterValue(ADS1115_LOW_THRESH_REG);
+  return readBit(iLowThreshReg, i_bit_num);
 }
 
 
@@ -432,9 +450,10 @@ void ADS1115::setCompHighThreshBit(bool b_value, int i_bit_num){
    * @param b_value: value for the high threshold register
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
-  iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
+
+  iHighThreshReg = getRegisterValue(ADS1115_HIGH_THRESH_REG);
   writeBit(iHighThreshReg, i_bit_num, b_value);
-  write16(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
+  setRegisterValue(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
 }
 
 byte ADS1115::getCompHighThreshBit(int i_bit_num){
@@ -444,9 +463,9 @@ byte ADS1115::getCompHighThreshBit(int i_bit_num){
    * @param i_bit_num: bit number to read, LSF bit is 0
    * @return bit value on i_bit_num
   */
-  iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
-  readBit(iHighThreshReg, i_bit_num);
-  return iHighThreshReg;
+  
+  iHighThreshReg = getRegisterValue(ADS1115_HIGH_THRESH_REG);
+  return readBit(iHighThreshReg, i_bit_num);
 }
 
 
@@ -460,9 +479,12 @@ void ADS1115::setPinRdyMode(bool b_activate, byte b_comp_queue_mode){
   */
   
   setCompQueueMode(b_comp_queue_mode);
+
+  iHighThreshReg = 0b1111111111111111;
+  setRegisterValue(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
   
-  setCompLowThreshBit(0, 15);
-  setCompHighThreshBit(1, 15);
+  iLowThreshReg = 0b0000000000000000;
+  setRegisterValue(ADS1115_LOW_THRESH_REG, iLowThreshReg);
 }
 
 
@@ -476,8 +498,8 @@ bool ADS1115::getPinRdyMode() {
   */
   byte b_cmp_queue_mode = getCompQueueMode();
 
-  iLowThreshReg = read16(ADS1115_LOW_THRESH_REG);
-  iHighThreshReg = read16(ADS1115_HIGH_THRESH_REG);
+  iLowThreshReg = getRegisterValue(ADS1115_LOW_THRESH_REG);
+  iHighThreshReg = getRegisterValue(ADS1115_HIGH_THRESH_REG);
 
   if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
     return true;
@@ -516,7 +538,7 @@ void ADS1115::readConversionRegister() {
   
   _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE;
   _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt);
-  _ptrConvBuff[_iBuffCnt] = read16(ADS1115_CONVERSION_REG);
+  _ptrConvBuff[_iBuffCnt] = getRegisterValue(ADS1115_CONVERSION_REG);
 }
 
 
@@ -638,41 +660,87 @@ void ADS1115::printConfigReg() {
    * Dump Config register to Serial output
   */
   Serial.print("ADS1115 Conf.Reg.: ");
-  iConfigReg = read16(ADS1115_CONFIG_REG);
+  iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   Serial.println(iConfigReg, BIN);
 }
 
+uint16_t ADS1115::getRegisterValue(uint8_t i_reg) {
+  /**
+   * @brief Return a specified register value of ADS1115 (only 2 byte register are supported yet.)
+   * 
+   * @param i_reg: Register to be readout
+   */
 
-void ADS1115::write16(byte reg, uint16_t val) {
-  byte _reg = reg;
+  uint8_t ptr_data[2];
+  uint16_t i_ret_value;
 
-  _objI2C->beginTransmission(_iI2cAddress);
-  _objI2C->write(_reg);
-  _objI2C->write((byte)highByte(val));
-  _objI2C->write((byte)lowByte(val));
-  _objI2C->endTransmission();
+  i2c_master_write_read_device(ADS1115_I2C_PORT_NUM, _iI2cAddress, &i_reg, 1, ptr_data, 2, 50 / portTICK_RATE_MS);
+
+  i_ret_value = (uint16_t)(ptr_data[0]<<8) | ptr_data[1];
+
+  return i_ret_value;
 }
 
 
-int16_t ADS1115::read16(byte reg) {
-  byte _reg = reg;
-  byte hByte, lByte;
-  int16_t i_conv;
-  String str_conv;
+void ADS1115::setRegisterValue(uint8_t i_reg, uint16_t i_data) {
+  /**
+   * @brief Return a specified register value of ADS1115 (only 2 byte register are supported yet.)
+   * 
+   * @param i_reg: Register to be readout
+   */
 
-  _objI2C->beginTransmission(_iI2cAddress);
-  _objI2C->write(_reg);
-  _objI2C->endTransmission();
-  delay(1);
-  _objI2C->requestFrom((int)_iI2cAddress, 2);
-  if (_objI2C->available())
-  {
-    hByte = _objI2C->read();
-    lByte = _objI2C->read();
+  uint8_t * ptr_data = new uint8_t[2];
+  
+  ptr_data[0] = lowByte(i_data);
+  ptr_data[1] = highByte(i_data);
+  i2c_write(i_reg, ptr_data, 2);
+}
 
-    i_conv = (hByte << 8) | lByte;
+
+esp_err_t ADS1115::i2c_master_init(void)
+{
+  int i2c_master_port = ADS1115_I2C_PORT_NUM;
+  esp_err_t esp_err;
+
+  i2c_config_t conf;
+    
+  conf.mode = I2C_MODE_MASTER;
+  conf.sda_io_num = _iSdaPin;
+  conf.scl_io_num = _iSclPin;
+  conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+  conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+  conf.master.clk_speed = 400000;
+  conf.clk_flags = 0;
+
+  i2c_param_config(i2c_master_port, &conf);
+  esp_err = i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
+  return esp_err;
+}
+
+
+void ADS1115::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
+{
+  // Link i2c ressource
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+  // Change address register pointer of ADS
+  // Put Start command in queue
+  i2c_master_start(cmd);
+  // Initiate communication with start address and indicating read request, no Acknoledgement
+  i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_ACK);
+  
+  i2c_master_write_byte(cmd, i_reg, I2C_MASTER_ACK);
+  
+  for (int i_step=data_len; i_step>0; i_step--){
+    // Write MSB from ADS1115 and acknowledge it
+    i2c_master_write_byte(cmd, *(data_write + i_step - 1), I2C_MASTER_ACK);
   }
-  return i_conv;
+  // Put Stop command in queue
+  i2c_master_stop(cmd);
+
+  // Execute all queued commands, 100ms timeout
+  esp_err_t ret = i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 100 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(cmd);
 }
 
 

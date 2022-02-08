@@ -4,7 +4,9 @@
 #ifndef ADS1115_h
 #define ADS1115_h
 
-#include <Wire.h>
+#include "driver/i2c.h"
+
+#define ADS1115_I2C_PORT_NUM I2C_NUM_1 // I2C port number
 
 #define ADS1115_I2CADD_DEFAULT  0x48 //ADDR-Pin on GND
 #define ADS1115_I2CADD_ADDR_VDD 0x49 //ADDR-Pin on VDD
@@ -106,7 +108,7 @@
 class ADS1115
 {
   public:
-    ADS1115(TwoWire*);
+    ADS1115();
     bool begin(void);
     bool begin(uint8_t);
     bool begin(int, int);
@@ -144,6 +146,8 @@ class ADS1115
     float getPhysVal(void);
     int getLatestBufVal(void);
     void printConfigReg(void);
+    uint16_t getRegisterValue(uint8_t);
+    void setRegisterValue(uint8_t, uint16_t);
     void setPhysConv(const float, const float);
     void setPhysConv(const float, const float, const float);
     void setPhysConv(const float[][2], size_t);
@@ -151,21 +155,22 @@ class ADS1115
     void deactivateFilter();
     bool getFilterStatus(void);
     bool getConnectionStatus(void);
+    uint16_t iConfigReg;
 
   private:
     int _iSdaPin;
     int _iSclPin;
     uint8_t _iI2cAddress;
-    TwoWire * _objI2C;
+    uint8_t _iI2cRegPointer;
     float ** _ptrConvTable;
     size_t _iSizeConvTable;
     int _iConvMethod;
     float bitNumbering;
-    uint16_t iConfigReg;
     uint16_t iLowThreshReg;
     uint16_t iHighThreshReg;
-    int16_t read16(byte);
-    void write16(byte, uint16_t);
+    esp_err_t i2c_master_init();
+    void i2c_write(uint8_t, uint8_t*, size_t);
+    void i2c_read(uint8_t, uint8_t*, size_t);
     void initConvTable(size_t);
     void writeBit(uint16_t &, int, bool);
     bool readBit(uint16_t, int);

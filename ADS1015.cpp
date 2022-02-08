@@ -1,5 +1,5 @@
 // Code based on Retian (version 1.0)
-// https://arduino-projekte.webnode.at/meine-libraries/adc-ADS1015/
+// https://arduino-projekte.webnode.at/meine-libraries/adc-ads1115/
 
 #include "Arduino.h"
 #include "ADS1015.h"
@@ -320,7 +320,7 @@ void ADS1015::setCompPolarity(bool b_polarity) {
    *    ADS1015_CMP_POL_ACTIVE_LOW  : Active low (default)
    *    ADS1015_CMP_POL_ACTIVE_HIGH : Active high
   */
-  //i2c_read(ADS1015_CONFIG_REG, (uint8_t *)&iConfigReg, 2);
+
   iConfigReg = getRegisterValue(ADS1015_CONFIG_REG);
 
   writeBit(iConfigReg, ADS1015_CMP_POL, b_polarity);
