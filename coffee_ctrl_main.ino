@@ -521,6 +521,11 @@ void configWebserver(){
    * Configure and start asynchronous webserver
    */
 
+  // favicons in LitleFs have to be included in the server 
+  //TODO maybe not static?
+  server.serveStatic("/favicon-32x32.png", LittleFS, "favicon-32x32.png");
+  server.serveStatic("/apple-touch-icon.png", LittleFS, "apple-touch-icon.png");
+
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/index.html");
