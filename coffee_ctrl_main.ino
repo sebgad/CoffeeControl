@@ -86,7 +86,6 @@ struct config {
 // File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
-const int iMaxMeasurements = 10000; // Maximum allowed measurement lines
 const char* strParamFilePath = "/params.json";
 bool bParamFileLocked = false;
 
