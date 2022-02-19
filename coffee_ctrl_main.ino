@@ -8,18 +8,19 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
-#include <SPIFFS.h>
+#include "FS.h"
+#include <LittleFS.h>
 #include <time.h>
 #include <string>
 #include "Pt1000.h"
-#include "ADS1015.h"
+#include "ADS1115.h"
 #include "PidCtrl.h"
 #include "WifiAccess.h"
-#include <Wire.h>
 #include <ArduinoJson.h>
 #include "AsyncJson.h"
 #include <Update.h>
 #include <esp_task_wdt.h>
+#include "ota.h"
 
 // PIN definitions
 
@@ -45,11 +46,7 @@
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
-#define WDT_Timeout 5 // WatchDog Timeout in seconds
-
-// Use Core 1 for Async Webserver
-#define CONFIG_ASYNC_TCP_RUNNING_CORE 1
-#define CONFIG_ASYNC_TCP_USE_WDT 1
+#define WDT_Timeout 6 // WatchDog Timeout in seconds
 
 // config structure for online calibration
 struct config {
@@ -89,7 +86,6 @@ struct config {
 // File paths for measurement and calibration file
 const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
-const int iMaxMeasurements = 10000; // Maximum allowed measurement lines
 const char* strParamFilePath = "/params.json";
 bool bParamFileLocked = false;
 
@@ -104,7 +100,7 @@ config objConfig;
 
 // Sensor variables
 float fTime = 0.F;
-float fTemp = 0.F; // TODO -  need to use double for PID lib
+float fTemp = 0.F;
 
 // bit variable to indicate whether ESP32 has a online connection
 bool bEspOnline = false;
@@ -115,9 +111,8 @@ const char* charNtpServerUrl = "europe.pool.ntp.org";
 const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
 const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
 
-// Initialize ADS1015 I2C connection
-TwoWire objI2cBus = TwoWire(0);
-ADS1015 objADS1015(&objI2cBus);
+// Initialize ADS1115 I2C connection
+ADS1115 *objADS1115 = new ADS1115;
 
 // timer object for ISR
 hw_timer_t * objTimerLong = NULL;
@@ -180,13 +175,13 @@ void IRAM_ATTR onAlertRdy(){
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
     // Define State machine transition and oversampling
-      if (iInterruptCntAlert % 16 == 0) {
+      if (iInterruptCntAlert % 2 == 0) {
         if (iStatusCtrl == IDLE){
           // Only change Status when idle to measurement running
           iStatusCtrl = CONTROL;
           iInterruptCntAlertCatch++;
         }
-      } else if (iInterruptCntAlert % 2 == 0) {
+      } else if (iInterruptCntAlert % 1 == 0) {
         // every second interrupt one measurement shall be performed
         if (iStatusCtrl == IDLE) {
           // Only change Status when idle to measurement running
@@ -236,8 +231,8 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   
   bool b_successful = false;
   
-  WiFi.disconnect(true);
-  delay(100);
+  //WiFi.disconnect(true);
+  //delay(100);
 
   Serial.print("Device ");
   Serial.print(WiFi.macAddress());
@@ -247,18 +242,21 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   delay(100);
 
   int i_run_cnt_fail = 0;
-  int i_wifi_status = WL_IDLE_STATUS;
+  int i_wifi_status;
 
   WiFi.mode(WIFI_STA);
 
   // Connect to WPA/WPA2 network:
   WiFi.begin(objConfig.wifiSSID.c_str(), objConfig.wifiPassword.c_str());
+  i_wifi_status = WiFi.status();
 
   while ((i_wifi_status != WL_CONNECTED) && (i_run_cnt_fail<i_total_fail)) {
     // wait for connection establish
     delay(i_timout_attemp);
     i_run_cnt_fail++;
     i_wifi_status = WiFi.status();
+    Serial.print("Connection Attemp: ");
+    Serial.println(i_run_cnt_fail);
   }
 
   if (i_wifi_status == WL_CONNECTED) {
@@ -296,7 +294,7 @@ void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
     
   Serial.println("Disconnected from WiFi access point");
   Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.disconnected.reason);
+  Serial.println(info.wifi_sta_disconnected.reason);
   Serial.println("Trying to Reconnect");
   connectWiFi(3, 1000);
 } // reconnectWiFi
@@ -311,7 +309,7 @@ bool loadConfiguration(){
   if (!bParamFileLocked){
     // file is not locked by another process ->  save to read or write
     bParamFileLocked = true;
-    File obj_param_file = SPIFFS.open(strParamFilePath, "r");
+    File obj_param_file = LittleFS.open(strParamFilePath, "r");
     StaticJsonDocument<JSON_MEMORY> json_doc;
     DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
@@ -424,7 +422,7 @@ bool saveConfiguration(){
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
-    File obj_param_file = SPIFFS.open(strParamFilePath, "w");
+    File obj_param_file = LittleFS.open(strParamFilePath, "w");
   
     if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
       Serial.println(F("Failed to write configuration to file"));
@@ -523,34 +521,46 @@ void configWebserver(){
    * Configure and start asynchronous webserver
    */
 
+  // favicons in LitleFs have to be included in the server 
+  //TODO maybe not static?
+  server.serveStatic("/favicon-32x32.png", LittleFS, "favicon-32x32.png");
+  server.serveStatic("/apple-touch-icon.png", LittleFS, "apple-touch-icon.png");
+
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html");
+    request->send(LittleFS, "/index.html");
   });
 
   // Route for graphs web page
   server.on("/graphs.html", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/graphs.html");
+    request->send(LittleFS, "/graphs.html");
   });
 
   // Route for settings web page
   server.on("/settings.html", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/settings.html");
+    request->send(LittleFS, "/settings.html");
   });
   
   // Route for ota web page
   server.on("/ota.html", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/ota.html");
+    request->send(LittleFS, "/ota.html");
+  });
+
+  // Route for ota web page
+  server.on("/failsafe", HTTP_GET, [](AsyncWebServerRequest *request){
+    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ota_html_gz, ota_html_gz_len);
+    response->addHeader("Content-Encoding", "gzip");
+    request->send(response);
   });
 
   // Route for stylesheets.css
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/style.css");
+    request->send(LittleFS, "/style.css");
   });
 
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, strMeasFilePath, "text/plain");
+    request->send(LittleFS, strMeasFilePath, "text/plain");
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -574,7 +584,7 @@ void configWebserver(){
 
   // Parameter file, available under http://coffee.local/params.json
   server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, strParamFilePath, "text/plain");
+      request->send(LittleFS, strParamFilePath, "text/plain");
   });
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
@@ -617,9 +627,9 @@ void configWebserver(){
       configLED();
       
       if(objConfig.SigFilterActive){
-        objADS1015.activateFilter();
+        objADS1115->activateFilter();
       } else {
-        objADS1015.deactivateFilter();
+        objADS1115->deactivateFilter();
       }
       
       request->send(200, "text/plain", "Parameters are updated and changes applied.");
@@ -674,7 +684,7 @@ void configWebserver(){
                 return ptr_request->send(400, "text/plain", "MD5 parameter invalid");
               } 
               
-              // MD5 precheck done, creating temp file on spiffs file system
+              // MD5 precheck done, creating temp file on LittleFS file system
               if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
                 // Update cannot be started for reasons
                 Update.printError(Serial);
@@ -719,7 +729,7 @@ void configWebserver(){
           */
           if (!i_index) {
             // open the file on first call and store the file handle in the request object
-            ptr_request->_tempFile = SPIFFS.open("/" + str_filename, "w");
+            ptr_request->_tempFile = LittleFS.open("/" + str_filename, "w");
             Serial.print("Start uploading file: ");
             Serial.println(str_filename);
           }
@@ -749,43 +759,43 @@ void configWebserver(){
 }
 
 
-bool configADS1015(){
+bool configADS1115(){
   /**
-   * Configure Analog digital converter ADS1015
+   * Configure Analog digital converter ADS1115
    */
   
   // Initialize I2c on defined pins with default adress
-  if (!objADS1015.begin(SDA_0, SCL_0, ADS1015_I2CADD_DEFAULT)){
+  if (!objADS1115->begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
     Serial.println("Failed to initialize I2C sensor connection, stop working.");
     return false;
   }
 
   // Set Signal Filter Status
   if(objConfig.SigFilterActive){
-    objADS1015.activateFilter();
+    objADS1115->activateFilter();
   }
 
   // set Comparator Polarity to active high
-  objADS1015.setCompPolarity(ADS1015_CMP_POL_ACTIVE_HIGH);
+  objADS1115->setCompPolarity(ADS1115_CMP_POL_ACTIVE_HIGH);
 
   // set differential voltage: A0-A1
-  objADS1015.setMux(ADS1015_MUX_AIN0_AIN1);
+  objADS1115->setMux(ADS1115_MUX_AIN0_AIN1);
 
   // set data rate (samples per second)
-  objADS1015.setRate(ADS1015_RATE_128);
+  objADS1115->setRate(ADS1115_RATE_8);
 
   // set to continues conversion method
-  objADS1015.setOpMode(ADS1015_MODE_CONTINUOUS);
+  objADS1115->setOpMode(ADS1115_MODE_CONTINUOUS);
 
   #ifdef Pt1000_CONV_LINEAR
-    objADS1015.setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
+    objADS1115->setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
     Serial.print("Applying linear regression function for Pt1000 conversion: ");
     Serial.print(fPt1000LinCoeffX1, 4);
     Serial.print(" * Umess + ");
     Serial.println(fPt1000LinCoeffX0, 4);
   #endif
   #ifdef Pt1000_CONV_SQUARE
-    objADS1015.setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
+    objADS1115->setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
     Serial.print("Applying square regression function for Pt1000 conversion: ");
     Serial.print(fPt1000SquareCoeffX2, 4);
     Serial.print(" * Umess² + ");
@@ -795,7 +805,7 @@ bool configADS1015(){
   #endif
   #ifdef Pt1000_CONV_LOOK_UP_TABLE
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
-    objADS1015.setPhysConv(arrPt1000LookUpTbl, size_1d_map);
+    objADS1115->setPhysConv(arrPt1000LookUpTbl, size_1d_map);
     Serial.println("Applying Lookuptable for Pt1000 conversion:");
     for(int i_row=0; i_row<size_1d_map; i_row++){
       Serial.print(arrPt1000LookUpTbl[i_row][0], 4);
@@ -805,15 +815,15 @@ bool configADS1015(){
   #endif
 
   // set gain amplifier
-  objADS1015.setPGA(ADS1015_PGA_0P256);
+  objADS1115->setPGA(ADS1115_PGA_0P256);
 
   // set latching mode
-  objADS1015.setCompLatchingMode(ADS1015_CMP_LAT_ACTIVE);
+  objADS1115->setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
 
   // assert after one conversion
-  objADS1015.setPinRdyMode(ADS1015_CONV_READY_ACTIVE, ADS1015_CMP_QUE_ASSERT_4_CONV);
+  objADS1115->setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
-  objADS1015.printConfigReg();
+  objADS1115->printConfigReg();
   return true;
 }
 
@@ -823,14 +833,14 @@ void setup(){
   delay(50);
   Serial.println("Starting setup.");
 
-  // initialize SPIFFs and load configuration files
-  if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-      // Initialization of SPIFFS failed, restart it
-      Serial.println("SPIFFS mount Failed, restart ESP");
+  // initialize LittleFS and load configuration files
+  if(!LittleFS.begin(FORMAT_SPIFFS_IF_FAILED)){
+      // Initialization of LittleFS failed, restart it
+      Serial.println("LittleFS mount Failed, restart ESP");
       delay(1000);
       ESP.restart();
   } else {
-    Serial.println("SPIFFS mount successfully.");
+    Serial.println("LittleFS mount successfully.");
     // initialize configuration before load json file
     resetConfiguration(false);
     
@@ -841,15 +851,15 @@ void setup(){
   }
 
   // Initialization successfull, create csv file
-  unsigned int i_total_bytes = SPIFFS.totalBytes();
-  unsigned int i_used_bytes = SPIFFS.usedBytes();
+  unsigned int i_total_bytes = LittleFS.totalBytes();
+  unsigned int i_used_bytes = LittleFS.usedBytes();
 
   Serial.println("File system info:");
-  Serial.print("Total space on SPIFFS: ");
+  Serial.print("Total space on LittleFS: ");
   Serial.print(i_total_bytes);
   Serial.println(" bytes");
 
-  Serial.print("Total space used on SPIFFS: ");
+  Serial.print("Total space used on LittleFS: ");
   Serial.print(i_used_bytes);
   Serial.println(" bytes");
   Serial.println("");
@@ -863,14 +873,15 @@ void setup(){
   setColor(LED_COLOR_WHITE, true); // White
 
   // Connect to wifi and create time stamp if device is Online
-  bEspOnline = connectWiFi();
+  bEspOnline = connectWiFi(3, 3000);
   char char_timestamp[50];
 
   if (bEspOnline == true) {
     // ESP has wifi connection
 
     // Define reconnect action when disconnecting from Wifi
-    WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
+    // ISSUE_PENDING: No corresponding onEvent yet discovered for Core version 2
+    //WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
 
     // initialize NTP client
     configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
@@ -902,7 +913,7 @@ void setup(){
     Serial.println(strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
-    setColor(LED_COLOR_PURPLE, false);   // Purple 
+    setColor(LED_COLOR_PURPLE, false); 
   }
 
   // configure and start webserver
@@ -916,26 +927,30 @@ void setup(){
     MDNS.addService("http", "tcp", 80);
   }
 
-  // Write Measurement file header
-  //if (!bMeasFileLocked){
-  //  bMeasFileLocked = true;
-    File obj_meas_file = SPIFFS.open(strMeasFilePath, "w");
-
-    obj_meas_file.print("Measurement File created on ");
-    obj_meas_file.println(char_timestamp);
-    obj_meas_file.println("");
-    obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
-    obj_meas_file.close();
-  //  bMeasFileLocked = false;
-  //} else {
-  //  Serial.println("Could not create measurement file due to active Lock");
-  //}
-
-  // configure ADS1015
-  if(!configADS1015()) {
-    // TODO add diagnosis when ADS1015 is not connected
-    Serial.println("ADS1015 configuration not successful.");
+    // configure ADS1115
+  if(!configADS1115()) {
+    // TODO add diagnosis when ADS1115 is not connected
+    Serial.println("ADS1115 configuration not successful.");
   }
+
+  // Write Measurement file header
+  File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
+  uint16_t i_config_reg = objADS1115->getRegisterValue(ADS1115_CONFIG_REG);
+  uint16_t i_low_reg = objADS1115->getRegisterValue(ADS1115_LOW_THRESH_REG);
+  uint16_t i_high_reg = objADS1115->getRegisterValue(ADS1115_HIGH_THRESH_REG);
+  obj_meas_file.print("Measurement File created on ");
+  obj_meas_file.println(char_timestamp);
+  obj_meas_file.println("ADS1115 Register Settings");
+  obj_meas_file.print("Config Register: 0b");
+  obj_meas_file.println(i_config_reg, BIN);
+  obj_meas_file.print("Low Threshold Register: 0b");
+  obj_meas_file.println(i_low_reg, BIN);
+  obj_meas_file.print("High Threshold Register: 0b");
+  obj_meas_file.println(i_high_reg, BIN);
+  
+  obj_meas_file.println("");
+  obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
+  obj_meas_file.close();
 
   // Initialize Timer 
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
@@ -973,7 +988,7 @@ boolean readSensors(){
   
   fTime = (float)(millis() - iTimeStart) / 1000.0;
   // get physical value of sensor
-  fTemp = objADS1015.getPhysVal();
+  fTemp = objADS1115->getPhysVal();
 
   b_result = true;
   return b_result;
@@ -1005,26 +1020,20 @@ bool writeMeasFile(){
     float f_temp_local = fTemp;
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
-    bool b_filter_status = objADS1015.getFilterStatus();
     unsigned long i_int_count = iInterruptCntAlertCatch;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
-  //if (!bMeasFileLocked){
-  //  bMeasFileLocked = true;
-    File obj_meas_file = SPIFFS.open(strMeasFilePath, "a");
-    obj_meas_file.print(f_time, 4);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_temp_local);
-    obj_meas_file.print(",");
-    obj_meas_file.print(f_tar_pwm);
-    obj_meas_file.print(",");
-    obj_meas_file.println(i_int_count);
-    obj_meas_file.close();
-    b_success = true;
-  //  bMeasFileLocked = false;
-  //} else {
-  //  b_success = false;
-  //}
+  File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
+  obj_meas_file.print(f_time, 4);
+  obj_meas_file.print(",");
+  obj_meas_file.print(f_temp_local);
+  obj_meas_file.print(",");
+  obj_meas_file.print(f_tar_pwm);
+  obj_meas_file.print(",");
+  obj_meas_file.println(i_int_count);
+  obj_meas_file.close();
+  
+  b_success = true;
   return b_success;
 }// writeMeasFile
 
@@ -1096,7 +1105,7 @@ void loop(){
     // Call sensor read out function
     bool b_result_sensor;
     
-    if(objADS1015.getConnectionStatus()){
+    if(objADS1115->getConnectionStatus()){
       // Only read out sensor if connection status is true
       b_result_sensor = readSensors();
     }
@@ -1114,13 +1123,13 @@ void loop(){
   }
 
   if (iStatusLED == LED_SET) {
-    if(objADS1015.getConnectionStatus()){
-          // only check for frozen values if connection to ADS1015 is successful
-          if(objADS1015.isValueFrozen()){
+    if(objADS1115->getConnectionStatus()){
+          // only check for frozen values if connection to ADS1115 is successful
+          if(objADS1115->isValueFrozen()){
             setColor(LED_COLOR_PURPLE, false);
-            Serial.println("ADS1015 Sensor value frozen");
-            // configure ADS1015 again
-            //configADS1015(); // error occured reconfigure ADC?
+            Serial.println("ADS1115 Sensor value frozen");
+            // configure ADS1115 again
+            //configADS1115(); // error occured reconfigure ADC?
 
           }
           else{
@@ -1139,7 +1148,7 @@ void loop(){
               setColor(LED_COLOR_GREEN, true); 
             }
           }
-        }// if objADS1015.getConnectionStatus()
+        }// if objADS1115->getConnectionStatus()
 
     portENTER_CRITICAL_ISR(&objTimerMux);
       iStatusLED = LED_IDLE;
@@ -1168,4 +1177,3 @@ void loop(){
     }
   }
 }// loop
-

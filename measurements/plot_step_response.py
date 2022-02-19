@@ -80,6 +80,13 @@ for f_temp in df_all['Temperature']:
 df_all['TempMean4']=l_temp_filt4
 df_all['TempMean8']=l_temp_filt8
 
+# matlab expects a step in target PWM
+df_all = pd.concat([df_all.iloc[:1], df_all], ignore_index=True)
+df_all['TargetPWM'][0] = 0
+df_all['TimeShifted'][0] = 0
+df_all['Time'][0] = 0
+df_all.to_csv("20220105_TS_step_17_pwm_combined.csv")
+
 df_all.plot(y='Temperature',x='TimeShifted', legend=False, ax=ax, label="Temp", color= 'tab:blue')
 df_all.plot(y='TempMean4',x='TimeShifted', legend=False, ax=ax, label="Temp", color= 'tab:red')
 df_all.plot(y='TempMean8',x='TimeShifted', legend=False, ax=ax, label="Temp", color= 'tab:purple')
