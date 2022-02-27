@@ -268,7 +268,7 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
       Serial.println(WiFi.localIP());
       // Signal strength and approximate conversion to percentage
       int i_dBm = WiFi.RSSI();
-      calcWifiStreng(i_dBm);
+      calcWifiStrength(i_dBm);
       /*if (i_dBm>=-50) {
         iDbmPercentage = 100;
       } else if (i_dBm<=-100) {
@@ -302,7 +302,7 @@ void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
   connectWiFi(3, 1000);
 } // reconnectWiFi
 
-void calcWifiStreng(int i_dBm){
+void calcWifiStrength(int i_dBm){
   /**
    * calculate the wifi strength from dB to % 
    */
@@ -1010,10 +1010,11 @@ boolean readSensors(){
   // get physical value of sensor
   fTemp = objADS1115->getPhysVal();
   
-  if (bEspOnline == true) {
-    int i_dBm = WiFi.RSSI();
-    calcWifiStreng(i_dBm);
-  }
+  // ISSUE PENDING: WiFi.RSSI() is delaying code execution.
+  //if (bEspOnline == true) {
+  //  int i_dBm = WiFi.RSSI();
+  //  calcWifiStrength(i_dBm);
+  //}
 
   b_result = true;
   return b_result;
@@ -1046,8 +1047,14 @@ bool writeMeasFile(){
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
     unsigned long i_int_count = iInterruptCntAlertCatch;
+    // get conversion buffer as pointer
     int16_t * ptr_conv_buff  = objADS1115->getBuffer();
+    // get buffer size
     int i_abs_buff_size  = objADS1115->getAbsBufSize();
+    // deep copy of conversion buffer
+    int16_t * ptr_conv_buff_cpy = new int16_t[i_abs_buff_size];
+    for (int i_elem=0; i_elem<i_abs_buff_size; i_elem++){ptr_conv_buff_cpy[i_elem] = *(ptr_conv_buff+i_elem);}
+
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
@@ -1058,15 +1065,19 @@ bool writeMeasFile(){
   obj_meas_file.print(f_tar_pwm);
   obj_meas_file.print(",");
 
-  for (int16_t i_val=0; i_val<i_abs_buff_size; i_val++){
-    obj_meas_file.print(ptr_conv_buff[i_val]); // print the buffer in the report
-    obj_meas_file.print(" ");
+  for (int i_val=0; i_val<i_abs_buff_size; i_val++){
+    obj_meas_file.print(ptr_conv_buff_cpy[i_val]); // print the buffer in the report
+    if (i_val<i_abs_buff_size-1){
+      obj_meas_file.print(" ");
+    }
   }
 
   obj_meas_file.print(",");
   obj_meas_file.println(i_int_count);
   obj_meas_file.close();
   
+  // memory release of deepcopy
+  delete[] ptr_conv_buff_cpy;
   b_success = true;
   return b_success;
 }// writeMeasFile
