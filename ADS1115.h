@@ -154,6 +154,8 @@ class ADS1115
     void activateFilter();
     void deactivateFilter();
     bool getFilterStatus(void);
+    int getAbsBufSize(void);
+    int16_t* getBuffer(void);
     bool getConnectionStatus(void);
     uint16_t iConfigReg;
 

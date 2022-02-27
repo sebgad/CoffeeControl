@@ -7,8 +7,10 @@
 ADS1115::ADS1115() {
   // Initialize Conversion buffer
   _ptrConvBuff = new int16_t[ADS1115_CONV_BUF_SIZE];
-  _iBuffCnt = 0;
+  _iBuffCnt = -1;
   _iBuffMaxFillIndex = 0;
+
+  for (int i_elem=0; i_elem<ADS1115_CONV_BUF_SIZE; i_elem++){_ptrConvBuff[i_elem]=0;}
 }
 
 bool ADS1115::begin() {
@@ -536,8 +538,8 @@ void ADS1115::readConversionRegister() {
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
   */ 
   
-  _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE;
-  _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt);
+  _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE; // ring buffer
+  _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt); // get fill index of filter. Used for error detection or filter selsction
   _ptrConvBuff[_iBuffCnt] = getRegisterValue(ADS1115_CONVERSION_REG);
 }
 
@@ -559,7 +561,12 @@ int ADS1115::getLatestBufVal(){
    * @brief Get latest buffer value / latest conversion (unfiltered raw value)
    * 
    */
-  return (int)_ptrConvBuff[_iBuffCnt];
+  if (_iBuffCnt>=0){
+    return (int)_ptrConvBuff[_iBuffCnt];
+  }
+  else{
+    return 0;
+  }
 }
 
 
@@ -769,7 +776,7 @@ void ADS1115::activateFilter(){
    */
 
   _bFilterActive = true;
-  _iBuffMaxFillIndex=0;
+  //_iBuffMaxFillIndex=0;
 
   if (ADS1115_CONV_BUF_SIZE == 5){
       _ptrFilterCoeff = new float[5];
@@ -844,6 +851,24 @@ bool ADS1115::getFilterStatus(){
   return _bFilterActive;
 }
 
+int ADS1115::getAbsBufSize(){
+  /**
+   * @brief get the absolute buffer size of the filter
+   * 
+   */
+
+  return (int)ADS1115_CONV_BUF_SIZE;
+}
+
+int16_t* ADS1115::getBuffer(){
+  /**
+   * @brief get the pointer to the buffer
+   * 
+   */
+
+  return _ptrConvBuff;
+}
+
 
 float ADS1115::_getSavGolFilterVal(){
   /**
@@ -872,11 +897,12 @@ float ADS1115::_getAvgFilterVal(){
 
   float f_filter_value = 0.0F;
 
-  for (int i_row=0; i_row<ADS1115_CONV_BUF_SIZE; i_row++){
+  // when the filter is fully filled _iBuffMaxFillIndex is 1 below the filter size
+  for (int i_row=0; i_row<=_iBuffMaxFillIndex; i_row++){
     f_filter_value += _ptrConvBuff[i_row];
   }
 
-  f_filter_value /= (float)ADS1115_CONV_BUF_SIZE;
+  f_filter_value /= (float)(_iBuffMaxFillIndex+1);
 
   return f_filter_value;
 }
@@ -927,7 +953,8 @@ float ADS1115::getConvVal(){
   readConversionRegister();
 
   if (_bFilterActive){
-    if (_bSavGolFilterActive){
+    // if filter is not fully filled for savitzky golay filter use average filter
+    if (_bSavGolFilterActive && (_iBuffMaxFillIndex +1) == ADS1115_CONV_BUF_SIZE){
     // apply savitzky golay filter
       f_conversion_value = _getSavGolFilterVal();
     } else {
@@ -935,7 +962,8 @@ float ADS1115::getConvVal(){
       f_conversion_value = _getAvgFilterVal();
     }
   } else {
-    f_conversion_value = (float)_ptrConvBuff[_iBuffCnt];
+
+    f_conversion_value = (float)getLatestBufVal();
   }
   return f_conversion_value;
 }

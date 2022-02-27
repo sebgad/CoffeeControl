@@ -98,6 +98,9 @@ float fTarPwm;
 // define configuration struct
 config objConfig;
 
+// global variabel for WiFi strength
+int iDbmPercentage = 0;
+
 // Sensor variables
 float fTime = 0.F;
 float fTemp = 0.F;
@@ -265,18 +268,18 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
       Serial.println(WiFi.localIP());
       // Signal strength and approximate conversion to percentage
       int i_dBm = WiFi.RSSI();
-      int i_dBm_percentage = 0;
-      if (i_dBm>=-50) {
-        i_dBm_percentage = 100;
+      calcWifiStreng(i_dBm);
+      /*if (i_dBm>=-50) {
+        iDbmPercentage = 100;
       } else if (i_dBm<=-100) {
-        i_dBm_percentage = 0;
+        iDbmPercentage = 0;
       } else {
-        i_dBm_percentage = 2*(i_dBm+100);
-      }
+        iDbmPercentage = 2*(i_dBm+100);
+      }*/
       Serial.print("Signal Strength: ");
       Serial.print(i_dBm);
       Serial.print(" dB -> ");
-      Serial.print(i_dBm_percentage);
+      Serial.print(iDbmPercentage);
       Serial.println(" %");
       b_successful = true;
   } else {
@@ -298,6 +301,20 @@ void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
   Serial.println("Trying to Reconnect");
   connectWiFi(3, 1000);
 } // reconnectWiFi
+
+void calcWifiStreng(int i_dBm){
+  /**
+   * calculate the wifi strength from dB to % 
+   */
+  iDbmPercentage = 0;
+  if (i_dBm>=-50) {
+    iDbmPercentage = 100;
+  } else if (i_dBm<=-100) {
+    iDbmPercentage = 0;
+  } else {
+    iDbmPercentage = 2*(i_dBm+100);
+  }
+}//getWifiStreng
 
 bool loadConfiguration(){
   /**
@@ -570,10 +587,13 @@ void configWebserver(){
         obj_json_values["Time"] = fTime;
         obj_json_values["Temperature"] = fTemp;
         
+        obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
         obj_json_values["PID"]["TargetPWM"] = fTarPwm;
         obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
-        obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
         obj_json_values["PID"]["ErrorDiff"] = objPid.getErrorDiff();
+
+        obj_json_values["WiFi"]["SignalStrength in %"] = iDbmPercentage;
+
       portEXIT_CRITICAL_ISR(&objTimerMux);
 
       String str_response;
@@ -949,7 +969,7 @@ void setup(){
   obj_meas_file.println(i_high_reg, BIN);
   
   obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,TargetPWM,InterruptCountAlertReady");
+  obj_meas_file.println("Time,Temperature,TargetPWM,Buffer,InterruptCountAlertReady");
   obj_meas_file.close();
 
   // Initialize Timer 
@@ -989,6 +1009,11 @@ boolean readSensors(){
   fTime = (float)(millis() - iTimeStart) / 1000.0;
   // get physical value of sensor
   fTemp = objADS1115->getPhysVal();
+  
+  if (bEspOnline == true) {
+    int i_dBm = WiFi.RSSI();
+    calcWifiStreng(i_dBm);
+  }
 
   b_result = true;
   return b_result;
@@ -1021,6 +1046,8 @@ bool writeMeasFile(){
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
     unsigned long i_int_count = iInterruptCntAlertCatch;
+    int16_t * ptr_conv_buff  = objADS1115->getBuffer();
+    int i_abs_buff_size  = objADS1115->getAbsBufSize();
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
@@ -1029,6 +1056,13 @@ bool writeMeasFile(){
   obj_meas_file.print(f_temp_local);
   obj_meas_file.print(",");
   obj_meas_file.print(f_tar_pwm);
+  obj_meas_file.print(",");
+
+  for (int16_t i_val=0; i_val<i_abs_buff_size; i_val++){
+    obj_meas_file.print(ptr_conv_buff[i_val]); // print the buffer in the report
+    obj_meas_file.print(" ");
+  }
+
   obj_meas_file.print(",");
   obj_meas_file.println(i_int_count);
   obj_meas_file.close();
