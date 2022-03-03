@@ -139,7 +139,7 @@ class ADS1115
     void setPinRdyMode(bool, byte);
     bool getPinRdyMode(void);
     bool conversionReady(void);
-    void readConversionRegister(void);
+    uint16_t readConversionRegister(void);
     bool isValueFrozen(void);
     float getConvVal(void);
     float getVoltVal(void);

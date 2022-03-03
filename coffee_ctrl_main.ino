@@ -1000,6 +1000,10 @@ void setup(){
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
 
+  // read the conversion register in a way the filter buffer is not filled but the register is still read.
+  uint16_t i_temp;
+  i_temp = objADS1115->readConversionRegister();
+
 }// Setup
 
 boolean readSensors(){

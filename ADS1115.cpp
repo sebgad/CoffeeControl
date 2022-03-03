@@ -533,14 +533,11 @@ bool ADS1115::readBit(uint16_t i_register, int i_pos){
   return ((i_register & (1<<i_pos)) >> i_pos);
 }
 
-void ADS1115::readConversionRegister() {
+uint16_t ADS1115::readConversionRegister() {
   /**
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
   */ 
-  
-  _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE; // ring buffer
-  _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt); // get fill index of filter. Used for error detection or filter selsction
-  _ptrConvBuff[_iBuffCnt] = getRegisterValue(ADS1115_CONVERSION_REG);
+  return getRegisterValue(ADS1115_CONVERSION_REG);
 }
 
 
@@ -771,7 +768,7 @@ void ADS1115::initConvTable(size_t i_size_conv) {
 
 void ADS1115::activateFilter(){
   /**
-   * @brief Activate the conversion filter
+   * @brief Activate the conversion filter and define Savitzky-Golay filter-variables
    * 
    */
 
@@ -872,7 +869,7 @@ int16_t* ADS1115::getBuffer(){
 
 float ADS1115::_getSavGolFilterVal(){
   /**
-   * @brief get filter value
+   * @brief get filtered value via Savitzky-Golay filter
    * 
    */
   
@@ -891,7 +888,7 @@ float ADS1115::_getSavGolFilterVal(){
 
 float ADS1115::_getAvgFilterVal(){
   /**
-   * @brief get filter value
+   * @brief get filtered value via average filter
    * 
    */
 
@@ -943,15 +940,19 @@ bool ADS1115::isValueFrozen(){
 
 float ADS1115::getConvVal(){
   /**
-   * @brief get latest conversion value
+   * @brief get the filtered conversion value
    * 
    * 
    */
 
   float f_conversion_value;
 
-  readConversionRegister();
+  // fill the filter buffer an increment the ring buffer counter
+  _iBuffCnt = (_iBuffCnt+1) % ADS1115_CONV_BUF_SIZE; // ring buffer
+  _iBuffMaxFillIndex = max(_iBuffMaxFillIndex,_iBuffCnt); // get fill index of filter. Used for error detection or filter selsction
+  _ptrConvBuff[_iBuffCnt] = readConversionRegister(); // read the register
 
+  // Filter
   if (_bFilterActive){
     // if filter is not fully filled for savitzky golay filter use average filter
     if (_bSavGolFilterActive && (_iBuffMaxFillIndex +1) == ADS1115_CONV_BUF_SIZE){
