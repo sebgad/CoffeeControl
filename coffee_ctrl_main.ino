@@ -804,8 +804,6 @@ bool configADS1115(){
   // set data rate (samples per second)
   objADS1115->setRate(ADS1115_RATE_8);
 
-  // set to continues conversion method
-  objADS1115->setOpMode(ADS1115_MODE_CONTINUOUS);
 
   #ifdef Pt1000_CONV_LINEAR
     objADS1115->setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
@@ -843,6 +841,9 @@ bool configADS1115(){
   // assert after one conversion
   objADS1115->setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
+  // set to continues conversion method
+  objADS1115->setOpMode(ADS1115_MODE_CONTINUOUS);
+  
   objADS1115->printConfigReg();
   return true;
 }
@@ -999,10 +1000,6 @@ void setup(){
   
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
-
-  // read the conversion register in a way the filter buffer is not filled but the register is still read.
-  uint16_t i_temp;
-  i_temp = objADS1115->readConversionRegister();
 
 }// Setup
 
