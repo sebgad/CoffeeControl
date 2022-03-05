@@ -20,15 +20,27 @@
       ['Label', 'Value'],
       ['Temp', 0.0],
     ]);
+
+    var dataPWM = google.visualization.arrayToDataTable([
+      ['Label', 'Value'],
+      ['PWM', 0.0],
+    ]);
           
     var formatterTemp = new google.visualization.NumberFormat({
       suffix: '°C',
       fractionDigits: 2,
     });
 
-    formatterTemp.format(dataTemp, 1); 
+    var formatterPWM = new google.visualization.NumberFormat({
+      suffix: '',
+      fractionDigits: 2,
+    });
+
+    formatterTemp.format(dataTemp, 1);
+    formatterPWM.format(dataPWM, 1);
       
     var chartTemp = new google.visualization.Gauge(document.getElementById('gauge_Temp'));
+    var chartPWM = new google.visualization.Gauge(document.getElementById('gauge_PWM'));
 
     setInterval(function() {
       var xhr=new XMLHttpRequest();
@@ -44,25 +56,40 @@
           greenFrom: obj_json_req["PID"]["TargetValue"]-1, greenTo: obj_json_req["PID"]["TargetValue"]+1,
           redFrom: obj_json_req["PID"]["TargetValue"]+1, redTo: 120,
           yellowFrom:0, yellowTo: obj_json_req["PID"]["TargetValue"]-1,
-          minorTicks: 10
+          minorTicks:10,
+          min:0, max:120,
         };
         
+        var optionsPWM = {
+          width: 350, height: 150,
+          yellowFrom: 0, yellowTo:100,
+          redFrom:100, redTo:255,
+          minorTicks: 10,
+          min:0, max:255,
+        };
+
         dataTemp.setValue(0, 1, obj_json_req["Temperature"]);
+        dataPWM.setValue(0, 1, obj_json_req["PID"]["TargetPWM"])
+
         formatterTemp.format(dataTemp, 1);
+        formatterPWM.format(dataPWM, 1)
+
         chartTemp.draw(dataTemp, optionsTemp);
+        chartPWM.draw(dataPWM, optionsPWM);
 
         var obj_div = document.getElementById("pid_values");
         
         for(var str_key in obj_json_req["PID"]){
-          var obj_sub_div = document.getElementById(str_key);
-          if(!obj_sub_div){
-            // create label if not already exists
-            var obj_sub_div = document.createElement("div");
-            obj_sub_div.id = str_key;
-            obj_div.appendChild(obj_sub_div);
+          if (str_key != "TargetPWM"){
+            var obj_sub_div = document.getElementById(str_key);
+            if(!obj_sub_div){
+              // create label if not already exists
+              var obj_sub_div = document.createElement("div");
+                obj_sub_div.id = str_key;
+                obj_div.appendChild(obj_sub_div);
+            }
+            obj_sub_div.innerHTML = "<p style='width:20%;'> <b>" + str_key + "</b> </p><p style='width:20%;'>" + obj_json_req["PID"][str_key] + "</p>";
           }
-            
-          obj_sub_div.innerHTML = "<p style='width:20%;'> <b>" + str_key + "</b> </p><p style='width:20%;'>" + obj_json_req["PID"][str_key] + "</p>";
         }
 		
 		var obj_div = document.getElementById("wifi_values");
@@ -117,12 +144,17 @@
 </div>
 
 <div class="main">
-  <h2>Rancilio Silvia Control</h2>
-  <h3>PID values</h3>
+  <h2>Dashboard</h2>
+  <h3>PID controller</h3>
   <div class="item", id="pid_values", width="80%" style="text-align: left;"></div>
-  <h3>Sensor values</h3>
-  <div class="item", id="gauge_Temp", height="100px"></div>
-  <h3>WiFi values</h3>
+  <h4>Temperature Sensor / PWM Target value</h4>
+  <table border="0">
+  <tr>
+    <td><div class="item", id="gauge_Temp", height="100px"></div></td>
+    <td><div class="item", id="gauge_PWM", height="100px"></div></td>
+  </tr>
+  </table>
+  <h3>WiFi</h3>
   <div class="item", id="wifi_values", width="80%" style="text-align: left;"></div>
 </div>
 
