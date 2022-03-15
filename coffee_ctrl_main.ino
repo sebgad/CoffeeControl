@@ -4,23 +4,8 @@
  * A script to control an espresso machine and display measurement values on a webserver of an ESP32
  * 
 *********/
-
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <ESPmDNS.h>
-#include "FS.h"
-#include <LittleFS.h>
-#include <time.h>
-#include <string>
-#include "Pt1000.h"
-#include "ADS1115.h"
-#include "PidCtrl.h"
-#include "WifiAccess.h"
-#include <ArduinoJson.h>
-#include "AsyncJson.h"
-#include <Update.h>
-#include <esp_task_wdt.h>
-#include "ota.h"
+#define LOG_LEVEL ESP_LOG_VERBOSE
+//#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 
 // PIN definitions
 
@@ -40,6 +25,7 @@
 #define FORMAT_SPIFFS_IF_FAILED true
 #define JSON_MEMORY 1600
 
+
 // define timer related channels for PWM signals
 #define RwmRedChannel 13 //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
 #define RwmGrnChannel 14 //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
@@ -47,6 +33,26 @@
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
 #define WDT_Timeout 6 // WatchDog Timeout in seconds
+
+
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
+#include "FS.h"
+#include <LittleFS.h>
+#include <time.h>
+#include <string>
+#include "Pt1000.h"
+#include "ADS1115.h"
+#include "PidCtrl.h"
+#include "WifiAccess.h"
+#include <ArduinoJson.h>
+#include "AsyncJson.h"
+#include <Update.h>
+#include <esp_task_wdt.h>
+#include "ota.h"
+#include "esp32-hal-log.h"
+
 
 // config structure for online calibration
 struct config {
@@ -88,6 +94,9 @@ const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
 const char* strParamFilePath = "/params.json";
 bool bParamFileLocked = false;
+const char* strLogFilePath = "/logfile.txt";
+static char bufPrintLog[512];
+const char* strUserLogLabel = "USER";
 
 // start time for measurement
 unsigned long iTimeStart = 0;
@@ -122,6 +131,7 @@ hw_timer_t * objTimerLong = NULL;
 
 // Status for function call timing, used in ISR
 volatile uint8_t iStatusMeas = 0; // 0:init/idle, 1:store value running, 2: store value finished
+volatile uint8_t iStatusDiag = 0; // 0:init/idle, 1:diagRequest
 volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measurement finished, 3:control
 volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
 
@@ -146,6 +156,11 @@ enum eStatusMeas {
 enum eStatusLED {
   LED_IDLE,
   LED_SET
+};
+
+enum eStatusDiag {
+  IDLE_DIAG,
+  REQUEST_DIAG
 };
 
 enum eLEDColor{
@@ -216,6 +231,10 @@ void IRAM_ATTR onTimerLong(){
         iStatusLED = LED_SET;
       }
 
+      if (iStatusDiag == IDLE_DIAG){
+        iStatusDiag = REQUEST_DIAG;
+      }
+
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
@@ -237,11 +256,7 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   //WiFi.disconnect(true);
   //delay(100);
 
-  Serial.print("Device ");
-  Serial.print(WiFi.macAddress());
-
-  Serial.print(" try connecting to ");
-  Serial.println(objConfig.wifiSSID);
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Device %s try connecting to %s\n", WiFi.macAddress().c_str(), objConfig.wifiSSID.c_str());
   delay(100);
 
   int i_run_cnt_fail = 0;
@@ -258,33 +273,20 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
     delay(i_timout_attemp);
     i_run_cnt_fail++;
     i_wifi_status = WiFi.status();
-    Serial.print("Connection Attemp: ");
-    Serial.println(i_run_cnt_fail);
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection Attemp: %d\n", i_run_cnt_fail);
   }
 
   if (i_wifi_status == WL_CONNECTED) {
       // Print ESP32 Local IP Address
-      Serial.print("Connection successful. Local IP: ");
-      Serial.println(WiFi.localIP());
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection successful. Local IP: %s\n", WiFi.localIP().toString().c_str());
       // Signal strength and approximate conversion to percentage
       int i_dBm = WiFi.RSSI();
       calcWifiStrength(i_dBm);
-      /*if (i_dBm>=-50) {
-        iDbmPercentage = 100;
-      } else if (i_dBm<=-100) {
-        iDbmPercentage = 0;
-      } else {
-        iDbmPercentage = 2*(i_dBm+100);
-      }*/
-      Serial.print("Signal Strength: ");
-      Serial.print(i_dBm);
-      Serial.print(" dB -> ");
-      Serial.print(iDbmPercentage);
-      Serial.println(" %");
+
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Signal strength: %d dB -> %d %%\n", i_dBm, iDbmPercentage);
       b_successful = true;
   } else {
-    Serial.print("Connection unsuccessful. WiFi status: ");
-    Serial.println(i_wifi_status);
+    esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "Connection unsuccessful. WiFi status: %d\n", i_wifi_status);
   }
   
   return b_successful;
@@ -295,10 +297,9 @@ void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
    * Try to reconnect to WiFi when disconnected from network
    */
     
-  Serial.println("Disconnected from WiFi access point");
-  Serial.print("WiFi lost connection. Reason: ");
-  Serial.println(info.wifi_sta_disconnected.reason);
-  Serial.println("Trying to Reconnect");
+  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Disconnected from WiFi access point\n");
+  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "WiFi lost connection. Reason: %d\n", info.wifi_sta_disconnected.reason);
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Trying to reconnect...\n");
   connectWiFi(3, 1000);
 } // reconnectWiFi
 
@@ -331,15 +332,14 @@ bool loadConfiguration(){
     DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
     if ((!obj_param_file) || (error)){
-      Serial.println(F("Failed to read file, using default configuration"));
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Failed to read file, using default configuration.\n");
       
       if (!obj_param_file) {
-        Serial.println(F("File could not be opened"));
+        esp_log_write(ESP_LOG_WARN, strUserLogLabel, "File could not be opened.\n");
       }
     
       if (error) {
-        Serial.print(F("json deserializion error: "));
-        Serial.println(error.c_str());
+        esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "JSON deserializion error: %*c\n", error.c_str());
       }
     
       obj_param_file.close();
@@ -387,7 +387,7 @@ bool loadConfiguration(){
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
         if (!saveConfiguration()){
-          Serial.println("Cannot write back to JSON file");
+          esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Cannot write back to JSON file.\n");
         }
       }
   }
@@ -442,10 +442,10 @@ bool saveConfiguration(){
     File obj_param_file = LittleFS.open(strParamFilePath, "w");
   
     if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
-      Serial.println(F("Failed to write configuration to file"));
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Failed to write configuration to file\n");
     }
     else{
-      Serial.println("configuration file updated successfully");
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Configuration file updated successfully\n");
       b_success = true;
     }
     obj_param_file.close();
@@ -578,6 +578,11 @@ void configWebserver(){
   // Measurement file, available under http://coffee.local/data.csv
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, strMeasFilePath, "text/plain");
+  });
+
+  // Log file
+  server.on("/log.txt", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, strLogFilePath, "text/plain");
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -725,7 +730,7 @@ void configWebserver(){
                 Update.printError(Serial);
                 return ptr_request->send(400, "text/plain", "Could not end OTA");
               } else {
-                Serial.println("Firmware flash successful. Restart ESP.");
+                esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Firmware flash successful. Restart ESP.\n");
               }
             } else {
               // everything runs smooth in this iteration -> return none
@@ -750,8 +755,7 @@ void configWebserver(){
           if (!i_index) {
             // open the file on first call and store the file handle in the request object
             ptr_request->_tempFile = LittleFS.open("/" + str_filename, "w");
-            Serial.print("Start uploading file: ");
-            Serial.println(str_filename);
+            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Start uploading file: %s\n", str_filename);
           }
 
           if (i_len) {
@@ -763,7 +767,7 @@ void configWebserver(){
             // close the file handle as the upload is now done
             ptr_request->_tempFile.close();
             ptr_request->redirect("/ota.html");
-            Serial.println("File upload finished.");
+            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File upload finished.\n"); 
           }
     }
     );
@@ -786,7 +790,7 @@ bool configADS1115(){
   
   // Initialize I2c on defined pins with default adress
   if (!objADS1115->begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
-    Serial.println("Failed to initialize I2C sensor connection, stop working.");
+    esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Failed to initialize I2C sensor connection, stop working.\n");
     return false;
   }
 
@@ -807,28 +811,19 @@ bool configADS1115(){
 
   #ifdef Pt1000_CONV_LINEAR
     objADS1115->setPhysConv(fPt1000LinCoeffX1, fPt1000LinCoeffX0);
-    Serial.print("Applying linear regression function for Pt1000 conversion: ");
-    Serial.print(fPt1000LinCoeffX1, 4);
-    Serial.print(" * Umess + ");
-    Serial.println(fPt1000LinCoeffX0, 4);
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Applying linear regression function for Pt1000 conversion: %.4f * Umess + %.4f\n", fPt1000LinCoeffX1, fPt1000LinCoeffX0);
   #endif
   #ifdef Pt1000_CONV_SQUARE
     objADS1115->setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
-    Serial.print("Applying square regression function for Pt1000 conversion: ");
-    Serial.print(fPt1000SquareCoeffX2, 4);
-    Serial.print(" * Umess² + ");
-    Serial.print(fPt1000SquareCoeffX1, 4);
-    Serial.print(" * Umess + ");
-    Serial.println(fPt1000SquareCoeffX0);
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Applying square regression function for Pt1000 conversion: \
+                               %.4f * Umess^2 + %.4f * Umess + %.4f\n", fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0)
   #endif
   #ifdef Pt1000_CONV_LOOK_UP_TABLE
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
     objADS1115->setPhysConv(arrPt1000LookUpTbl, size_1d_map);
-    Serial.println("Applying Lookuptable for Pt1000 conversion:");
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Applying lookup table for Pt1000 conversion:\n");
     for(int i_row=0; i_row<size_1d_map; i_row++){
-      Serial.print(arrPt1000LookUpTbl[i_row][0], 4);
-      Serial.print("   ");
-      Serial.println(arrPt1000LookUpTbl[i_row][1], 4);
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "%.4f    %.4f\n", arrPt1000LookUpTbl[i_row][0], arrPt1000LookUpTbl[i_row][1]);
     }
   #endif
 
@@ -848,26 +843,61 @@ bool configADS1115(){
   return true;
 }
 
+
+int vprintf_into_FS(const char* szFormat, va_list args) {
+	//write evaluated format string into buffer
+	int i_ret = vsnprintf (bufPrintLog, sizeof(bufPrintLog), szFormat, args);
+
+	//output is now in buffer. write to file.
+	if(i_ret >= 0) {
+    if(!LittleFS.exists(strLogFilePath)) {
+      // Create logfile if it does not exist.
+      File writeLog = LittleFS.open(strLogFilePath, FILE_WRITE);
+      if(!writeLog) Serial.println("Couldn't open log file"); 
+      delay(50);
+      writeLog.close();
+    }
+    
+		File LogFile = LittleFS.open(strLogFilePath, FILE_APPEND);
+		//debug output
+		LogFile.write((uint8_t*) bufPrintLog, (size_t) i_ret);
+		//flush print log, to make sure message is written to file.
+		LogFile.flush();
+		LogFile.close();
+	}
+	return i_ret;
+}
+
+
 void setup(){
   // Initialize Serial port for debugging purposes
   Serial.begin(115200);
   delay(50);
-  Serial.println("Starting setup.");
 
   // initialize LittleFS and load configuration files
   if(!LittleFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-      // Initialization of LittleFS failed, restart it
-      Serial.println("LittleFS mount Failed, restart ESP");
-      delay(1000);
-      ESP.restart();
+    // Initialization of LittleFS failed, restart it
+    Serial.println("LittleFS mount Failed, restart ESP.");
+    delay(1000);
+    ESP.restart();
   } else {
-    Serial.println("LittleFS mount successfully.");
+    // Link logging output to function
+    esp_log_set_vprintf(&vprintf_into_FS);
+    // Verbose output level
+    esp_log_level_set("*", LOG_LEVEL);
+    esp_log_level_set("wifi", LOG_LEVEL);
+    esp_log_level_set(strUserLogLabel, ESP_LOG_VERBOSE);
+    
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "\n\n-----------------------------------Starting Logging.\n");
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "LittleFS mount successfully.\n");
+    unsigned int i_reset_reason = esp_reset_reason();
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Last reset reason: %d\n", i_reset_reason);
     // initialize configuration before load json file
     resetConfiguration(false);
     
     // load configuration from file in eeprom
     if (!loadConfiguration()) {
-      Serial.println("Parameter file is locked on startup. Please reset to factory settings.");
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Parameter file is locked on startup. Please reset to factory settings.\n");
     }
   }
 
@@ -875,17 +905,11 @@ void setup(){
   unsigned int i_total_bytes = LittleFS.totalBytes();
   unsigned int i_used_bytes = LittleFS.usedBytes();
 
-  Serial.println("File system info:");
-  Serial.print("Total space on LittleFS: ");
-  Serial.print(i_total_bytes);
-  Serial.println(" bytes");
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File system info:\n");
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Total space on LittleFS: %d bytes\n", i_total_bytes);
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Total space used on LittleFS: %d bytes\n", i_used_bytes);
 
-  Serial.print("Total space used on LittleFS: ");
-  Serial.print(i_used_bytes);
-  Serial.println(" bytes");
-  Serial.println("");
-
-    // turn green status LED on
+  // turn green status LED on
   pinMode(P_STAT_LED, OUTPUT);
   digitalWrite(P_STAT_LED, HIGH);
   
@@ -910,28 +934,21 @@ void setup(){
     // get local time
     struct tm obj_timeinfo;
     if(!getLocalTime(&obj_timeinfo)){
-      Serial.println("Failed to obtain time stamp online");
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Failed to obtain time stamp online\n");
     } else {
       // write time stamp into variable
-      strftime(char_timestamp, sizeof(char_timestamp), "%c", &obj_timeinfo);
+      strftime(char_timestamp, sizeof(char_timestamp), "%s", &obj_timeinfo);
     }
-
     // print location to measurement file
-    Serial.print("Create File ");
-    Serial.print(WiFi.localIP());
-    Serial.println(strMeasFilePath);
-  
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Create File %s%s\n", WiFi.localIP().toString().c_str(), strMeasFilePath);
   } else {
     // No wifi connection possible start SoftAP
-    Serial.print("Connection to SSID '");
-    Serial.print(objConfig.wifiSSID);
-    Serial.println("' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'");
+
+    esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "Connection to SSID '%s' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'\n", objConfig.wifiSSID.c_str());
     WiFi.softAP("SilviaCoffeeCtrl");
     
     // print location to measurement file
-    Serial.print("Create File ");
-    Serial.print(WiFi.softAPIP());
-    Serial.println(strMeasFilePath);
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Create file %s%s\n", WiFi.softAPIP().toString().c_str(), strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
     setColor(LED_COLOR_PURPLE, false); 
@@ -942,16 +959,16 @@ void setup(){
 
   // register mDNS. ESP is available under http://coffee.local
   if (!MDNS.begin("coffee")) {
-    Serial.println("Error setting up MDNS responder!");
+    esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Error setting up MDNS responder!\n");
   } else {
     // add service to standart http connection
     MDNS.addService("http", "tcp", 80);
   }
 
-    // configure ADS1115
+  // configure ADS1115
   if(!configADS1115()) {
     // TODO add diagnosis when ADS1115 is not connected
-    Serial.println("ADS1115 configuration not successful.");
+    esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "ADS1115 configuration not successful.\n");
   }
 
   // Write Measurement file header
@@ -1173,14 +1190,12 @@ void loop(){
           // only check for frozen values if connection to ADS1115 is successful
           if(objADS1115->isValueFrozen()){
             setColor(LED_COLOR_PURPLE, false);
-            Serial.println("ADS1115 Sensor value frozen");
+            esp_log_write(ESP_LOG_ERROR, strUserLogLabel,  "ADS1115 Sensor values frozen. Reconfigure ADS1115\n");
             // configure ADS1115 again
-            //configADS1115(); // error occured reconfigure ADC?
-
+            configADS1115();
           }
           else{
             // sensor is OK-> display heating status
-
             if (fTemp < objConfig.CtrlTarget - 1.0) {
               // Heat up signal
               setColor(LED_COLOR_ORANGE, true);
@@ -1200,7 +1215,7 @@ void loop(){
       iStatusLED = LED_IDLE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
-    
+
   if (iStatusCtrl == CONTROL) {
     // Call heating control function
     bool b_result_ctrl_heating;
@@ -1221,5 +1236,16 @@ void loop(){
         iStatusMeas = IDLE_MEAS;
       portEXIT_CRITICAL_ISR(&objTimerMux);
     }
+  }
+
+  // Diagnosis functionality
+  if (iStatusDiag==REQUEST_DIAG){
+    if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
+      esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Conversion mode changed to single shot (default) during runtime. Re-Configure ADS1115.\n");
+      configADS1115();
+    }
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iStatusDiag = IDLE_DIAG;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 }// loop
