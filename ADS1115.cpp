@@ -718,6 +718,15 @@ esp_err_t ADS1115::i2c_master_init(void)
 
   i2c_param_config(i2c_master_port, &conf);
   esp_err = i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
+
+  return esp_err;
+}
+
+esp_err_t ADS1115::stop(void)
+{
+  esp_err_t esp_err;
+  esp_err = i2c_driver_delete(ADS1115_I2C_PORT_NUM);
+  
   return esp_err;
 }
 

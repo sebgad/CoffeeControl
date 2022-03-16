@@ -112,6 +112,7 @@ class ADS1015
     bool begin(uint8_t);
     bool begin(int, int);
     bool begin(int, int, uint8_t);
+    esp_err_t stop(void);
     void setDefault(void);
     void startSingleShotMeas(bool);
     bool getOpStatus(void);

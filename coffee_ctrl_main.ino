@@ -94,7 +94,8 @@ const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
 const char* strParamFilePath = "/params.json";
 bool bParamFileLocked = false;
-const char* strLogFilePath = "/logfile.txt";
+const char* strRecentLogFilePath = "/logfile_recent.txt";
+const char* strLastLogFilePath = "/logfile_last.txt";
 static char bufPrintLog[512];
 const char* strUserLogLabel = "USER";
 
@@ -564,6 +565,11 @@ void configWebserver(){
   });
 
   // Route for ota web page
+  server.on("/log.html", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/log.html");
+  });
+
+  // Route for ota web page
   server.on("/failsafe", HTTP_GET, [](AsyncWebServerRequest *request){
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ota_html_gz, ota_html_gz_len);
     response->addHeader("Content-Encoding", "gzip");
@@ -580,9 +586,14 @@ void configWebserver(){
     request->send(LittleFS, strMeasFilePath, "text/plain");
   });
 
-  // Log file
-  server.on("/log.txt", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(LittleFS, strLogFilePath, "text/plain");
+  // Current log file
+  server.on("/recentlogfile.txt", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, strRecentLogFilePath, "text/plain");
+  });
+
+  // Log file from previous session
+  server.on("/lastlogfile.txt", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, strLastLogFilePath, "text/plain");
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -850,15 +861,15 @@ int vprintf_into_FS(const char* szFormat, va_list args) {
 
 	//output is now in buffer. write to file.
 	if(i_ret >= 0) {
-    if(!LittleFS.exists(strLogFilePath)) {
+    if(!LittleFS.exists(strRecentLogFilePath)) {
       // Create logfile if it does not exist.
-      File writeLog = LittleFS.open(strLogFilePath, FILE_WRITE);
+      File writeLog = LittleFS.open(strRecentLogFilePath, FILE_WRITE);
       if(!writeLog) Serial.println("Couldn't open log file"); 
       delay(50);
       writeLog.close();
     }
     
-		File LogFile = LittleFS.open(strLogFilePath, FILE_APPEND);
+		File LogFile = LittleFS.open(strRecentLogFilePath, FILE_APPEND);
 		//debug output
 		LogFile.write((uint8_t*) bufPrintLog, (size_t) i_ret);
 		//flush print log, to make sure message is written to file.
@@ -881,6 +892,15 @@ void setup(){
     delay(1000);
     ESP.restart();
   } else {
+    // Move last log file
+    if (LittleFS.exists(strLastLogFilePath)){
+      LittleFS.remove(strLastLogFilePath);
+    }
+    
+    if (LittleFS.exists(strRecentLogFilePath)){
+      LittleFS.rename(strRecentLogFilePath, strLastLogFilePath);
+    }
+
     // Link logging output to function
     esp_log_set_vprintf(&vprintf_into_FS);
     // Verbose output level
@@ -1242,7 +1262,11 @@ void loop(){
   if (iStatusDiag==REQUEST_DIAG){
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
       esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Conversion mode changed to single shot (default) during runtime. Re-Configure ADS1115.\n");
-      configADS1115();
+      if (objADS1115->stop()){
+        configADS1115();
+      } else{
+        esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Cannot delete driver for reinit.\n");
+      }
     }
     portENTER_CRITICAL_ISR(&objTimerMux);
       iStatusDiag = IDLE_DIAG;
