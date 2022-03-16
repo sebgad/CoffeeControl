@@ -1262,7 +1262,7 @@ void loop(){
   if (iStatusDiag==REQUEST_DIAG){
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
       esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Conversion mode changed to single shot (default) during runtime. Re-Configure ADS1115.\n");
-      if (objADS1115->stop()){
+      if (objADS1115->stop()==ESP_OK){
         configADS1115();
       } else{
         esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Cannot delete driver for reinit.\n");
