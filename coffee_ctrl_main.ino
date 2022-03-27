@@ -32,7 +32,7 @@
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
-#define WDT_Timeout 6 // WatchDog Timeout in seconds
+#define WDT_Timeout 15 // WatchDog Timeout in seconds
 
 
 #include <WiFi.h>
@@ -232,7 +232,7 @@ void IRAM_ATTR onTimerLong(){
         iStatusLED = LED_SET;
       }
 
-      if (iStatusDiag == IDLE_DIAG){
+      if ((iStatusDiag == IDLE_DIAG) & (iInterruptCntLong % 2 == 0)){
         iStatusDiag = REQUEST_DIAG;
       }
 
@@ -1262,6 +1262,7 @@ void loop(){
   if (iStatusDiag==REQUEST_DIAG){
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
       esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Conversion mode changed to single shot (default) during runtime. Re-Configure ADS1115.\n");
+      setColor(LED_COLOR_PURPLE, false); 
       if (objADS1115->stop()==ESP_OK){
         configADS1115();
       } else{
