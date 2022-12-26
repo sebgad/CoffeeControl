@@ -80,6 +80,7 @@ struct config {
   float RwmRgbColorPurpleFactor;
   float RwmRgbColorWhiteFactor;
   bool SigFilterActive;
+  uint32_t TimeToStandby;
 };
 
 
@@ -88,6 +89,9 @@ const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
 const char* strParamFilePath = "/params.json";
 bool bParamFileLocked = false;
+
+// Time out status for soft off
+bool bTimeOutReached = false;
 
 // start time for measurement
 unsigned long iTimeStart = 0;
@@ -383,6 +387,9 @@ bool loadConfiguration(){
       (json_doc["LED"]["GainFactorColorPurple"])?objConfig.RwmRgbColorPurpleFactor = json_doc["LED"]["GainFactorColorPurple"]:b_set_default_values = true;
       (json_doc["LED"]["GainFactorColorWhite"])?objConfig.RwmRgbColorWhiteFactor = json_doc["LED"]["GainFactorColorWhite"]:b_set_default_values = true;
       (json_doc["Signal"]["SigFilterActive"])?objConfig.SigFilterActive = json_doc["Signal"]["SigFilterActive"]:b_set_default_values = true;
+      (json_doc["System"]["TimeToStandby"])?objConfig.TimeToStandby = json_doc["System"]["TimeToStandby"]:b_set_default_values = true;
+
+       
 
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
@@ -436,6 +443,7 @@ bool saveConfiguration(){
   json_doc["LED"]["GainFactorColorPurple"] = objConfig.RwmRgbColorPurpleFactor;
   json_doc["LED"]["GainFactorColorWhite"] = objConfig.RwmRgbColorWhiteFactor;
   json_doc["Signal"]["SigFilterActive"] = objConfig.SigFilterActive;
+  json_doc["System"]["TimeToStandby"] = objConfig.TimeToStandby;
 
   if (!bParamFileLocked){
     bParamFileLocked = true;
@@ -493,6 +501,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.RwmRgbColorPurpleFactor = 1.0;
   objConfig.RwmRgbColorWhiteFactor = 1.0;
   objConfig.SigFilterActive = true;
+  objConfig.TimeToStandby =  600; //s
 
   if (b_safe_to_json){
     saveConfiguration();
@@ -641,6 +650,7 @@ void configWebserver(){
     objConfig.RwmRgbColorPurpleFactor = obj_json["LED"]["GainFactorColorPurple"];
     objConfig.RwmRgbColorWhiteFactor = obj_json["LED"]["GainFactorColorWhite"];
     objConfig.SigFilterActive = obj_json["Signal"]["SigFilterActive"];
+    objConfig.TimeToStandby = obj_json["System"]["TimeToStandby"];
 
     if (saveConfiguration()){
       configPID();
@@ -1029,9 +1039,12 @@ bool controlHeating(){
 
   bool b_success = false;
 
-  objPid.compute();
+  if (!bTimeOutReached) {
+    objPid.compute();
+  } else {
+    fTarPwm = 0.F;
+  }
   ledcWrite(PwmSsrChannel, (int)fTarPwm);
-
   b_success = true;
   return b_success;
 
@@ -1174,13 +1187,11 @@ void loop(){
           if(objADS1115->isValueFrozen()){
             setColor(LED_COLOR_PURPLE, false);
             Serial.println("ADS1115 Sensor value frozen");
-            // configure ADS1115 again
-            //configADS1115(); // error occured reconfigure ADC?
-
+            // Turn heating off in case sensor status is invalid
+            ledcWrite(PwmSsrChannel, 0);
           }
           else{
             // sensor is OK-> display heating status
-
             if (fTemp < objConfig.CtrlTarget - 1.0) {
               // Heat up signal
               setColor(LED_COLOR_ORANGE, true);
@@ -1221,5 +1232,10 @@ void loop(){
         iStatusMeas = IDLE_MEAS;
       portEXIT_CRITICAL_ISR(&objTimerMux);
     }
+  }
+
+  if (millis() >= objConfig.TimeToStandby * 1000) {
+    // check whether timeout is reached, PWM will be deactivated.
+    bTimeOutReached = true;
   }
 }// loop

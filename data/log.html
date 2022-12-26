@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="stylesheet" type="text/css" href="style.css">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <title>BananaCoffee</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script type="text/javascript">
+    function getOldLog() {
+      var xhr=new XMLHttpRequest();
+      xhr.open("GET","lastlogfile.txt");
+
+      xhr.onload= function() {
+        var str_buf = xhr.responseText;
+        let str_buf_html = str_buf.replace(/(\r\n|\n\r|\r|\n)/g, '<br />');
+        var obj_div = document.getElementById("lastlog");
+        obj_div.innerHTML = str_buf_html;
+        }
+      xhr.send();
+    }
+
+    setInterval(function() {
+      var xhr=new XMLHttpRequest();
+      xhr.open("GET","recentlogfile.txt");
+
+      xhr.onload= function() {
+        var str_buf = xhr.responseText;
+        let str_buf_html = str_buf.replace(/(\r\n|\n\r|\r|\n)/g, '<br />');
+        var obj_div = document.getElementById("recentlog");
+        obj_div.innerHTML = str_buf_html;
+        }
+      xhr.send();
+    }, 5000);
+ </script> 
+</head>
+<body onload="getOldLog()">
+  <style>
+    p {
+      display: flex;
+      justify-content: left;
+      align-items: center;
+    }
+
+    p > span {
+      display: inline-block;
+      width: 20px;
+    }
+
+    p > span:first-child {
+      display: inline-block;
+      width: 200px;
+    }
+    </style>
+
+<div class="header">
+  <h1>BananaCoffee</h1>
+  A simple <b>web interface</b> to control Rancilio Silvia espresso machine.
+</div>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="graphs.html">Graphs</a>
+  <a href="settings.html">Settings</a>
+  <a href="ota.html">OTA</a>
+  <a href="log.html" class="active">Debug Log</a>
+  <a href="#" class="right">About</a>
+</div>
+
+<div class="main">
+  <h2>Debug Log</h2>
+  <h3>Recent Log</h3>
+  <div class="item", id="recentlog", width="80%" style="text-align: left;"></div>
+  <h3>Log from previous Session</h3>
+  <div class="item", id="lastlog", width="80%" style="text-align: left;"></div>
+</div>
+
+<div class="footer">
+  <h5>Footer</h5>
+</div>
+
+</body>
+</html>
