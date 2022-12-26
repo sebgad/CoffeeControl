@@ -60,6 +60,15 @@ bool ADS1015::begin(int i_sda, int i_scl, uint8_t i_i2c_address) {
 }
 
 
+esp_err_t ADS1015::stop(void)
+{
+  esp_err_t esp_err;
+  esp_err = i2c_driver_delete(ADS1015_I2C_PORT_NUM);
+  
+  return esp_err;
+}
+
+
 void ADS1015::setDefault() {
   /**
    * Bring ADS1015 back to default settings
