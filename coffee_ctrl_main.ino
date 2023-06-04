@@ -500,7 +500,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.RwmRgbColorPurpleFactor = 1.0;
   objConfig.RwmRgbColorWhiteFactor = 1.0;
   objConfig.SigFilterActive = true;
-  objConfig.TimeToStandby =  6000; //s
+  objConfig.TimeToStandby =  3600; //s
 
   if (b_safe_to_json){
     saveConfiguration();
