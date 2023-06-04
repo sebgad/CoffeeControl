@@ -344,10 +344,10 @@ bool loadConfiguration(){
       }
     
       if (error) {
-        esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "JSON deserializion error: %*c\n", error.c_str());
+        //esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "JSON deserializion error: %*c\n", error.c_str());
       }
-    
       obj_param_file.close();
+
       bParamFileLocked = false;
       resetConfiguration(true);
     } else {
@@ -389,8 +389,6 @@ bool loadConfiguration(){
       (json_doc["LED"]["GainFactorColorWhite"])?objConfig.RwmRgbColorWhiteFactor = json_doc["LED"]["GainFactorColorWhite"]:b_set_default_values = true;
       (json_doc["Signal"]["SigFilterActive"])?objConfig.SigFilterActive = json_doc["Signal"]["SigFilterActive"]:b_set_default_values = true;
       (json_doc["System"]["TimeToStandby"])?objConfig.TimeToStandby = json_doc["System"]["TimeToStandby"]:b_set_default_values = true;
-
-       
 
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
@@ -502,7 +500,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.RwmRgbColorPurpleFactor = 1.0;
   objConfig.RwmRgbColorWhiteFactor = 1.0;
   objConfig.SigFilterActive = true;
-  objConfig.TimeToStandby =  600; //s
+  objConfig.TimeToStandby =  6000; //s
 
   if (b_safe_to_json){
     saveConfiguration();
@@ -849,7 +847,7 @@ bool configADS1115(){
   #endif
 
   // set gain amplifier
-  objADS1115->setPGA(ADS1115_PGA_0P256);
+  objADS1115->setPGA(ADS1115_PGA_0P512);
 
   // set latching mode
   objADS1115->setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
@@ -1221,7 +1219,7 @@ void loop(){
   if (iStatusLED == LED_SET) {
     if(objADS1115->getConnectionStatus()){
           // only check for frozen values if connection to ADS1115 is successful
-          if(objADS1115->isValueFrozen()){
+          if((objADS1115->isValueFrozen()) || (objADS1115->getLatestBufVal() < 10.F)){
             setColor(LED_COLOR_PURPLE, false);
             Serial.println("ADS1115 Sensor value frozen");
             // Turn heating off in case sensor status is invalid
