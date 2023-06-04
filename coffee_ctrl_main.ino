@@ -837,7 +837,7 @@ bool configADS1115(){
   #ifdef Pt1000_CONV_SQUARE
     objADS1115->setPhysConv(fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Applying square regression function for Pt1000 conversion: \
-                               %.4f * Umess^2 + %.4f * Umess + %.4f\n", fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0)
+                               %.4f * Umess^2 + %.4f * Umess + %.4f\n", fPt1000SquareCoeffX2, fPt1000SquareCoeffX1, fPt1000SquareCoeffX0);
   #endif
   #ifdef Pt1000_CONV_LOOK_UP_TABLE
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
