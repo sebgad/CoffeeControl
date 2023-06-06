@@ -751,7 +751,7 @@ void ADS1115::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
   // Put Stop command in queue
   i2c_master_stop(cmd);
 
-  // Execute all queued commands, 100ms timeout
+  // Execute all queued commands, 1000ms timeout
   esp_err_t ret = i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
   i2c_cmd_link_delete(cmd);
 }
