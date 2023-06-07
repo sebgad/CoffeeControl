@@ -1192,7 +1192,7 @@ void loop(){
   }
 
   if ((iState & LED_CTRL) == LED_CTRL) {
-    if(iErrorId > 0){
+    if(iErrorId > NO_ERROR){
       setColor(LED_COLOR_PURPLE, false); 
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal

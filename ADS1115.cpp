@@ -677,9 +677,14 @@ uint16_t ADS1115::getRegisterValue(uint8_t i_reg) {
 
   uint8_t ptr_data[2];
   uint16_t i_ret_value;
+  esp_err_t esp_ret_value;
 
-  i2c_master_write_read_device(ADS1115_I2C_PORT_NUM, _iI2cAddress, &i_reg, 1, ptr_data, 2, 50 / portTICK_RATE_MS);
-
+  esp_ret_value = i2c_master_write_read_device(ADS1115_I2C_PORT_NUM, _iI2cAddress, &i_reg, 1, ptr_data, 2, 100 / portTICK_RATE_MS);
+  if(esp_ret_value == ESP_ERR_TIMEOUT){
+    Serial.println("Error Timeout in I2C communication.");
+  } else if(esp_ret_value == ESP_FAIL){
+    Serial.println("Error in I2C communication.Slave not acknowledged.");
+  }
   i_ret_value = (uint16_t)(ptr_data[0]<<8) | ptr_data[1];
 
   return i_ret_value;
