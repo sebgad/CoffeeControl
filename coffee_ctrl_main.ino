@@ -5,7 +5,6 @@
  * 
 *********/
 #define LOG_LEVEL ESP_LOG_VERBOSE
-//#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 
 // PIN definitions
 
@@ -152,7 +151,8 @@ enum eError{
   TEMP_OUT_RANGE    = (1u << 1),
   TEMP_FROZEN       = (1u << 2),
   MEAS_DEV_RESET    = (1u << 3),
-};
+  WIFI_DISCONNECT   = (1u << 4),
+  };
 
 enum eLEDColor{
   LED_COLOR_RED,
@@ -207,7 +207,7 @@ void IRAM_ATTR onTimerLong(){
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
       // Only change Status when idle to measurement running
-      if (iInterruptCntLong % 5 == 0) {
+      if (iInterruptCntLong % 2 == 0) {
         iState |= STORE;
       }
 
@@ -244,7 +244,6 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   //delay(100);
 
   esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Device %s try connecting to %s\n", WiFi.macAddress().c_str(), objConfig.wifiSSID.c_str());
-  delay(100);
 
   int i_run_cnt_fail = 0;
   int i_wifi_status;
@@ -1068,38 +1067,15 @@ bool writeMeasFile(){
   float f_temp_local = fTemp;
   float f_tar_pwm = fTarPwm;
   float f_time = fTime;
-  unsigned long i_int_count = iInterruptCntAlertCatch;
-  // get conversion buffer as pointer
-  //int16_t * ptr_conv_buff  = objADS1115->getBuffer();
-  // get buffer size
-  //int i_abs_buff_size  = objADS1115->getAbsBufSize();
-  // deep copy of conversion buffer
-  //int16_t * ptr_conv_buff_cpy = new int16_t[i_abs_buff_size];
-  //for (int i_elem=0; i_elem<i_abs_buff_size; i_elem++){ptr_conv_buff_cpy[i_elem] = *(ptr_conv_buff+i_elem);}
-
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
-  obj_meas_file.print(f_time, 4);
+  obj_meas_file.print(f_time, 3);
   obj_meas_file.print(",");
   obj_meas_file.print(f_temp_local);
   obj_meas_file.print(",");
   obj_meas_file.println(f_tar_pwm);
-  //obj_meas_file.print(",");
-
-  //for (int i_val=0; i_val<i_abs_buff_size; i_val++){
-  //  obj_meas_file.print(ptr_conv_buff_cpy[i_val]); // print the buffer in the report
-  //  if (i_val<i_abs_buff_size-1){
-  //    obj_meas_file.print(" ");
-  //  }
-  //}
-
-  //obj_meas_file.print(",");
-  //obj_meas_file.println(i_int_count);
   obj_meas_file.close();
-  
-  // memory release of deepcopy
-  //delete[] ptr_conv_buff_cpy;
   b_success = true;
   return b_success;
 }// writeMeasFile
@@ -1249,13 +1225,28 @@ void loop(){
       iErrorId &= ~MEAS_DEV_RESET;
     }
 
+    if ((WiFi.status() != WL_CONNECTED) && (WiFi.getMode() == WIFI_MODE_STA)){
+      iErrorId |= WIFI_DISCONNECT;
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Wifi disconnected.\n");
+    } else {
+      iErrorId &= ~WIFI_DISCONNECT;
+    }
+
     // try error handling
-    if (iErrorId != NO_ERROR){
-      // disable powerstages
-      fTarPwm = 0.F;
-      ledcWrite(PwmSsrChannel, 0);
-      // configure ADS1115 again
-      configADS1115();
+    if (iErrorId > NO_ERROR){
+      if (iErrorId <= (TEMP_OUT_RANGE + TEMP_FROZEN + MEAS_DEV_RESET)){
+        // disable powerstages
+        fTarPwm = 0.F;
+        ledcWrite(PwmSsrChannel, 0);
+        // configure ADS1115 again
+        objADS1115->stop();
+        configADS1115();
+      } else if (iErrorId == WIFI_DISCONNECT) {
+        WiFi.disconnect(true);
+        connectWiFi(3, 6000);
+        server.end();
+        server.begin();
+      }
     }
     
     portENTER_CRITICAL_ISR(&objTimerMux);

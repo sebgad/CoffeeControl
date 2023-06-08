@@ -718,7 +718,7 @@ esp_err_t ADS1115::i2c_master_init(void)
   conf.scl_io_num = _iSclPin;
   conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
   conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-  conf.master.clk_speed = 400000;
+  conf.master.clk_speed = 100000;
   conf.clk_flags = 0;
 
   i2c_param_config(i2c_master_port, &conf);
