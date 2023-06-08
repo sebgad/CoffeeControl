@@ -1219,7 +1219,7 @@ void loop(){
   if (iStatusLED == LED_SET) {
     if(objADS1115->getConnectionStatus()){
           // only check for frozen values if connection to ADS1115 is successful
-          if((objADS1115->isValueFrozen()) || (objADS1115->getLatestBufVal() < 10.F)){
+          if(objADS1115->isValueFrozen()){
             setColor(LED_COLOR_PURPLE, false);
             Serial.println("ADS1115 Sensor value frozen");
             // Turn heating off in case sensor status is invalid
