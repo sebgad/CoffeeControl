@@ -479,7 +479,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.CtrlIntFactor = 350.0;
   objConfig.CtrlDifActivate = false;
   objConfig.CtrlDifFactor = 0.0;
-  objConfig.CtrlTarget = 91.0;
+  objConfig.CtrlTarget = 85.0;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
   objConfig.HighThresholdActivate = false;
@@ -533,6 +533,10 @@ void configPID(){
 
   if (objConfig.LowThresholdActivate) {
     objPid.setOnThres(objConfig.LowThresholdValue);
+  }
+
+  if (objConfig.HighThresholdActivate) {
+    objPid.setOffThres(objConfig.HighTresholdValue);
   }
 
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
@@ -1272,9 +1276,11 @@ void loop(){
     }
   }
 
-  if (millis() >= objConfig.TimeToStandby * 1000) {
+  // TODO: add a dynamic timeout -> (start-now)>TimeToStandby; timeout can then be reset via a button in webinterface
+  if ((millis() >= objConfig.TimeToStandby * 1000) && (bTimeOutReached == false)) {
     // check whether timeout is reached, PWM will be deactivated.
     bTimeOutReached = true;
+    esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Timeout reached -> machine going into sleep\n");
   }
   
   // Diagnosis functionality
