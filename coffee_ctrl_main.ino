@@ -207,11 +207,11 @@ void IRAM_ATTR onTimerLong(){
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
       // Only change Status when idle to measurement running
-      if (iInterruptCntLong % 2 == 0) {
+      if (iInterruptCntLong % 1 == 0) {
         iState |= STORE;
       }
 
-      if (iInterruptCntLong % 5 == 0) {
+      if (iInterruptCntLong % 3 == 0) {
         // Only write LED value when interrupt function is called 5 times
         iState |= LED_CTRL;
       }
@@ -271,23 +271,13 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
 
       esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Signal strength: %d dB -> %d %%\n", i_dBm, iDbmPercentage);
       b_successful = true;
+      WiFi.setAutoReconnect(true);
   } else {
     esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "Connection unsuccessful. WiFi status: %d\n", i_wifi_status);
   }
   
   return b_successful;
 } // connectWiFi
-
-void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
-  /**
-   * Try to reconnect to WiFi when disconnected from network
-   */
-    
-  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Disconnected from WiFi access point\n");
-  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "WiFi lost connection. Reason: %d\n", info.wifi_sta_disconnected.reason);
-  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Trying to reconnect...\n");
-  connectWiFi(3, 6000);
-} // reconnectWiFi
 
 void calcWifiStrength(int i_dBm){
   /**
@@ -1199,7 +1189,6 @@ void loop(){
 
   // Diagnosis functionality
   if ((iState & DIAG) == DIAG){
-
     // Error: Temperature Range unplausible
     if (fTemp < 10.F){
       // Sensor range is not valid
@@ -1242,8 +1231,6 @@ void loop(){
         objADS1115->stop();
         configADS1115();
       } else if (iErrorId == WIFI_DISCONNECT) {
-        WiFi.disconnect(true);
-        connectWiFi(3, 6000);
         server.end();
         server.begin();
       }
