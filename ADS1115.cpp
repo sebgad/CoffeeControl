@@ -677,9 +677,14 @@ uint16_t ADS1115::getRegisterValue(uint8_t i_reg) {
 
   uint8_t ptr_data[2];
   uint16_t i_ret_value;
+  esp_err_t esp_ret_value;
 
-  i2c_master_write_read_device(ADS1115_I2C_PORT_NUM, _iI2cAddress, &i_reg, 1, ptr_data, 2, 50 / portTICK_RATE_MS);
-
+  esp_ret_value = i2c_master_write_read_device(ADS1115_I2C_PORT_NUM, _iI2cAddress, &i_reg, 1, ptr_data, 2, 100 / portTICK_RATE_MS);
+  if(esp_ret_value == ESP_ERR_TIMEOUT){
+    Serial.println("Error Timeout in I2C communication.");
+  } else if(esp_ret_value == ESP_FAIL){
+    Serial.println("Error in I2C communication.Slave not acknowledged.");
+  }
   i_ret_value = (uint16_t)(ptr_data[0]<<8) | ptr_data[1];
 
   return i_ret_value;
@@ -713,7 +718,7 @@ esp_err_t ADS1115::i2c_master_init(void)
   conf.scl_io_num = _iSclPin;
   conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
   conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-  conf.master.clk_speed = 400000;
+  conf.master.clk_speed = 100000;
   conf.clk_flags = 0;
 
   i2c_param_config(i2c_master_port, &conf);
@@ -751,7 +756,7 @@ void ADS1115::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
   // Put Stop command in queue
   i2c_master_stop(cmd);
 
-  // Execute all queued commands, 100ms timeout
+  // Execute all queued commands, 1000ms timeout
   esp_err_t ret = i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
   i2c_cmd_link_delete(cmd);
 }

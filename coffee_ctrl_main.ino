@@ -5,7 +5,6 @@
  * 
 *********/
 #define LOG_LEVEL ESP_LOG_VERBOSE
-//#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 
 // PIN definitions
 
@@ -32,8 +31,7 @@
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
-#define WDT_Timeout 15 // WatchDog Timeout in seconds
-
+#define WDT_Timeout 75 // WatchDog Timeout in seconds
 
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -134,39 +132,27 @@ ADS1115 *objADS1115 = new ADS1115;
 // timer object for ISR
 hw_timer_t * objTimerLong = NULL;
 
-// Status for function call timing, used in ISR
-volatile uint8_t iStatusMeas = 0; // 0:init/idle, 1:store value running, 2: store value finished
-volatile uint8_t iStatusDiag = 0; // 0:init/idle, 1:diagRequest
-volatile uint8_t iStatusCtrl = 0; // 0:init/idle, 1:measurement running, 2:measurement finished, 3:control
-volatile uint8_t iStatusLED = 0; // 0:init/idle, 1: set new LED value
-
 // define Counter for interrupt handling
 volatile unsigned long iInterruptCntLong = 0;
 volatile unsigned long iInterruptCntAlert = 0;
 volatile unsigned long iInterruptCntAlertCatch = 0;
 
-
-// enums for the status
-enum eStatusCtrl {
-  IDLE,
-  MEASURE,
-  CONTROL,
+enum eState{
+  IDLE      = (1u << 0),
+  MEASURE   = (1u << 1),
+  PID_CTRL  = (1u << 2),
+  STORE     = (1u << 3),
+  DIAG      = (1u << 4),
+  LED_CTRL  = (1u << 5)
 };
 
-enum eStatusMeas {
-  IDLE_MEAS,
-  STORE_MEAS
-};
-
-enum eStatusLED {
-  LED_IDLE,
-  LED_SET
-};
-
-enum eStatusDiag {
-  IDLE_DIAG,
-  REQUEST_DIAG
-};
+enum eError{
+  NO_ERROR          = (1u << 0),
+  TEMP_OUT_RANGE    = (1u << 1),
+  TEMP_FROZEN       = (1u << 2),
+  MEAS_DEV_RESET    = (1u << 3),
+  WIFI_DISCONNECT   = (1u << 4),
+  };
 
 enum eLEDColor{
   LED_COLOR_RED,
@@ -189,6 +175,11 @@ const unsigned long iInterruptLongIntervalMicros = 450000; //microseconds
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
+// Status for function call timing, used in ISR
+volatile unsigned int iState = IDLE;
+
+int iErrorId = NO_ERROR;
+
 // timers ==============================================================================================================
 void IRAM_ATTR onAlertRdy(){
   /** Interrupt Service Routine for sensor read outs
@@ -197,50 +188,41 @@ void IRAM_ATTR onAlertRdy(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
-    // Define State machine transition and oversampling
-      if (iInterruptCntAlert % 2 == 0) {
-        if (iStatusCtrl == IDLE){
-          // Only change Status when idle to measurement running
-          iStatusCtrl = CONTROL;
-          iInterruptCntAlertCatch++;
-        }
-      } else if (iInterruptCntAlert % 1 == 0) {
-        // every second interrupt one measurement shall be performed
-        if (iStatusCtrl == IDLE) {
-          // Only change Status when idle to measurement running
-          iStatusCtrl = MEASURE;
-          iInterruptCntAlertCatch++;
-        }
-      }
-      iInterruptCntAlert++;
+    // Perform Measurement on interrupt call
+    iState |= MEASURE;
+
+    if (iInterruptCntAlert % 2 == 0) {
+        // Only apply control on every second interrupt
+        iState |= PID_CTRL;
+    }
+    iInterruptCntAlert++;
     portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
 void IRAM_ATTR onTimerLong(){
-  /** Interrupt Service Routine for sensor read outs
+  /** ISR triggered by timer alarm. Used for Store Measurement file, LED-Set and DIAG-Function
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
   **/
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
-      // Interrupt counter
-      iInterruptCntLong++;
-
-      if (iStatusMeas == IDLE_MEAS) {
-        // Only change Status when idle to measurement running
-        iStatusMeas = STORE_MEAS;
+      // Only change Status when idle to measurement running
+      if (iInterruptCntLong % 1 == 0) {
+        iState |= STORE;
       }
 
-      if (iInterruptCntLong % 5 == 0) {
+      if (iInterruptCntLong % 3 == 0) {
         // Only write LED value when interrupt function is called 5 times
-        iStatusLED = LED_SET;
+        iState |= LED_CTRL;
       }
 
-      if ((iStatusDiag == IDLE_DIAG) & (iInterruptCntLong % 2 == 0)){
-        iStatusDiag = REQUEST_DIAG;
+      if (iInterruptCntLong % 2 == 0){
+        iState |= DIAG;
       }
-
     portEXIT_CRITICAL_ISR(&objTimerMux);
+
+    // Interrupt counter
+    iInterruptCntLong++;
 }
 
 
@@ -262,7 +244,6 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   //delay(100);
 
   esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Device %s try connecting to %s\n", WiFi.macAddress().c_str(), objConfig.wifiSSID.c_str());
-  delay(100);
 
   int i_run_cnt_fail = 0;
   int i_wifi_status;
@@ -275,7 +256,7 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
 
   while ((i_wifi_status != WL_CONNECTED) && (i_run_cnt_fail<i_total_fail)) {
     // wait for connection establish
-    delay(i_timout_attemp);
+    vTaskDelay(i_timout_attemp/portTICK_PERIOD_MS);
     i_run_cnt_fail++;
     i_wifi_status = WiFi.status();
     esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection Attemp: %d\n", i_run_cnt_fail);
@@ -290,23 +271,13 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
 
       esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Signal strength: %d dB -> %d %%\n", i_dBm, iDbmPercentage);
       b_successful = true;
+      WiFi.setAutoReconnect(true);
   } else {
     esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "Connection unsuccessful. WiFi status: %d\n", i_wifi_status);
   }
   
   return b_successful;
 } // connectWiFi
-
-void reconnectWiFi(WiFiEvent_t event, WiFiEventInfo_t info){
-  /**
-   * Try to reconnect to WiFi when disconnected from network
-   */
-    
-  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Disconnected from WiFi access point\n");
-  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "WiFi lost connection. Reason: %d\n", info.wifi_sta_disconnected.reason);
-  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Trying to reconnect...\n");
-  connectWiFi(3, 1000);
-} // reconnectWiFi
 
 void calcWifiStrength(int i_dBm){
   /**
@@ -337,10 +308,10 @@ bool loadConfiguration(){
     DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
     if ((!obj_param_file) || (error)){
-      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Failed to read file, using default configuration.\n");
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to read file, using default configuration.\n");
       
       if (!obj_param_file) {
-        esp_log_write(ESP_LOG_WARN, strUserLogLabel, "File could not be opened.\n");
+        esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File could not be opened.\n");
       }
     
       if (error) {
@@ -393,7 +364,7 @@ bool loadConfiguration(){
       if (b_set_default_values){
         // default values are set to Json object -> write it back to file.
         if (!saveConfiguration()){
-          esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Cannot write back to JSON file.\n");
+          esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Cannot write back to JSON file.\n");
         }
       }
   }
@@ -449,7 +420,7 @@ bool saveConfiguration(){
     File obj_param_file = LittleFS.open(strParamFilePath, "w");
   
     if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
-      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Failed to write configuration to file\n");
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to write configuration to file\n");
     }
     else{
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Configuration file updated successfully\n");
@@ -813,7 +784,7 @@ bool configADS1115(){
   
   // Initialize I2c on defined pins with default adress
   if (!objADS1115->begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
-    esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Failed to initialize I2C sensor connection, stop working.\n");
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to initialize I2C sensor connection, stop working.\n");
     return false;
   }
 
@@ -929,7 +900,7 @@ void setup(){
     
     // load configuration from file in eeprom
     if (!loadConfiguration()) {
-      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Parameter file is locked on startup. Please reset to factory settings.\n");
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Parameter file is locked on startup. Please reset to factory settings.\n");
     }
   }
 
@@ -950,15 +921,11 @@ void setup(){
   setColor(LED_COLOR_WHITE, true); // White
 
   // Connect to wifi and create time stamp if device is Online
-  bEspOnline = connectWiFi(3, 3000);
+  bEspOnline = connectWiFi(3, 6000);
   char char_timestamp[50];
 
   if (bEspOnline == true) {
     // ESP has wifi connection
-
-    // Define reconnect action when disconnecting from Wifi
-    // ISSUE_PENDING: No corresponding onEvent yet discovered for Core version 2
-    //WiFi.onEvent(reconnectWiFi, SYSTEM_EVENT_STA_DISCONNECTED);
 
     // initialize NTP client
     configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
@@ -966,7 +933,7 @@ void setup(){
     // get local time
     struct tm obj_timeinfo;
     if(!getLocalTime(&obj_timeinfo)){
-      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Failed to obtain time stamp online\n");
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to obtain time stamp online\n");
     } else {
       // write time stamp into variable
       strftime(char_timestamp, sizeof(char_timestamp), "%s", &obj_timeinfo);
@@ -976,7 +943,7 @@ void setup(){
   } else {
     // No wifi connection possible start SoftAP
 
-    esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "Connection to SSID '%s' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'\n", objConfig.wifiSSID.c_str());
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection to SSID '%s' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'\n", objConfig.wifiSSID.c_str());
     WiFi.softAP("SilviaCoffeeCtrl");
     
     // print location to measurement file
@@ -991,16 +958,20 @@ void setup(){
 
   // register mDNS. ESP is available under http://coffee.local
   if (!MDNS.begin("coffee")) {
-    esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Error setting up MDNS responder!\n");
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Error setting up MDNS responder!\n");
   } else {
     // add service to standart http connection
     MDNS.addService("http", "tcp", 80);
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "MDNS responder successfully initialized.\n");
   }
 
   // configure ADS1115
   if(!configADS1115()) {
     // TODO add diagnosis when ADS1115 is not connected
-    esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "ADS1115 configuration not successful.\n");
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ADS1115 configuration not successful.\n");
+    iErrorId |= MEAS_DEV_RESET;
+  } else {
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ADS initialized successfully.\n");
   }
 
   // Write Measurement file header
@@ -1049,27 +1020,9 @@ void setup(){
   
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "JUMP to main loop.\n");
 
 }// Setup
-
-boolean readSensors(){
-  // Read out Sensor values
-  bool b_result = false;
-  
-  fTime = (float)(millis() - iTimeStart) / 1000.0;
-  // get physical value of sensor
-  fTemp = objADS1115->getPhysVal();
-  
-  // ISSUE PENDING: WiFi.RSSI() is delaying code execution.
-  //if (bEspOnline == true) {
-  //  int i_dBm = WiFi.RSSI();
-  //  calcWifiStrength(i_dBm);
-  //}
-
-  b_result = true;
-  return b_result;
-} //readSensors
-
 
 bool controlHeating(){
   /** PID regulator function for controling heating device
@@ -1077,14 +1030,15 @@ bool controlHeating(){
    */
 
   bool b_success = false;
-
-  if (!bTimeOutReached) {
+  if ((!bTimeOutReached) && (iErrorId == NO_ERROR)) {
     objPid.compute();
+    b_success = true;
   } else {
     fTarPwm = 0.F;
+    b_success = false;
   }
   ledcWrite(PwmSsrChannel, (int)fTarPwm);
-  b_success = true;
+
   return b_success;
 
 } // controlHeating
@@ -1096,41 +1050,18 @@ bool writeMeasFile(){
 
   bool b_success = false;
   portENTER_CRITICAL_ISR(&objTimerMux);
-    float f_temp_local = fTemp;
-    float f_tar_pwm = fTarPwm;
-    float f_time = fTime;
-    unsigned long i_int_count = iInterruptCntAlertCatch;
-    // get conversion buffer as pointer
-    int16_t * ptr_conv_buff  = objADS1115->getBuffer();
-    // get buffer size
-    int i_abs_buff_size  = objADS1115->getAbsBufSize();
-    // deep copy of conversion buffer
-    int16_t * ptr_conv_buff_cpy = new int16_t[i_abs_buff_size];
-    for (int i_elem=0; i_elem<i_abs_buff_size; i_elem++){ptr_conv_buff_cpy[i_elem] = *(ptr_conv_buff+i_elem);}
-
+  float f_temp_local = fTemp;
+  float f_tar_pwm = fTarPwm;
+  float f_time = fTime;
   portEXIT_CRITICAL_ISR(&objTimerMux);
   
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
-  obj_meas_file.print(f_time, 4);
+  obj_meas_file.print(f_time, 3);
   obj_meas_file.print(",");
   obj_meas_file.print(f_temp_local);
   obj_meas_file.print(",");
-  obj_meas_file.print(f_tar_pwm);
-  obj_meas_file.print(",");
-
-  for (int i_val=0; i_val<i_abs_buff_size; i_val++){
-    obj_meas_file.print(ptr_conv_buff_cpy[i_val]); // print the buffer in the report
-    if (i_val<i_abs_buff_size-1){
-      obj_meas_file.print(" ");
-    }
-  }
-
-  obj_meas_file.print(",");
-  obj_meas_file.println(i_int_count);
+  obj_meas_file.println(f_tar_pwm);
   obj_meas_file.close();
-  
-  // memory release of deepcopy
-  delete[] ptr_conv_buff_cpy;
   b_success = true;
   return b_success;
 }// writeMeasFile
@@ -1199,79 +1130,55 @@ void setColor(int i_color, bool b_gain_active) {
 
 
 void loop(){
-  if ((iStatusCtrl == MEASURE) || (iStatusCtrl == CONTROL)) {
-    // Call sensor read out function
-    bool b_result_sensor;
+  if ((iState & MEASURE) == MEASURE) {
+    fTime = (float)(millis() - iTimeStart) / 1000.0;
+    // get physical value of sensor
+    fTemp = objADS1115->getPhysVal();
     
-    if(objADS1115->getConnectionStatus()){
-      // Only read out sensor if connection status is true
-      b_result_sensor = readSensors();
-    }
-
-    if (b_result_sensor == true) {
-      if (iStatusCtrl == MEASURE) {
-        // Only change to IDLE if Measurement is requested and readout was successfully
-        portENTER_CRITICAL_ISR(&objTimerMux);
-          iStatusCtrl = IDLE;
-        portEXIT_CRITICAL_ISR(&objTimerMux);
-      }
-      // reset watchdog timer every time a sensor value is read
-      esp_task_wdt_reset();
-    }
-  }
-
-  if (iStatusLED == LED_SET) {
-    if(objADS1115->getConnectionStatus()){
-          // only check for frozen values if connection to ADS1115 is successful
-          if(objADS1115->isValueFrozen()){
-            setColor(LED_COLOR_PURPLE, false);
-            Serial.println("ADS1115 Sensor value frozen");
-            // Turn heating off in case sensor status is invalid
-            ledcWrite(PwmSsrChannel, 0);
-            esp_log_write(ESP_LOG_ERROR, strUserLogLabel,  "ADS1115 Sensor values frozen. Reconfigure ADS1115\n");
-            // configure ADS1115 again
-            configADS1115();
-          }
-          else{
-            // sensor is OK-> display heating status
-            if (fTemp < objConfig.CtrlTarget - 1.0) {
-              // Heat up signal
-              setColor(LED_COLOR_ORANGE, true);
-            } 
-            else if (fTemp > objConfig.CtrlTarget + 1.0){
-              // Cool down signal
-              setColor(LED_COLOR_BLUE, true);
-            }
-            else {
-              // temperature in range signal
-              setColor(LED_COLOR_GREEN, true); 
-            }
-          }
-        }// if objADS1115->getConnectionStatus()
-
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iStatusLED = LED_IDLE;
+      iState &= ~MEASURE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
+
+    // reset watchdog timer every time a sensor value is read
+    esp_task_wdt_reset();
   }
 
-  if (iStatusCtrl == CONTROL) {
+  if ((iState & PID_CTRL) == PID_CTRL) {
     // Call heating control function
     bool b_result_ctrl_heating;
     b_result_ctrl_heating = controlHeating();
-    if (b_result_ctrl_heating == true) {
-      portENTER_CRITICAL_ISR(&objTimerMux);
-        iStatusCtrl = IDLE;
-      portEXIT_CRITICAL_ISR(&objTimerMux);
-      }
+    
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState &= ~PID_CTRL;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
   }
- 
-  if (iStatusMeas==STORE_MEAS) {
+
+  if ((iState & LED_CTRL) == LED_CTRL) {
+    if(iErrorId > NO_ERROR){
+      setColor(LED_COLOR_PURPLE, false); 
+    } else if (fTemp < objConfig.CtrlTarget - 1.0) {
+      // Heat up signal
+      setColor(LED_COLOR_ORANGE, true);
+    } else if (fTemp > objConfig.CtrlTarget + 1.0){
+      // Cool down signal
+      setColor(LED_COLOR_BLUE, true);
+    } else {
+      // temperature in range signal
+      setColor(LED_COLOR_GREEN, true); 
+    }
+    
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState &= ~LED_CTRL;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+  }
+
+  if ((iState & STORE) == STORE) {
     // Write values to measurement file
     bool b_result_meas_write;
     b_result_meas_write = writeMeasFile();
     if (b_result_meas_write){
       portENTER_CRITICAL_ISR(&objTimerMux);
-        iStatusMeas = IDLE_MEAS;
+        iState &= ~STORE;
       portEXIT_CRITICAL_ISR(&objTimerMux);
     }
   }
@@ -1284,18 +1191,56 @@ void loop(){
   }
   
   // Diagnosis functionality
-  if (iStatusDiag==REQUEST_DIAG){
+  if ((iState & DIAG) == DIAG){
+    // Error: Temperature Range unplausible
+    if (fTemp < 10.F){
+      // Sensor range is not valid
+      iErrorId |= TEMP_OUT_RANGE;
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Temperature range unplausible. Measured Value: %.2f C.\n", fTemp);
+    } else {
+      iErrorId &= ~TEMP_OUT_RANGE;
+    }
+
+    // Error: Value frozen
+    if (objADS1115->isValueFrozen()){
+      iErrorId |= TEMP_FROZEN;
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "ERROR: ADS1115 Sensor values frozen.\n");
+    } else {
+      iErrorId &= ~TEMP_FROZEN;
+    }
+
+    // Error: Internal reset of ADS
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
-      esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Conversion mode changed to single shot (default) during runtime. Re-Configure ADS1115.\n");
-      setColor(LED_COLOR_PURPLE, false); 
-      if (objADS1115->stop()==ESP_OK){
+      iErrorId |= MEAS_DEV_RESET;
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Conversion mode changed to single shot (default) during runtime.\n");
+    } else {
+      iErrorId &= ~MEAS_DEV_RESET;
+    }
+
+    if ((WiFi.status() != WL_CONNECTED) && (WiFi.getMode() == WIFI_MODE_STA)){
+      iErrorId |= WIFI_DISCONNECT;
+      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Wifi disconnected.\n");
+    } else {
+      iErrorId &= ~WIFI_DISCONNECT;
+    }
+
+    // try error handling
+    if (iErrorId > NO_ERROR){
+      if (iErrorId <= (TEMP_OUT_RANGE + TEMP_FROZEN + MEAS_DEV_RESET)){
+        // disable powerstages
+        fTarPwm = 0.F;
+        ledcWrite(PwmSsrChannel, 0);
+        // configure ADS1115 again
+        objADS1115->stop();
         configADS1115();
-      } else{
-        esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "Cannot delete driver for reinit.\n");
+      } else if (iErrorId == WIFI_DISCONNECT) {
+        server.end();
+        server.begin();
       }
     }
+    
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iStatusDiag = IDLE_DIAG;
+      iState &= ~DIAG;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 }// loop
