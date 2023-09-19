@@ -103,6 +103,8 @@
 
 #define ADS1115_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
+#define ADS1115_DEB_VALUE_FROZEN 5
+
 #include "Arduino.h"
 
 class ADS1115
@@ -159,6 +161,7 @@ class ADS1115
     int16_t* getBuffer(void);
     bool getConnectionStatus(void);
     uint16_t iConfigReg;
+    void getGradientPhysVal(float *, float * );
 
   private:
     int _iSdaPin;
@@ -187,7 +190,7 @@ class ADS1115
     bool _bConnectStatus;
     float _getAvgFilterVal();
     float _getSavGolFilterVal();
-    
+    int _iValFroozenDebCnt;
 };
 
 #endif

@@ -26,7 +26,7 @@ i_R1 = 1299
 i_R2 = 1299
 i_R3 = 1298
 i_R4 = df['Ohm']
-vcc = 3.3
+vcc = 5.08
 
 df['Umess'] = vcc*(i_R1*i_R4-i_R3*i_R2)/ ((i_R1+i_R2)*(i_R3+i_R4))
 

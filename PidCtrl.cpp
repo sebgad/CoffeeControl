@@ -219,7 +219,9 @@ void PidCtrl::_calcControlEquation(){
     float f_delta_sec;
     float f_control_deviation;
     float f_d_control_deviation;
-    float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
+    float f_k_p_coeff = 0.F;
+    float f_k_i_coeff = 0.F;
+    float f_k_d_coeff = 0.F;
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
     f_control_deviation = _fTargetValue - *_ptrActualValue; // error
@@ -297,14 +299,12 @@ void PidCtrl::_initCoeffTable(size_t i_size_conv) {
   }
 }
 
-
 float PidCtrl::getErrorIntegrator(){
   /**
    * @brief Get the sum error of the integrator part of the controller
   */
   return _fSumIntegrator;
 }
-
 
 float PidCtrl::getTargetValue(){
   /**
@@ -318,4 +318,27 @@ float PidCtrl::getErrorDiff(){
    * @brief Get the error difference between recent deviation and last deviation
    */ 
   return _fErrDiff;
+}
+
+void PidCtrl::boostPid(){
+    /**
+     * @brief Boost PID controller to max output and reset PID values
+     * 
+     */
+        // Check lower and upper limit of manipulation variable
+    *_ptrManipValue = _fUpLim;
+
+    // check and react for ONOFFThreshold
+    if (_bThresOn &&  (*_ptrActualValue < _fThresOn)) { *_ptrManipValue = _fUpLim; }; // below lower thres -> set to upper limit
+    if (_bThresOff &&  (*_ptrActualValue > _fThresOff)) { *_ptrManipValue = _fLoLim; }; // below lower thres -> set to upper limit
+}
+
+void PidCtrl::resetPidValues(){
+    /**
+     * @brief Resets all PID values to 0
+     * 
+     */
+    _fSumIntegrator = 0.F;
+    *_ptrManipValue = 0.F;
+    _fLastControlDev = 0.F;
 }

@@ -5,13 +5,15 @@
  * 
 *********/
 #define LOG_LEVEL ESP_LOG_VERBOSE
-
+ 
 // PIN definitions
 
 // I2C pins
 #define SDA_0 23
 #define SCL_0 22
 #define CONV_RDY_PIN 14
+
+#define P_PID_BUTTON 26
 
 // PWM defines
 #define P_SSR_PWM 21
@@ -26,13 +28,14 @@
 
 
 // define timer related channels for PWM signals
-#define RwmRedChannel 13 //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
+#define RwmRedChannel 13 //  PWM  channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
 #define RwmGrnChannel 14 //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
 #define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
 #define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
 
 #define WDT_Timeout 75 // WatchDog Timeout in seconds
 
+#include "Arduino.h"
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
@@ -143,7 +146,8 @@ enum eState{
   PID_CTRL  = (1u << 2),
   STORE     = (1u << 3),
   DIAG      = (1u << 4),
-  LED_CTRL  = (1u << 5)
+  LED_CTRL  = (1u << 5),
+  PID_BOOST = (1u << 6),
 };
 
 enum eError{
@@ -180,7 +184,30 @@ volatile unsigned int iState = IDLE;
 
 int iErrorId = NO_ERROR;
 
+unsigned long iPidButtonLastTime = 0;
+unsigned long iPidButtonCurrTime = 0;
+
 // timers ==============================================================================================================
+void IRAM_ATTR onPIDButtonPress(){
+  /**
+   * @brief ISR for button press to Boost heating and reset PID controller
+   * 
+   */
+  // Define Critical Code section, also needs to be called in Main-Loop
+  portENTER_CRITICAL_ISR(&objTimerMux);
+  iPidButtonCurrTime = millis();
+
+  if ((iPidButtonCurrTime - iPidButtonLastTime) > 250) {
+    if ((iState & PID_BOOST) != PID_BOOST) {
+      iState |= PID_BOOST;
+    } else {
+      iState &= ~PID_BOOST;
+    }
+    iPidButtonLastTime = iPidButtonCurrTime;
+  }
+  portEXIT_CRITICAL_ISR(&objTimerMux);
+}
+
 void IRAM_ATTR onAlertRdy(){
   /** Interrupt Service Routine for sensor read outs
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
@@ -188,12 +215,13 @@ void IRAM_ATTR onAlertRdy(){
 
   // Define Critical Code section, also needs to be called in Main-Loop
     portENTER_CRITICAL_ISR(&objTimerMux);
-    // Perform Measurement on interrupt call
-    iState |= MEASURE;
 
     if (iInterruptCntAlert % 2 == 0) {
-        // Only apply control on every second interrupt
+        // Only apply control on every third interrupt
         iState |= PID_CTRL;
+          
+        // Perform Measurement on interrupt call
+        iState |= MEASURE;
     }
     iInterruptCntAlert++;
     portEXIT_CRITICAL_ISR(&objTimerMux);
@@ -216,7 +244,7 @@ void IRAM_ATTR onTimerLong(){
         iState |= LED_CTRL;
       }
 
-      if (iInterruptCntLong % 2 == 0){
+      if (iInterruptCntLong % 3 == 0){
         iState |= DIAG;
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
@@ -749,7 +777,7 @@ void configWebserver(){
           if (!i_index) {
             // open the file on first call and store the file handle in the request object
             ptr_request->_tempFile = LittleFS.open("/" + str_filename, "w");
-            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Start uploading file: %s\n", str_filename);
+            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Start uploading file: %s\n", str_filename.c_str());
           }
 
           if (i_len) {
@@ -816,9 +844,6 @@ bool configADS1115(){
     const size_t size_1d_map = sizeof(arrPt1000LookUpTbl) / sizeof(arrPt1000LookUpTbl[0]);
     objADS1115->setPhysConv(arrPt1000LookUpTbl, size_1d_map);
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Applying lookup table for Pt1000 conversion:\n");
-    for(int i_row=0; i_row<size_1d_map; i_row++){
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "%.4f    %.4f\n", arrPt1000LookUpTbl[i_row][0], arrPt1000LookUpTbl[i_row][1]);
-    }
   #endif
 
   // set gain amplifier
@@ -990,7 +1015,7 @@ void setup(){
   obj_meas_file.println(i_high_reg, BIN);
   
   obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,TargetPWM,Buffer,InterruptCountAlertReady");
+  obj_meas_file.println("Time,Temperature,TargetPWM");
   obj_meas_file.close();
 
   // Initialize Timer 
@@ -1003,6 +1028,9 @@ void setup(){
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
   attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
+
+  pinMode(P_PID_BUTTON, INPUT_PULLDOWN);
+  attachInterrupt(P_PID_BUTTON, &onPIDButtonPress, FALLING);
   
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
@@ -1042,6 +1070,25 @@ bool controlHeating(){
   return b_success;
 
 } // controlHeating
+
+bool boostHeating(){
+  /**
+   * @brief Boost PID heating and reset controller parameter
+   * 
+   */
+  
+  bool b_success = false;
+  if ((!bTimeOutReached) && (iErrorId == NO_ERROR)) {
+    objPid.boostPid();
+    b_success = true;
+  } else {
+    fTarPwm = 0.F;
+    b_success = false;
+  }
+  ledcWrite(PwmSsrChannel, (int)fTarPwm);
+
+  return b_success;
+}
 
 bool writeMeasFile(){
   /** Function to store the data in measurement file
@@ -1143,19 +1190,25 @@ void loop(){
     esp_task_wdt_reset();
   }
 
-  if ((iState & PID_CTRL) == PID_CTRL) {
-    // Call heating control function
-    bool b_result_ctrl_heating;
-    b_result_ctrl_heating = controlHeating();
+  if (((iState & PID_CTRL) == PID_CTRL) & ((iState & PID_BOOST) != PID_BOOST)) {
+    // Call heating control function only when PID_BOOST is not active
+    controlHeating();
     
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~PID_CTRL;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 
+  if ((iState & PID_BOOST) == PID_BOOST){
+    boostHeating();
+    //esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Turbo Boost\n");
+  }
+
   if ((iState & LED_CTRL) == LED_CTRL) {
     if(iErrorId > NO_ERROR){
       setColor(LED_COLOR_PURPLE, false); 
+    } else if ((iState & PID_BOOST) == PID_BOOST){
+      setColor(LED_COLOR_WHITE, true);
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
       setColor(LED_COLOR_ORANGE, true);
@@ -1201,14 +1254,6 @@ void loop(){
       iErrorId &= ~TEMP_OUT_RANGE;
     }
 
-    // Error: Value frozen
-    if (objADS1115->isValueFrozen()){
-      iErrorId |= TEMP_FROZEN;
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "ERROR: ADS1115 Sensor values frozen.\n");
-    } else {
-      iErrorId &= ~TEMP_FROZEN;
-    }
-
     // Error: Internal reset of ADS
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
       iErrorId |= MEAS_DEV_RESET;
@@ -1226,17 +1271,17 @@ void loop(){
 
     // try error handling
     if (iErrorId > NO_ERROR){
-      if (iErrorId <= (TEMP_OUT_RANGE + TEMP_FROZEN + MEAS_DEV_RESET)){
+      if (iErrorId <= (TEMP_OUT_RANGE + MEAS_DEV_RESET)){
         // disable powerstages
         fTarPwm = 0.F;
         ledcWrite(PwmSsrChannel, 0);
         // configure ADS1115 again
-        objADS1115->stop();
-        configADS1115();
-      } else if (iErrorId == WIFI_DISCONNECT) {
-        server.end();
-        server.begin();
-      }
+        //objADS1115->stop();
+        //configADS1115();
+      } //else if (iErrorId == WIFI_DISCONNECT) {
+        //server.end();
+        //server.begin();
+      //}
     }
     
     portENTER_CRITICAL_ISR(&objTimerMux);

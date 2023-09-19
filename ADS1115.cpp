@@ -9,6 +9,7 @@ ADS1115::ADS1115() {
   _ptrConvBuff = new int16_t[ADS1115_CONV_BUF_SIZE];
   _iBuffCnt = -1;
   _iBuffMaxFillIndex = 0;
+  _iValFroozenDebCnt = 0;
 
   for (int i_elem=0; i_elem<ADS1115_CONV_BUF_SIZE; i_elem++){_ptrConvBuff[i_elem]=0;}
 }
@@ -503,7 +504,7 @@ bool ADS1115::getPinRdyMode() {
   iLowThreshReg = getRegisterValue(ADS1115_LOW_THRESH_REG);
   iHighThreshReg = getRegisterValue(ADS1115_HIGH_THRESH_REG);
 
-  if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
+  if (!readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && !(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
     return true;
   } else {
     return false;
@@ -634,8 +635,7 @@ float ADS1115::getPhysVal(void){
   */
   
   float f_voltage = getVoltVal();
-  float f_physical;
-  int i_index = 0;
+  float f_physical = 0.F;
 
   if (_iSizeConvTable==1){
     // polynom or linear regression
@@ -657,7 +657,6 @@ float ADS1115::getPhysVal(void){
   }
   return f_physical;
 }
-
 
 void ADS1115::printConfigReg() {
   /**
@@ -690,7 +689,6 @@ uint16_t ADS1115::getRegisterValue(uint8_t i_reg) {
   return i_ret_value;
 }
 
-
 void ADS1115::setRegisterValue(uint8_t i_reg, uint16_t i_data) {
   /**
    * @brief Return a specified register value of ADS1115 (only 2 byte register are supported yet.)
@@ -704,7 +702,6 @@ void ADS1115::setRegisterValue(uint8_t i_reg, uint16_t i_data) {
   ptr_data[1] = highByte(i_data);
   i2c_write(i_reg, ptr_data, 2);
 }
-
 
 esp_err_t ADS1115::i2c_master_init(void)
 {
@@ -757,7 +754,7 @@ void ADS1115::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
   i2c_master_stop(cmd);
 
   // Execute all queued commands, 1000ms timeout
-  esp_err_t ret = i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
+  i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
   i2c_cmd_link_delete(cmd);
 }
 
@@ -778,7 +775,6 @@ void ADS1115::initConvTable(size_t i_size_conv) {
     _ptrConvTable[i_row]=new float[3];
   }
 }
-
 
 void ADS1115::activateFilter(){
   /**
@@ -928,26 +924,39 @@ bool ADS1115::isValueFrozen(){
    * 
    */
 
+  bool b_val_equal = false;
   bool b_status = false;
 
   if (_iBuffMaxFillIndex>=9){
     // filter is active and filled enough -> check if value is frozen
 
     int16_t i_last_val = _ptrConvBuff[0];
+    b_val_equal = true;
     b_status = true;
 
     for (int i_row=1; i_row<=_iBuffMaxFillIndex; i_row++){
-      // if two values are not the smae break the for loop and return false
+      // if two values are not the same, break the for loop and return false
       // _iBuffMaxFillIndex is a index not a counter
       if (_ptrConvBuff[i_row] != i_last_val){
         // values are different -> found change -> ok
-        b_status = false;
+        b_val_equal = false;
         break;
       }
       i_last_val = _ptrConvBuff[i_row]; // set last value to current value
     }
-  }
+    
+    if (b_val_equal){
+      _iValFroozenDebCnt++;
 
+      if (_iValFroozenDebCnt == ADS1115_DEB_VALUE_FROZEN) {
+        b_status = false;
+        esp_log_write(ESP_LOG_ERROR, "ADS1115", "Sensor raw values in buffer are equal. Last raw value: %d.\n", i_last_val);
+        _iValFroozenDebCnt = 0;
+      }
+    } else {
+      _iValFroozenDebCnt = 0;
+    }
+  }
   return b_status;
 }
 
@@ -977,7 +986,6 @@ float ADS1115::getConvVal(){
       f_conversion_value = _getAvgFilterVal();
     }
   } else {
-
     f_conversion_value = (float)getLatestBufVal();
   }
   return f_conversion_value;

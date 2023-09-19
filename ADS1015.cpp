@@ -509,7 +509,7 @@ bool ADS1015::getPinRdyMode() {
   iLowThreshReg = getRegisterValue(ADS1015_LOW_THRESH_REG);
   iHighThreshReg = getRegisterValue(ADS1015_HIGH_THRESH_REG);
 
-  if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1015_CMP_DISABLE)) {
+  if (!readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && !(b_cmp_queue_mode==ADS1015_CMP_DISABLE)) {
     return true;
   } else {
     return false;
@@ -640,8 +640,7 @@ float ADS1015::getPhysVal(void){
   */
   
   float f_voltage = getVoltVal();
-  float f_physical;
-  int i_index = 0;
+  float f_physical = 0.F;
 
   if (_iSizeConvTable==1){
     // polynom or linear regression
@@ -749,7 +748,7 @@ void ADS1015::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
   i2c_master_stop(cmd);
 
   // Execute all queued commands, 100ms timeout
-  esp_err_t ret = i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 100 / portTICK_RATE_MS);
+  i2c_master_cmd_begin(ADS1015_I2C_PORT_NUM, cmd, 100 / portTICK_RATE_MS);
   i2c_cmd_link_delete(cmd);
 }
 

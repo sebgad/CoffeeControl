@@ -3,7 +3,7 @@
 
 #ifndef ADS1015_h
 #define ADS1015_h
-
+#include "Arduino.h"
 #include "driver/i2c.h"
 
 #define ADS1015_I2C_PORT_NUM I2C_NUM_1 // I2C port number
@@ -102,7 +102,7 @@
 
 #define ADS1015_DELAY_AFTER_MUX_CHANGE 5 //5 ms
 
-#include "Arduino.h"
+
 
 class ADS1015
 {
