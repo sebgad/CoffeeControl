@@ -36,6 +36,8 @@ class PidCtrl
     float getErrorIntegrator();
     float getErrorDiff();
     float getTargetValue();
+    void setPidToSleep();
+    void wakePidUp();
 
   private:
     float ** ptrConstants;
@@ -53,6 +55,7 @@ class PidCtrl
     float _fThresOff;
     bool _bThresOn = false;
     bool _bThresOff = false;
+    bool _bSleep = false;
     int _iLinkMode;
     unsigned long _iLastComputeMillis;
     float _fLastControlDev;

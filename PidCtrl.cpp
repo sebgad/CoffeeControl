@@ -220,6 +220,11 @@ void PidCtrl::_calcControlEquation(){
     float f_control_deviation;
     float f_d_control_deviation;
     float f_k_p_coeff, f_k_i_coeff, f_k_d_coeff;
+
+    if (_bSleep){
+        // early return when PID controller is in sleep
+        return;
+    }
     
     f_delta_sec = (float)(millis() - _iLastComputeMillis)/1000.0;
     f_control_deviation = _fTargetValue - *_ptrActualValue; // error
@@ -319,3 +324,23 @@ float PidCtrl::getErrorDiff(){
    */ 
   return _fErrDiff;
 }
+
+
+void PidCtrl::setPidToSleep(){
+    /**
+   * @brief set the PID controller to sleep
+   */ 
+
+  *_ptrManipValue = 0.0;
+  _bSleep = true;
+}
+
+void PidCtrl::wakePidUp(){
+    /**
+   * @brief set the PID controller to sleep
+   */ 
+
+  _fSumIntegrator = 0;
+  _bSleep = false;
+}
+
