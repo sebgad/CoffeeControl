@@ -98,9 +98,6 @@ const char* strLastLogFilePath = "/logfile_last.txt";
 static char bufPrintLog[512];
 const char* strUserLogLabel = "USER";
 
-// Time out status for soft off
-bool bTimeOutReached = false;
-
 // start time for measurement
 unsigned long iTimeStart = 0;
 
@@ -137,6 +134,9 @@ volatile unsigned long iInterruptCntLong = 0;
 volatile unsigned long iInterruptCntAlert = 0;
 volatile unsigned long iInterruptCntAlertCatch = 0;
 
+// soft Sleep mode
+bool bSleepMode = false; 
+
 enum eState{
   IDLE      = (1u << 0),
   MEASURE   = (1u << 1),
@@ -160,7 +160,8 @@ enum eLEDColor{
   LED_COLOR_BLUE,
   LED_COLOR_ORANGE,
   LED_COLOR_PURPLE,
-  LED_COLOR_WHITE
+  LED_COLOR_WHITE,
+  LED_COLOR_SLEEP
 };
 
 // Initialisation of PID controler
@@ -1030,8 +1031,11 @@ bool controlHeating(){
    */
 
   bool b_success = false;
-  if ((!bTimeOutReached) && (iErrorId == NO_ERROR)) {
+  if ((!bSleepMode) && (iErrorId == NO_ERROR)) {
     objPid.compute();
+    b_success = true;
+  } else if (bSleepMode){
+    fTarPwm = 0.F;
     b_success = true;
   } else {
     fTarPwm = 0.F;
@@ -1103,6 +1107,8 @@ void setColor(int i_color, bool b_gain_active) {
     f_red_value = 100.F * objConfig.RwmRgbColorWhiteFactor;
     f_green_value = 100.F * objConfig.RwmRgbColorWhiteFactor;
     f_blue_value = 100.F * objConfig.RwmRgbColorWhiteFactor;
+  }else if (i_color == LED_COLOR_SLEEP) {
+    f_red_value = 10.F * objConfig.RwmRgbColorWhiteFactor;
   }
 
   if (b_gain_active){
@@ -1128,33 +1134,28 @@ void setColor(int i_color, bool b_gain_active) {
 
 }// setColor
 
+void setToSleep(){
+  /** set the coffemachine to sleep
+   *
+   */
 
-void loop(){
-  if ((iState & MEASURE) == MEASURE) {
-    fTime = (float)(millis() - iTimeStart) / 1000.0;
-    // get physical value of sensor
-    fTemp = objADS1115->getPhysVal();
-    
-    portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~MEASURE;
-    portEXIT_CRITICAL_ISR(&objTimerMux);
+  bSleepMode = true;
+  esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Timeout reached -> machine going into sleep\n");
+  objPid.setPidToSleep();
 
-    // reset watchdog timer every time a sensor value is read
-    esp_task_wdt_reset();
+} //setToSleep
+
+
+void stateCtrlLed(){
+  /** what is done in the LED state (without state switching)
+   *
+   */
+  if(bSleepMode){
+    //sleep mode
+    setColor(LED_COLOR_SLEEP, false);
+    return;
   }
-
-  if ((iState & PID_CTRL) == PID_CTRL) {
-    // Call heating control function
-    bool b_result_ctrl_heating;
-    b_result_ctrl_heating = controlHeating();
-    
-    portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~PID_CTRL;
-    portEXIT_CRITICAL_ISR(&objTimerMux);
-  }
-
-  if ((iState & LED_CTRL) == LED_CTRL) {
-    if(iErrorId > NO_ERROR){
+  if(iErrorId > NO_ERROR){
       setColor(LED_COLOR_PURPLE, false); 
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
@@ -1166,33 +1167,16 @@ void loop(){
       // temperature in range signal
       setColor(LED_COLOR_GREEN, true); 
     }
-    
-    portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~LED_CTRL;
-    portEXIT_CRITICAL_ISR(&objTimerMux);
-  }
 
-  if ((iState & STORE) == STORE) {
-    // Write values to measurement file
-    bool b_result_meas_write;
-    b_result_meas_write = writeMeasFile();
-    if (b_result_meas_write){
-      portENTER_CRITICAL_ISR(&objTimerMux);
-        iState &= ~STORE;
-      portEXIT_CRITICAL_ISR(&objTimerMux);
-    }
-  }
+}//stateCtrlLed
 
-  // TODO: add a dynamic timeout -> (start-now)>TimeToStandby; timeout can then be reset via a button in webinterface
-  if ((millis() >= objConfig.TimeToStandby * 1000) && (bTimeOutReached == false)) {
-    // check whether timeout is reached, PWM will be deactivated.
-    bTimeOutReached = true;
-    esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Timeout reached -> machine going into sleep\n");
-  }
-  
-  // Diagnosis functionality
-  if ((iState & DIAG) == DIAG){
-    // Error: Temperature Range unplausible
+
+void stateCtrlDiag(){
+  /** what is done in the DIAG state (without state switching)
+   *
+   */
+
+  // Error: Temperature Range unplausible
     if (fTemp < 10.F){
       // Sensor range is not valid
       iErrorId |= TEMP_OUT_RANGE;
@@ -1202,7 +1186,8 @@ void loop(){
     }
 
     // Error: Value frozen
-    if (objADS1115->isValueFrozen()){
+    // dont trigger if in sleep
+    if ((objADS1115->isValueFrozen()) && (!bSleepMode)){
       iErrorId |= TEMP_FROZEN;
       esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "ERROR: ADS1115 Sensor values frozen.\n");
     } else {
@@ -1238,6 +1223,67 @@ void loop(){
         server.begin();
       }
     }
+
+}
+
+
+void loop(){
+  if ((iState & MEASURE) == MEASURE) {
+    fTime = (float)(millis() - iTimeStart) / 1000.0;
+    // get physical value of sensor
+    fTemp = objADS1115->getPhysVal();
+    
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState &= ~MEASURE;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+
+    // reset watchdog timer every time a sensor value is read
+    esp_task_wdt_reset();
+  }
+
+  if ((iState & PID_CTRL) == PID_CTRL) {
+    // Call heating control function
+    bool b_result_ctrl_heating;
+    b_result_ctrl_heating = controlHeating();
+    
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState &= ~PID_CTRL;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+  }
+
+  if ((iState & LED_CTRL) == LED_CTRL) {
+    stateCtrlLed()  
+    
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState &= ~LED_CTRL;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+  }
+
+  if ((iState & STORE) == STORE) {
+    // Write values to measurement file if not in sleep mode
+    bool b_result_meas_write;
+    if (bSleepMode){
+      b_result_meas_write =true
+    } else {
+      b_result_meas_write = writeMeasFile();
+    }
+    
+    if (b_result_meas_write){
+      portENTER_CRITICAL_ISR(&objTimerMux);
+        iState &= ~STORE;
+      portEXIT_CRITICAL_ISR(&objTimerMux);
+    }
+  }
+
+  // TODO: add a dynamic timeout -> (start-now)>TimeToStandby; timeout can then be reset via a button in webinterface
+  if ((millis() >= objConfig.TimeToStandby * 1000) && (!bSleepMode)) {
+    // check whether timeout is reached, PWM will be deactivated.
+    setToSleep():
+  }
+  
+  // Diagnosis functionality
+  if ((iState & DIAG) == DIAG){
+    stateCtrlDiag()    
     
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~DIAG;
