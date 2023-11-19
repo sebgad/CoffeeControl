@@ -135,7 +135,10 @@ volatile unsigned long iInterruptCntAlert = 0;
 volatile unsigned long iInterruptCntAlertCatch = 0;
 
 // soft Sleep mode
-bool bSleepMode = false; 
+bool bSleepMode = false;
+
+// start time when exiting sleep mode
+unsigned long iAwakeTimeStart = 0;
 
 enum eState{
   IDLE      = (1u << 0),
@@ -1011,6 +1014,7 @@ void setup(){
   timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
   timerAlarmEnable(objTimerLong);
   iTimeStart = millis();
+  iAwakeTimeStart = millis();
 
   // Enable Hardware Watchdog with Kernel panic reaction
   esp_task_wdt_init(WDT_Timeout, true);
@@ -1154,6 +1158,8 @@ void wakeUp(){
   esp_log_write(ESP_LOG_INFO, strUserLogLabel, "CoffeeCtrl is waking up :)\n");
   objPid.wakePidUp();
 
+  iAwakeTimeStart = millis();
+
 } //setToSleep
 
 
@@ -1191,7 +1197,7 @@ void stateCtrlDiag(){
     if (fTemp < 10.F){
       // Sensor range is not valid
       iErrorId |= TEMP_OUT_RANGE;
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Temperature range unplausible. Measured Value: %.2f C.\n", fTemp);
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "ERROR: Temperature range unplausible. Measured Value: %.2f C.\n", fTemp);
     } else {
       iErrorId &= ~TEMP_OUT_RANGE;
     }
@@ -1200,7 +1206,7 @@ void stateCtrlDiag(){
     // dont trigger if in sleep
     if ((objADS1115->isValueFrozen()) && (!bSleepMode)){
       iErrorId |= TEMP_FROZEN;
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "ERROR: ADS1115 Sensor values frozen.\n");
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "ERROR: ADS1115 Sensor values frozen.\n");
     } else {
       iErrorId &= ~TEMP_FROZEN;
     }
@@ -1208,14 +1214,14 @@ void stateCtrlDiag(){
     // Error: Internal reset of ADS
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
       iErrorId |= MEAS_DEV_RESET;
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Conversion mode changed to single shot (default) during runtime.\n");
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "ERROR: Conversion mode changed to single shot (default) during runtime.\n");
     } else {
       iErrorId &= ~MEAS_DEV_RESET;
     }
 
     if ((WiFi.status() != WL_CONNECTED) && (WiFi.getMode() == WIFI_MODE_STA)){
       iErrorId |= WIFI_DISCONNECT;
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Wifi disconnected.\n");
+      esp_log_write(ESP_LOG_WARN, strUserLogLabel, "ERROR: Wifi disconnected.\n");
     } else {
       iErrorId &= ~WIFI_DISCONNECT;
     }
@@ -1234,7 +1240,6 @@ void stateCtrlDiag(){
         server.begin();
       }
     }
-
 }
 
 
@@ -1286,8 +1291,8 @@ void loop(){
     }
   }
 
-  // TODO: add a dynamic timeout -> (start-now)>TimeToStandby; timeout can then be reset via a button in webinterface
-  if ((millis() >= objConfig.TimeToStandby * 1000) && (!bSleepMode)) {
+  // TODO: timeout can then be reset via a button in webinterface
+  if (((millis() - iAwakeTimeStart) >= objConfig.TimeToStandby * 1000) && (!bSleepMode)) {
     // check whether timeout is reached, PWM will be deactivated.
     setToSleep():
   }
