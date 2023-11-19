@@ -38,6 +38,7 @@ class PidCtrl
     float getTargetValue();
     void setPidToSleep();
     void wakePidUp();
+    void resetPid();
 
   private:
     float ** ptrConstants;

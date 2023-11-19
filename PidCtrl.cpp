@@ -325,6 +325,16 @@ float PidCtrl::getErrorDiff(){
   return _fErrDiff;
 }
 
+void PidCtrl::resetPid(){
+    /**
+   * @brief resets the memory of the controller
+   */ 
+
+  _fSumIntegrator = 0;
+  _iLastComputeMillis = millis();
+}
+
+
 
 void PidCtrl::setPidToSleep(){
     /**
@@ -340,7 +350,7 @@ void PidCtrl::wakePidUp(){
    * @brief set the PID controller to sleep
    */ 
 
-  _fSumIntegrator = 0;
+  resetPid();
   _bSleep = false;
 }
 
