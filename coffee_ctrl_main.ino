@@ -1145,6 +1145,17 @@ void setToSleep(){
 
 } //setToSleep
 
+void wakeUp(){
+  /** set the coffemachine to sleep
+   *
+   */
+
+  bSleepMode = false;
+  esp_log_write(ESP_LOG_INFO, strUserLogLabel, "CoffeeCtrl is waking up :)\n");
+  objPid.wakePidUp();
+
+} //setToSleep
+
 
 void stateCtrlLed(){
   /** what is done in the LED state (without state switching)
