@@ -1,8 +1,8 @@
 /*********
- * 
+ *
  * coffee_ctrl_main
  * A script to control an espresso machine and display measurement values on a webserver of an ESP32
- * 
+ *
 *********/
 #define LOG_LEVEL ESP_LOG_VERBOSE
 
@@ -73,7 +73,7 @@ struct config {
   uint32_t SsrFreq;
   uint32_t PwmSsrResolution;
   uint32_t RwmRgbFreq;
-  uint32_t RwmRgbResolution; 
+  uint32_t RwmRgbResolution;
   float RwmRgbGainFactorRed;
   float RwmRgbGainFactorGreen;
   float RwmRgbGainFactorBlue;
@@ -230,16 +230,16 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   /**
    * Try to connect to WiFi Accesspoint based on the given information in the header file WiFiAccess.h.
    * A defined number of connection is performed.
-   * @param 
+   * @param
    *    i_timout_attemp:     Total amount of connection attemps
    *    i_waiting_time:   Waiting time between connection attemps
-   * 
-   * @return 
+   *
+   * @return
    *    b_status:         true if connection is successfull
    */
-  
+
   bool b_successful = false;
-  
+
   //WiFi.disconnect(true);
   //delay(100);
 
@@ -275,13 +275,13 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   } else {
     esp_log_write(ESP_LOG_WARN, strUserLogLabel,  "Connection unsuccessful. WiFi status: %d\n", i_wifi_status);
   }
-  
+
   return b_successful;
 } // connectWiFi
 
 void calcWifiStrength(int i_dBm){
   /**
-   * calculate the wifi strength from dB to % 
+   * calculate the wifi strength from dB to %
    */
   iDbmPercentage = 0;
   if (i_dBm>=-50) {
@@ -295,25 +295,25 @@ void calcWifiStrength(int i_dBm){
 
 bool loadConfiguration(){
   /**
-   * Load configuration from configuration file 
+   * Load configuration from configuration file
    */
-  
+
   bool b_success = false;
 
   if (!bParamFileLocked){
     // file is not locked by another process ->  save to read or write
     bParamFileLocked = true;
     File obj_param_file = LittleFS.open(strParamFilePath, "r");
-    StaticJsonDocument<JSON_MEMORY> json_doc;
+    JsonDocument json_doc;
     DeserializationError error = deserializeJson(json_doc, obj_param_file);
 
     if ((!obj_param_file) || (error)){
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to read file, using default configuration.\n");
-      
+
       if (!obj_param_file) {
         esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File could not be opened.\n");
       }
-    
+
       if (error) {
         //esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "JSON deserializion error: %*c\n", error.c_str());
       }
@@ -326,8 +326,8 @@ bool loadConfiguration(){
       bParamFileLocked = false;
       // reset configuration struct before writing to get default values
       resetConfiguration(false);
-      bool b_set_default_values = false; 
-      
+      bool b_set_default_values = false;
+
       // Assign Values from json-File to configuration struct. If Field does not exist in JSON-File write default value to JSON file.
       (json_doc["Wifi"]["wifiSSID"])?objConfig.wifiSSID = json_doc["Wifi"]["wifiSSID"].as<String>():b_set_default_values = true; // issue #118 in ArduinoJson
       (json_doc["Wifi"]["wifiPassword"])?objConfig.wifiPassword = json_doc["Wifi"]["wifiPassword"].as<String>():b_set_default_values = true; // issue #118 in ArduinoJson
@@ -377,11 +377,11 @@ bool loadConfiguration(){
 
 bool saveConfiguration(){
   /**
-   * Save configuration to configuration file 
+   * Save configuration to configuration file
    */
-  
+
   bool b_success = false;
-  StaticJsonDocument<JSON_MEMORY> json_doc;
+  JsonDocument json_doc;
 
   json_doc["Wifi"]["wifiSSID"] = objConfig.wifiSSID;
   json_doc["Wifi"]["wifiPassword"] = objConfig.wifiPassword;
@@ -418,7 +418,7 @@ bool saveConfiguration(){
   if (!bParamFileLocked){
     bParamFileLocked = true;
     File obj_param_file = LittleFS.open(strParamFilePath, "w");
-  
+
     if (serializeJsonPretty(json_doc, obj_param_file) == 0) {
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to write configuration to file\n");
     }
@@ -436,11 +436,11 @@ bool saveConfiguration(){
 
 void resetConfiguration(boolean b_safe_to_json){
   /**
-   * init configuration to configuration file 
-   * 
+   * init configuration to configuration file
+   *
    * @param b_safe_to_json: Safe initial configuration to json file
    */
-  
+
   objConfig.wifiSSID = strWifiSsidFactory;
   objConfig.wifiPassword = strWifiPwFactory;
   objConfig.CtrlTimeFactor = true;
@@ -481,7 +481,7 @@ void resetConfiguration(boolean b_safe_to_json){
 void configLED(){
   /**
    * @brief Method to configure LED functionality
-   * 
+   *
    */
   ledcSetup(RwmRedChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
   ledcSetup(RwmGrnChannel, objConfig.RwmRgbFreq, objConfig.RwmRgbResolution);
@@ -496,7 +496,7 @@ void configPID(){
   /**
    * Configurate the PID controller
    */
-  
+
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPid.changeTargetValue(objConfig.CtrlTarget);
@@ -521,7 +521,7 @@ void configWebserver(){
    * Configure and start asynchronous webserver
    */
 
-  // favicons in LitleFs have to be included in the server 
+  // favicons in LitleFs have to be included in the server
   //TODO maybe not static?
   server.serveStatic("/favicon-32x32.png", LittleFS, "favicon-32x32.png");
   server.serveStatic("/apple-touch-icon.png", LittleFS, "apple-touch-icon.png");
@@ -540,7 +540,7 @@ void configWebserver(){
   server.on("/settings.html", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/settings.html");
   });
-  
+
   // Route for ota web page
   server.on("/ota.html", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/ota.html");
@@ -579,12 +579,12 @@ void configWebserver(){
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
-      StaticJsonDocument<200> obj_json_values;
+      JsonDocument obj_json_values;
       // send TargetPWM, Temperature, PID-values
       portENTER_CRITICAL_ISR(&objTimerMux);
         obj_json_values["Time"] = fTime;
         obj_json_values["Temperature"] = fTemp;
-        
+
         obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
         obj_json_values["PID"]["TargetPWM"] = fTarPwm;
         obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
@@ -597,7 +597,7 @@ void configWebserver(){
       String str_response;
       serializeJson(obj_json_values, str_response);
       request->send(200, "application/json", str_response);
-    
+
   });
 
   // Parameter file, available under http://coffee.local/params.json
@@ -606,9 +606,9 @@ void configWebserver(){
   });
 
   AsyncCallbackJsonWebHandler* obj_handler = new AsyncCallbackJsonWebHandler("/paramUpdate", [](AsyncWebServerRequest *request, JsonVariant &json) {
-    StaticJsonDocument<JSON_MEMORY> obj_json;
+    JsonDocument obj_json;
     obj_json = json.as<JsonObject>();
-    
+
     objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
     objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
     objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
@@ -644,13 +644,13 @@ void configWebserver(){
     if (saveConfiguration()){
       configPID();
       configLED();
-      
+
       if(objConfig.SigFilterActive){
         objADS1115->activateFilter();
       } else {
         objADS1115->deactivateFilter();
       }
-      
+
       request->send(200, "text/plain", "Parameters are updated and changes applied.");
     } else {
       request->send(200, "text/plain", "Parameters are not updated due to write lock");
@@ -658,7 +658,7 @@ void configWebserver(){
   });
 
   server.addHandler(obj_handler);
-  
+
   server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
     // initialization of a new parameter file
     resetConfiguration(true);
@@ -682,7 +682,7 @@ void configWebserver(){
     }, [&](AsyncWebServerRequest *ptr_request, String str_filename, size_t i_index, uint8_t *ptr_data, size_t i_len, bool b_final){
           /**
             * @brief (anonymous function) file is devided into chunks/parts and request is called repeatedly
-            * 
+            *
             * @param ptr_request    pointer object of the request
             * @param str_filename   filename of the file to upload
             * @param i_index        index of the current data chunk
@@ -690,19 +690,19 @@ void configWebserver(){
             * @param i_len          length of the actual data
             * @param b_final        fileupload is completed
             */
-        
+
             if (!i_index){
               // precheck before upload the filestream (index not given)
               if(!ptr_request->hasParam("MD5", true)) {
                 // request has no parameter MD5 (Hash value) --> aborting file upload
                 return ptr_request->send(400, "text/plain", "MD5 parameter missing");
-              } 
-              
+              }
+
               if(!Update.setMD5(ptr_request->getParam("MD5", true)->value().c_str())) {
                 // MD5 parameter is not a valid format --> aborting file upload
                 return ptr_request->send(400, "text/plain", "MD5 parameter invalid");
-              } 
-              
+              }
+
               // MD5 precheck done, creating temp file on LittleFS file system
               if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
                 // Update cannot be started for reasons
@@ -738,7 +738,7 @@ void configWebserver(){
     }, [&](AsyncWebServerRequest *ptr_request, String str_filename, size_t i_index, uint8_t *ptr_data, size_t i_len, bool b_final){
           /**
           * @brief (anonymous function) file is devided into chunks/parts and request is called repeatedly
-          * 
+          *
           * @param ptr_request    pointer object of the request
           * @param str_filename   filename of the file to upload
           * @param i_index        index of the current data chunk
@@ -749,7 +749,7 @@ void configWebserver(){
           if (!i_index) {
             // open the file on first call and store the file handle in the request object
             ptr_request->_tempFile = LittleFS.open("/" + str_filename, "w");
-            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Start uploading file: %s\n", str_filename);
+            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Start uploading file: %s\n", str_filename.c_str());
           }
 
           if (i_len) {
@@ -761,7 +761,7 @@ void configWebserver(){
             // close the file handle as the upload is now done
             ptr_request->_tempFile.close();
             ptr_request->redirect("/ota.html");
-            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File upload finished.\n"); 
+            esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File upload finished.\n");
           }
     }
     );
@@ -781,7 +781,7 @@ bool configADS1115(){
   /**
    * Configure Analog digital converter ADS1115
    */
-  
+
   // Initialize I2c on defined pins with default adress
   if (!objADS1115->begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to initialize I2C sensor connection, stop working.\n");
@@ -832,14 +832,14 @@ bool configADS1115(){
 
   // set to continues conversion method
   objADS1115->setOpMode(ADS1115_MODE_CONTINUOUS);
-  
+
   objADS1115->printConfigReg();
   return true;
 }
 
 
 int vprintf_into_FS(const char* szFormat, va_list args) {
-	//write evaluated format string into buffer
+	// write evaluated format string into buffer
 	int i_ret = vsnprintf (bufPrintLog, sizeof(bufPrintLog), szFormat, args);
 
 	//output is now in buffer. write to file.
@@ -847,21 +847,23 @@ int vprintf_into_FS(const char* szFormat, va_list args) {
     if(!LittleFS.exists(strRecentLogFilePath)) {
       // Create logfile if it does not exist.
       File writeLog = LittleFS.open(strRecentLogFilePath, FILE_WRITE);
-      if(!writeLog) Serial.println("Couldn't open log file"); 
+      if(!writeLog) Serial.println("Couldn't open log file");
       delay(50);
       writeLog.close();
     }
-    
+
 		File LogFile = LittleFS.open(strRecentLogFilePath, FILE_APPEND);
 		//debug output
 		LogFile.write((uint8_t*) bufPrintLog, (size_t) i_ret);
 		//flush print log, to make sure message is written to file.
 		LogFile.flush();
 		LogFile.close();
+
+    /* Print log to UART */
+    Serial.print(bufPrintLog);
 	}
 	return i_ret;
 }
-
 
 void setup(){
   // Initialize Serial port for debugging purposes
@@ -879,7 +881,7 @@ void setup(){
     if (LittleFS.exists(strLastLogFilePath)){
       LittleFS.remove(strLastLogFilePath);
     }
-    
+
     if (LittleFS.exists(strRecentLogFilePath)){
       LittleFS.rename(strRecentLogFilePath, strLastLogFilePath);
     }
@@ -890,14 +892,14 @@ void setup(){
     esp_log_level_set("*", LOG_LEVEL);
     esp_log_level_set("wifi", LOG_LEVEL);
     esp_log_level_set(strUserLogLabel, ESP_LOG_VERBOSE);
-    
+
     esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "\n\n-----------------------------------Starting Logging.\n");
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "LittleFS mount successfully.\n");
     unsigned int i_reset_reason = esp_reset_reason();
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Last reset reason: %d\n", i_reset_reason);
     // initialize configuration before load json file
     resetConfiguration(false);
-    
+
     // load configuration from file in eeprom
     if (!loadConfiguration()) {
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Parameter file is locked on startup. Please reset to factory settings.\n");
@@ -915,7 +917,7 @@ void setup(){
   // turn green status LED on
   pinMode(P_STAT_LED, OUTPUT);
   digitalWrite(P_STAT_LED, HIGH);
-  
+
   // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
   configLED();
   setColor(LED_COLOR_WHITE, true); // White
@@ -945,12 +947,12 @@ void setup(){
 
     esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection to SSID '%s' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'\n", objConfig.wifiSSID.c_str());
     WiFi.softAP("SilviaCoffeeCtrl");
-    
+
     // print location to measurement file
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Create file %s%s\n", WiFi.softAPIP().toString().c_str(), strMeasFilePath);
 
     // set RGB-LED to purple to user knows whats up
-    setColor(LED_COLOR_PURPLE, false); 
+    setColor(LED_COLOR_PURPLE, false);
   }
 
   // configure and start webserver
@@ -988,12 +990,12 @@ void setup(){
   obj_meas_file.println(i_low_reg, BIN);
   obj_meas_file.print("High Threshold Register: 0b");
   obj_meas_file.println(i_high_reg, BIN);
-  
+
   obj_meas_file.println("");
   obj_meas_file.println("Time,Temperature,TargetPWM,Buffer,InterruptCountAlertReady");
   obj_meas_file.close();
 
-  // Initialize Timer 
+  // Initialize Timer
   // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
   // true: increasing counter
   objTimerLong = timerBegin(1, 80, true);
@@ -1003,7 +1005,7 @@ void setup(){
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
   attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
-  
+
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
   // true: Alarm will be reseted automatically
@@ -1017,7 +1019,7 @@ void setup(){
 
   // Configure PID library
   configPID();
-  
+
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
   esp_log_write(ESP_LOG_INFO, strUserLogLabel, "JUMP to main loop.\n");
@@ -1054,7 +1056,7 @@ bool writeMeasFile(){
   float f_tar_pwm = fTarPwm;
   float f_time = fTime;
   portEXIT_CRITICAL_ISR(&objTimerMux);
-  
+
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
   obj_meas_file.print(f_time, 3);
   obj_meas_file.print(",");
@@ -1070,13 +1072,13 @@ bool writeMeasFile(){
 void setColor(int i_color, bool b_gain_active) {
   /** Function to output a RGB value to the LED
    * examples: (from https://www.rapidtables.com/web/color/RGB_Color.html)
-   * setColor(255, 0, 0);     // Red 
-   * setColor(0, 255, 0);     // Green 
-   * setColor(0, 0, 255);     // Blue 
-   * setColor(255, 255, 255); // White 
-   * setColor(170, 0, 255);   // Purple 
-   * setColor(255,10,0);      // Orange 
-   * setColor(255,20,0);      // Yellow 
+   * setColor(255, 0, 0);     // Red
+   * setColor(0, 255, 0);     // Green
+   * setColor(0, 0, 255);     // Blue
+   * setColor(255, 255, 255); // White
+   * setColor(170, 0, 255);   // Purple
+   * setColor(255,10,0);      // Orange
+   * setColor(255,20,0);      // Yellow
    *
    * @param i_color        color to set for the RGB LED
    * @param b_gain_active  gain factor is used for displaying LED
@@ -1134,7 +1136,7 @@ void loop(){
     fTime = (float)(millis() - iTimeStart) / 1000.0;
     // get physical value of sensor
     fTemp = objADS1115->getPhysVal();
-    
+
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~MEASURE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
@@ -1145,9 +1147,8 @@ void loop(){
 
   if ((iState & PID_CTRL) == PID_CTRL) {
     // Call heating control function
-    bool b_result_ctrl_heating;
-    b_result_ctrl_heating = controlHeating();
-    
+    controlHeating();
+
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~PID_CTRL;
     portEXIT_CRITICAL_ISR(&objTimerMux);
@@ -1155,7 +1156,7 @@ void loop(){
 
   if ((iState & LED_CTRL) == LED_CTRL) {
     if(iErrorId > NO_ERROR){
-      setColor(LED_COLOR_PURPLE, false); 
+      setColor(LED_COLOR_PURPLE, false);
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
       // Heat up signal
       setColor(LED_COLOR_ORANGE, true);
@@ -1164,9 +1165,9 @@ void loop(){
       setColor(LED_COLOR_BLUE, true);
     } else {
       // temperature in range signal
-      setColor(LED_COLOR_GREEN, true); 
+      setColor(LED_COLOR_GREEN, true);
     }
-    
+
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~LED_CTRL;
     portEXIT_CRITICAL_ISR(&objTimerMux);
@@ -1189,7 +1190,7 @@ void loop(){
     bTimeOutReached = true;
     esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Timeout reached -> machine going into sleep\n");
   }
-  
+
   // Diagnosis functionality
   if ((iState & DIAG) == DIAG){
     // Error: Temperature Range unplausible
@@ -1238,7 +1239,7 @@ void loop(){
         server.begin();
       }
     }
-    
+
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~DIAG;
     portEXIT_CRITICAL_ISR(&objTimerMux);

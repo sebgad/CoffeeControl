@@ -79,11 +79,11 @@ void ADS1115::setDefault() {
 void ADS1115::startSingleShotMeas(bool b_status) {
   /**
    * Single-shot conversion start
-   * This bit determines the operational status of the device. OS can only be written when in power-down state and has 
+   * This bit determines the operational status of the device. OS can only be written when in power-down state and has
    * no effect when a conversion is ongoing.
-   * 
+   *
    * @param b_status: ADS1115_MODE_SINGLESHOT : Start a single conversion (when in power-down state)
-   * 
+   *
   */
   if (b_status) {
 
@@ -91,11 +91,11 @@ void ADS1115::startSingleShotMeas(bool b_status) {
     bitWrite(iConfigReg, ADS1115_OS, b_status);
     setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
   }
-  
+
 };
 
 bool ADS1115::getOpStatus(void){
-  /** 
+  /**
    * Get Operational status
    * @return: 0 : Device is currently performing a conversion, 1 : Device is not currently performing a conversion
   */
@@ -116,7 +116,7 @@ void ADS1115::setMux(byte b_mux) {
    *    ADS1115_MUX_AIN1_GND AINp = AIN1 and AINn = GND
    *    ADS1115_MUX_AIN2_GND AINp = AIN2 and AINn = GND
    *    ADS1115_MUX_AIN3_GND AINp = AIN3 and AINn = GND
-  */ 
+  */
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   bool b2 = readBit(b_mux, 2);
   bool b1 = readBit(b_mux, 1);
@@ -131,7 +131,7 @@ void ADS1115::setMux(byte b_mux) {
 }
 
 
-byte ADS1115::getMux() { 
+byte ADS1115::getMux() {
   /**
    * Get Input multiplexer configuration
    * @return:
@@ -160,7 +160,7 @@ void ADS1115::setPGA(byte b_gain) {
    *    ADS1115_PGA_0P512 : FSR = +-0.512V
    *    ADS1115_PGA_0P256 : FSR = +-0.256V
   */
-  
+
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
 
   bool b2 = readBit(b_gain, 2);
@@ -197,7 +197,7 @@ void ADS1115::setPGA(byte b_gain) {
 
 
 
-byte ADS1115::getPGA() { 
+byte ADS1115::getPGA() {
   /**
    * Get the FSR of the programmable gain amplifier
    * @return:
@@ -221,9 +221,9 @@ void ADS1115::setOpMode(bool b_mode) {
    *    ADS1115_MODE_CONTINUOUS : Continuous-conversion mode
    *    ADS1115_MODE_SINGLESHOT : Single-shot mode or power-down state (default)
   */
-  
+
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
-  
+
   writeBit(iConfigReg, ADS1115_MODE, b_mode);
   setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
@@ -236,7 +236,7 @@ byte ADS1115::getOpMode() {
    *    0 : Continuous-conversion mode
    *    1 : Single-shot mode or power-down state (default)
   */
-  
+
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   return (iConfigReg & 1<<ADS1115_MODE) >> ADS1115_MODE;
 }
@@ -256,7 +256,7 @@ void ADS1115::setRate(byte b_rate) {
   */
 
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
-  
+
   bool b2 = readBit(b_rate, 2);
   bool b1 = readBit(b_rate, 1);
   bool b0 = readBit(b_rate, 0);
@@ -291,25 +291,25 @@ byte ADS1115::getRate() {
 void ADS1115::setCompMode(bool b_mode) {
   /**
    * Set the comparator operating mode
-   * @b_mode: 
+   * @b_mode:
    *    ADS1115_CMP_MODE_TRADITIONAL  : Traditional comparator (default)
    *    ADS1115_CMP_MODE_WINDOW       : Window comparator
   */
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
-  
+
   writeBit(iConfigReg, ADS1115_CMP_MDE, b_mode);
   setRegisterValue(ADS1115_CONFIG_REG, iConfigReg);
 }
 
 
-byte ADS1115::getCompMode() { 
+byte ADS1115::getCompMode() {
    /**
    * Get the comparator operating mode
-   * @return: 
+   * @return:
    *    0  : Traditional comparator (default)
    *    1  : Window comparator
   */
-  
+
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   return (iConfigReg & 1<<ADS1115_CMP_MDE) >> ADS1115_CMP_MDE;
 }
@@ -344,13 +344,13 @@ byte ADS1115::getCompPolarity() {
 
 void ADS1115::setCompLatchingMode(bool b_mode) {
   /**
-   * Set whether the ALERT/RDY pin latches after being asserted or clears after conversions are within the margin of 
+   * Set whether the ALERT/RDY pin latches after being asserted or clears after conversions are within the margin of
    * the upper and lower threshold values.
    * @param b_mode
    *    ADS1115_CMP_LAT_NOT_ACTIVE : Nonlatching comparator . The ALERT/RDY pin does not latch when asserted (default).
-   *    ADS1115_CMP_LAT_ACTIVE     : Latching comparator. The asserted ALERT/RDY pin remains latched until conversion data 
-   *                                 are read by the master or an appropriate SMBus alert response is sent by the master. 
-   *                                 The device responds with its address, and it is the lowest address currently asserting the 
+   *    ADS1115_CMP_LAT_ACTIVE     : Latching comparator. The asserted ALERT/RDY pin remains latched until conversion data
+   *                                 are read by the master or an appropriate SMBus alert response is sent by the master.
+   *                                 The device responds with its address, and it is the lowest address currently asserting the
    *                                 ALERT/RDY bus line.
   */
 
@@ -367,12 +367,12 @@ byte ADS1115::getCompLatchingMode() {
    * the upper and lower threshold values.
    * @return
    *    0 : Nonlatching comparator. The ALERT/RDY pin does not latch when asserted (default).
-   *    1 : Latching comparator. The asserted ALERT/RDY pin remains latched until conversion data 
-   *        are read by the master or an appropriate SMBus alert response is sent by the master. 
-   *        The device responds with its address, and it is the lowest address currently asserting the 
+   *    1 : Latching comparator. The asserted ALERT/RDY pin remains latched until conversion data
+   *        are read by the master or an appropriate SMBus alert response is sent by the master.
+   *        The device responds with its address, and it is the lowest address currently asserting the
    *        ALERT/RDY bus line.
   */
-  
+
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   return (iConfigReg & (1<<ADS1115_CMP_LAT)) >> ADS1115_CMP_LAT;
 }
@@ -380,8 +380,8 @@ byte ADS1115::getCompLatchingMode() {
 
 void ADS1115::setCompQueueMode(byte b_mode) {
   /**
-   * Perform two functions. When set to ADS1115_CMP_DISABLE, the comparator is disabled and the ALERT/RDY pin is set to a high-impedance state. 
-   * When set to any other value, the ALERT/RDY pin and the comparator function are enabled, and the set value determines the 
+   * Perform two functions. When set to ADS1115_CMP_DISABLE, the comparator is disabled and the ALERT/RDY pin is set to a high-impedance state.
+   * When set to any other value, the ALERT/RDY pin and the comparator function are enabled, and the set value determines the
    * number of successive conversions exceeding the upper or lower threshold required before asserting the ALERT/RDY pin.
    * @param b_mode
    *    ADS1115_CMP_QUE_ASSERT_1_CONV : Assert after one conversion
@@ -389,7 +389,7 @@ void ADS1115::setCompQueueMode(byte b_mode) {
    *    ADS1115_CMP_QUE_ASSERT_4_CONV : Assert after four conversions
    *    ADS1115_CMP_DISABLE           : Disable comparator and set ALERT/RDY pin to high-impedance (default)
   */
-  
+
   iConfigReg = getRegisterValue(ADS1115_CONFIG_REG);
   bool b1 = readBit(b_mode, 1);
   bool b0 = readBit(b_mode, 0);
@@ -403,8 +403,8 @@ void ADS1115::setCompQueueMode(byte b_mode) {
 
 byte ADS1115::getCompQueueMode() {
   /**
-   * Get Queue mode of comparator. When set to 11, the comparator is disabled and the ALERT/RDY pin is set to a high-impedance state. 
-   * When set to any other value, the ALERT/RDY pin and the comparator function are enabled, and the set value determines the 
+   * Get Queue mode of comparator. When set to 11, the comparator is disabled and the ALERT/RDY pin is set to a high-impedance state.
+   * When set to any other value, the ALERT/RDY pin and the comparator function are enabled, and the set value determines the
    * number of successive conversions exceeding the upper or lower threshold required before asserting the ALERT/RDY pin.
    * @param b_mode
    *    0b00 : Assert after one conversion
@@ -420,8 +420,8 @@ byte ADS1115::getCompQueueMode() {
 
 void ADS1115::setCompLowThreshBit(bool b_value, int i_bit_num){
   /**
-   * Set the lower threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore, 
-   * the values in these registers must be updated whenever the PGA settings are changed. 
+   * Set the lower threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore,
+   * the values in these registers must be updated whenever the PGA settings are changed.
    * @param b_value: value for the low threshold register
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
@@ -434,8 +434,8 @@ void ADS1115::setCompLowThreshBit(bool b_value, int i_bit_num){
 
 byte ADS1115::getCompLowThreshBit(int i_bit_num){
   /**
-   * Get the lower threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore, 
-   * the values in these registers must be updated whenever the PGA settings are changed. 
+   * Get the lower threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore,
+   * the values in these registers must be updated whenever the PGA settings are changed.
    * @param i_bit_num: bit number to read, LSF bit is 0
    * @return bit value on i_bit_num
   */
@@ -447,8 +447,8 @@ byte ADS1115::getCompLowThreshBit(int i_bit_num){
 
 void ADS1115::setCompHighThreshBit(bool b_value, int i_bit_num){
   /**
-   * Set the higher threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore, 
-   * the values in these registers must be updated whenever the PGA settings are changed. 
+   * Set the higher threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore,
+   * the values in these registers must be updated whenever the PGA settings are changed.
    * @param b_value: value for the high threshold register
    * @param i_bit_num: bit number to change, LSF bit is 0
   */
@@ -460,12 +460,12 @@ void ADS1115::setCompHighThreshBit(bool b_value, int i_bit_num){
 
 byte ADS1115::getCompHighThreshBit(int i_bit_num){
   /**
-   * Get the high threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore, 
-   * the values in these registers must be updated whenever the PGA settings are changed. 
+   * Get the high threshold values used by the comparator. The comparator is implemented as a digital comparator; therefore,
+   * the values in these registers must be updated whenever the PGA settings are changed.
    * @param i_bit_num: bit number to read, LSF bit is 0
    * @return bit value on i_bit_num
   */
-  
+
   iHighThreshReg = getRegisterValue(ADS1115_HIGH_THRESH_REG);
   return readBit(iHighThreshReg, i_bit_num);
 }
@@ -473,18 +473,18 @@ byte ADS1115::getCompHighThreshBit(int i_bit_num){
 
 void ADS1115::setPinRdyMode(bool b_activate, byte b_comp_queue_mode){
   /**
-   * Set pin ready mode. When set to RDY mode, the ALERT/RDY pin outputs the OS bit when in single-shot mode, and provides a 
+   * Set pin ready mode. When set to RDY mode, the ALERT/RDY pin outputs the OS bit when in single-shot mode, and provides a
    * continuous-conversion ready pulse when in continuous-conversion mode. Latching comparator is activated in this mode.
    * @param b_activate
    *    ADS1115_CONV_READY_ACTIVE     : pin ready mode is activated
    *    ADS1115_CONV_READY_NOT_ACTIVE : pin ready mode is deactivated
   */
-  
+
   setCompQueueMode(b_comp_queue_mode);
 
   iHighThreshReg = 0b1111111111111111;
   setRegisterValue(ADS1115_HIGH_THRESH_REG, iHighThreshReg);
-  
+
   iLowThreshReg = 0b0000000000000000;
   setRegisterValue(ADS1115_LOW_THRESH_REG, iLowThreshReg);
 }
@@ -492,7 +492,7 @@ void ADS1115::setPinRdyMode(bool b_activate, byte b_comp_queue_mode){
 
 bool ADS1115::getPinRdyMode() {
   /**
-   * Set pin ready mode. When set to RDY mode, the ALERT/RDY pin outputs the OS bit when in single-shot mode, and provides a 
+   * Set pin ready mode. When set to RDY mode, the ALERT/RDY pin outputs the OS bit when in single-shot mode, and provides a
    * continuous-conversion ready pulse when in continuous-conversion mode. Latching comparator is activated in this mode.
    * @return
    *    true     : pin ready mode is activated
@@ -503,7 +503,7 @@ bool ADS1115::getPinRdyMode() {
   iLowThreshReg = getRegisterValue(ADS1115_LOW_THRESH_REG);
   iHighThreshReg = getRegisterValue(ADS1115_HIGH_THRESH_REG);
 
-  if (~readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && ~(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
+  if (!readBit(iLowThreshReg, 15) && readBit(iHighThreshReg, 15) && !(b_cmp_queue_mode==ADS1115_CMP_DISABLE)) {
     return true;
   } else {
     return false;
@@ -524,7 +524,7 @@ void ADS1115::writeBit(uint16_t &i_register, int i_pos, bool b_value){
 }
 
 bool ADS1115::readBit(uint16_t i_register, int i_pos){
-  /** 
+  /**
    * read bit in uint16_t number at a given position
    * @param: i_register: number where to read out the bit
    * @param i_pos: bit position which should be read out
@@ -536,16 +536,16 @@ bool ADS1115::readBit(uint16_t i_register, int i_pos){
 uint16_t ADS1115::readConversionRegister() {
   /**
    * read conversion data from the conversion register as int value. Size can be maximum 16bit due to register length of the ADS1115
-  */ 
+  */
   return getRegisterValue(ADS1115_CONVERSION_REG);
 }
 
 
 float ADS1115::getVoltVal() {
   /**
-   * returns voltage level, based on the adc value of the ADS1115. 
+   * returns voltage level, based on the adc value of the ADS1115.
    * @return measured voltage
-  */ 
+  */
   float f_conv_volt;
 
   f_conv_volt = getConvVal() * bitNumbering;
@@ -556,7 +556,7 @@ float ADS1115::getVoltVal() {
 int ADS1115::getLatestBufVal(){
   /**
    * @brief Get latest buffer value / latest conversion (unfiltered raw value)
-   * 
+   *
    */
   if (_iBuffCnt>=0){
     return (int)_ptrConvBuff[_iBuffCnt];
@@ -572,9 +572,9 @@ void ADS1115::setPhysConv(const float f_x_1, const float f_0) {
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
-  */ 
+  */
   initConvTable(1);
-  
+
   _ptrConvTable[0][0] = 0.0;
   _ptrConvTable[0][1] = f_x_1;
   _ptrConvTable[0][2] = f_0;
@@ -586,7 +586,7 @@ void ADS1115::setPhysConv(const float f_x_2, const float f_x_1, const float f_0)
    * set factors for conversion from voltage to physical value
    * @param f_gradient: gradient of the conversion function
    * @param f_offset: (y-)Offset of the conversion function
-  */ 
+  */
   initConvTable(1);
 
   _ptrConvTable[0][0] = f_x_2;
@@ -608,14 +608,14 @@ void ADS1115::setPhysConv(const float arr_conv_table[][2], size_t i_size_conv) {
 
   // Initialize member _ptrConvTable
   initConvTable(i_size_conv);
-  
+
   // calculate gradient and offset and write it to array
   for (int i_row=1; i_row<i_size_conv; i_row++){
     f_prev_x = arr_conv_table[i_row-1][0];
     f_act_x = arr_conv_table[i_row][0];
     f_prev_y = arr_conv_table[i_row-1][1];
     f_act_y = arr_conv_table[i_row][1];
-    
+
     // start range
     _ptrConvTable[i_row-1][0] = f_prev_x;
     // gradient
@@ -632,26 +632,25 @@ float ADS1115::getPhysVal(void){
    * NOTE: readConversionRegister() must be called before to get adc value from ADS1115 register over I2C
    * @return: physical value based on voltage read out
   */
-  
+
   float f_voltage = getVoltVal();
-  float f_physical;
-  int i_index = 0;
+  float f_physical = 0.0;
 
   if (_iSizeConvTable==1){
     // polynom or linear regression
     f_physical = f_voltage * f_voltage * _ptrConvTable[0][0] + f_voltage * _ptrConvTable[0][1] + _ptrConvTable[0][2];
   } else {
-  
+
     if (f_voltage < _ptrConvTable[0][0]) {
       // left outside
 
     } else {
       // lookup table is given
-      for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {    
+      for (int i_idx = 1; i_idx < _iSizeConvTable; i_idx++) {
         if( (f_voltage >= _ptrConvTable[i_idx-1][0]) && (f_voltage < _ptrConvTable[i_idx][0]) ) {
           f_physical = f_voltage * _ptrConvTable[i_idx-1][1] + _ptrConvTable[i_idx-1][2];
           break;
-        } 
+        }
       }
     }
   }
@@ -671,7 +670,7 @@ void ADS1115::printConfigReg() {
 uint16_t ADS1115::getRegisterValue(uint8_t i_reg) {
   /**
    * @brief Return a specified register value of ADS1115 (only 2 byte register are supported yet.)
-   * 
+   *
    * @param i_reg: Register to be readout
    */
 
@@ -694,12 +693,12 @@ uint16_t ADS1115::getRegisterValue(uint8_t i_reg) {
 void ADS1115::setRegisterValue(uint8_t i_reg, uint16_t i_data) {
   /**
    * @brief Return a specified register value of ADS1115 (only 2 byte register are supported yet.)
-   * 
+   *
    * @param i_reg: Register to be readout
    */
 
   uint8_t * ptr_data = new uint8_t[2];
-  
+
   ptr_data[0] = lowByte(i_data);
   ptr_data[1] = highByte(i_data);
   i2c_write(i_reg, ptr_data, 2);
@@ -712,7 +711,7 @@ esp_err_t ADS1115::i2c_master_init(void)
   esp_err_t esp_err;
 
   i2c_config_t conf;
-    
+
   conf.mode = I2C_MODE_MASTER;
   conf.sda_io_num = _iSdaPin;
   conf.scl_io_num = _iSclPin;
@@ -731,7 +730,7 @@ esp_err_t ADS1115::stop(void)
 {
   esp_err_t esp_err;
   esp_err = i2c_driver_delete(ADS1115_I2C_PORT_NUM);
-  
+
   return esp_err;
 }
 
@@ -746,9 +745,9 @@ void ADS1115::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
   i2c_master_start(cmd);
   // Initiate communication with start address and indicating read request, no Acknoledgement
   i2c_master_write_byte(cmd, (_iI2cAddress<<1) | I2C_MASTER_WRITE, I2C_MASTER_ACK);
-  
+
   i2c_master_write_byte(cmd, i_reg, I2C_MASTER_ACK);
-  
+
   for (int i_step=data_len; i_step>0; i_step--){
     // Write MSB from ADS1115 and acknowledge it
     i2c_master_write_byte(cmd, *(data_write + i_step - 1), I2C_MASTER_ACK);
@@ -757,7 +756,7 @@ void ADS1115::i2c_write(uint8_t i_reg, uint8_t* data_write, size_t data_len)
   i2c_master_stop(cmd);
 
   // Execute all queued commands, 1000ms timeout
-  esp_err_t ret = i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
+  i2c_master_cmd_begin(ADS1115_I2C_PORT_NUM, cmd, 1000 / portTICK_RATE_MS);
   i2c_cmd_link_delete(cmd);
 }
 
@@ -767,12 +766,12 @@ void ADS1115::initConvTable(size_t i_size_conv) {
    * Initialize pointer for conversion table
    * @param i_size_conv: row of the conversion table
   */
-  
+
   // Make (row) size of conversion table in class available
   _iSizeConvTable=i_size_conv;
   // assign memory to the pointer, pointer in pointer element
   _ptrConvTable = new float*[_iSizeConvTable];
-  
+
   // assign second pointer in pointer to get a 2dim field
   for(int i_row=0;i_row<_iSizeConvTable;i_row++) {
     _ptrConvTable[i_row]=new float[3];
@@ -783,7 +782,7 @@ void ADS1115::initConvTable(size_t i_size_conv) {
 void ADS1115::activateFilter(){
   /**
    * @brief Activate the conversion filter and define Savitzky-Golay filter-variables
-   * 
+   *
    */
 
   _bFilterActive = true;
@@ -846,7 +845,7 @@ void ADS1115::activateFilter(){
 void ADS1115::deactivateFilter(){
   /**
    * @brief deactivat signal filter
-   * 
+   *
    */
 
   _bFilterActive = false;
@@ -856,7 +855,7 @@ void ADS1115::deactivateFilter(){
 bool ADS1115::getFilterStatus(){
   /**
    * @brief get actual filter status. True if filter is active
-   * 
+   *
    */
 
   return _bFilterActive;
@@ -865,7 +864,7 @@ bool ADS1115::getFilterStatus(){
 int ADS1115::getAbsBufSize(){
   /**
    * @brief get the absolute buffer size of the filter
-   * 
+   *
    */
 
   return (int)ADS1115_CONV_BUF_SIZE;
@@ -874,7 +873,7 @@ int ADS1115::getAbsBufSize(){
 int16_t* ADS1115::getBuffer(){
   /**
    * @brief get the pointer to the buffer
-   * 
+   *
    */
 
   return _ptrConvBuff;
@@ -884,9 +883,9 @@ int16_t* ADS1115::getBuffer(){
 float ADS1115::_getSavGolFilterVal(){
   /**
    * @brief get filtered value via Savitzky-Golay filter
-   * 
+   *
    */
-  
+
   int i_index;
   float f_filter_value = 0.0F;
 
@@ -895,7 +894,7 @@ float ADS1115::_getSavGolFilterVal(){
     f_filter_value += (_ptrConvBuff[i_index]*_ptrFilterCoeff[i_index]);
   }
   f_filter_value /= _fFilterNormCoeff;
-  
+
   return f_filter_value;
 }
 
@@ -903,7 +902,7 @@ float ADS1115::_getSavGolFilterVal(){
 float ADS1115::_getAvgFilterVal(){
   /**
    * @brief get filtered value via average filter
-   * 
+   *
    */
 
   float f_filter_value = 0.0F;
@@ -923,9 +922,9 @@ bool ADS1115::isValueFrozen(){
    * @brief check if the Sensor raw value is frozen. Is only active when the the filter is active.
    * An error is detected when the max value and the min value of te unfiltered filter-buffer is the same
    * (no change in the signal)
-   * 
+   *
    * @return: true: value is frozen; false: value is not frozen
-   * 
+   *
    */
 
   bool b_status = false;
@@ -955,8 +954,8 @@ bool ADS1115::isValueFrozen(){
 float ADS1115::getConvVal(){
   /**
    * @brief get the filtered conversion value
-   * 
-   * 
+   *
+   *
    */
 
   float f_conversion_value;
@@ -987,7 +986,7 @@ float ADS1115::getConvVal(){
 bool ADS1115::getConnectionStatus(){
   /**
    * @brief get Connection status of ADS1115. If true, connection is OK
-   * 
+   *
    */
 
   return _bConnectStatus;

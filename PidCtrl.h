@@ -6,7 +6,7 @@
  *  Kp:     P-Gain (P-Vestärkung)
  *  Tn:     reset time (Nachstellzeit) Tn = Kp/Ki
  *  Tv:     lead time (Vorhaltzeit) Tv= Kd/Kp
- * 
+ *
  * THem constants are stored in the memeber ptrConstants as Kp; 1/Tn; Tv
  */
 
