@@ -149,9 +149,8 @@ enum eState{
 enum eError{
   NO_ERROR          = (1u << 0),
   TEMP_OUT_RANGE    = (1u << 1),
-  TEMP_FROZEN       = (1u << 2),
-  MEAS_DEV_RESET    = (1u << 3),
-  WIFI_DISCONNECT   = (1u << 4),
+  MEAS_DEV_RESET    = (1u << 2),
+  WIFI_DISCONNECT   = (1u << 3),
   };
 
 enum eLEDColor{
@@ -609,6 +608,8 @@ void configWebserver(){
     JsonDocument obj_json;
     obj_json = json.as<JsonObject>();
 
+    esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Inside JSON upload handler.\n");
+
     objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
     objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
     objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
@@ -642,9 +643,6 @@ void configWebserver(){
     objConfig.TimeToStandby = obj_json["System"]["TimeToStandby"];
 
     if (saveConfiguration()){
-      configPID();
-      configLED();
-
       if(objConfig.SigFilterActive){
         objADS1115->activateFilter();
       } else {
@@ -1181,10 +1179,9 @@ void loop(){
       portENTER_CRITICAL_ISR(&objTimerMux);
         iState &= ~STORE;
       portEXIT_CRITICAL_ISR(&objTimerMux);
+
     }
   }
-
-  // TODO: add a dynamic timeout -> (start-now)>TimeToStandby; timeout can then be reset via a button in webinterface
   if ((millis() >= objConfig.TimeToStandby * 1000) && (bTimeOutReached == false)) {
     // check whether timeout is reached, PWM will be deactivated.
     bTimeOutReached = true;
@@ -1200,14 +1197,6 @@ void loop(){
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Temperature range unplausible. Measured Value: %.2f C.\n", fTemp);
     } else {
       iErrorId &= ~TEMP_OUT_RANGE;
-    }
-
-    // Error: Value frozen
-    if (objADS1115->isValueFrozen()){
-      iErrorId |= TEMP_FROZEN;
-      esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "ERROR: ADS1115 Sensor values frozen.\n");
-    } else {
-      iErrorId &= ~TEMP_FROZEN;
     }
 
     // Error: Internal reset of ADS
@@ -1227,14 +1216,7 @@ void loop(){
 
     // try error handling
     if (iErrorId > NO_ERROR){
-      if (iErrorId <= (TEMP_OUT_RANGE + TEMP_FROZEN + MEAS_DEV_RESET)){
-        // disable powerstages
-        fTarPwm = 0.F;
-        ledcWrite(PwmSsrChannel, 0);
-        // configure ADS1115 again
-        objADS1115->stop();
-        configADS1115();
-      } else if (iErrorId == WIFI_DISCONNECT) {
+      if (iErrorId == WIFI_DISCONNECT) {
         server.end();
         server.begin();
       }

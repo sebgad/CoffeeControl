@@ -7,7 +7,7 @@
   <title>BananaCoffee</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  
+
   <!-- Java script for graphs.html -->
   <script type="text/javascript">
 
@@ -49,7 +49,7 @@
       var obj_http_request=new XMLHttpRequest();
       // request data.csv from http server
       obj_http_request.open("GET","/paramReset");
-        
+
       // define function which is executed when requested is fully loaded
       obj_http_request.onload= function() {
         var str_buf = obj_http_request.responseText;
@@ -66,14 +66,14 @@
     var obj_http_request=new XMLHttpRequest();
     // request data.csv from http server
     obj_http_request.open("GET","params.json");
-    
+
     // define function which is executed when requested is fully loaded
     obj_http_request.onload= function() {
       // get response as string from esp async webserver
       var str_buf = obj_http_request.responseText;
       // parse string response to json object
       const obj_json_req = JSON.parse(str_buf);
-      
+
       // get form object in html side
       var obj_form = document.getElementById("id_input");
 
@@ -100,10 +100,10 @@
             var obj_label = document.createElement("Label");
             obj_label.setAttribute("for", str_section_key + "_" + str_key);
             obj_label.innerHTML = str_key;
-            
+
             // append label and line break form
             obj_para.appendChild(obj_label);
-          
+
             // define text input and line break
             var obj_input = document.createElement("Input");
             if (typeof obj_json_req[str_section_key][str_key] === "boolean"){
@@ -117,7 +117,7 @@
             }
             obj_input.value=obj_json_req[str_section_key][str_key];
             obj_input.id=str_section_key + "_" + str_key;
-          
+
             // append paragraph to form
             obj_form.appendChild(obj_para);
           } else {
@@ -140,12 +140,15 @@
     } else {
       // initialize FileReader object
       var obj_file_reader = new FileReader();
-      
+
+      // initiate FileRead
+      obj_file_reader.readAsText(obj_file);
+
       // define function when FileReader object has finished to parse file content
       obj_file_reader.onload = function(evt) {
         // get file content
         var str_file_content = evt.target.result;
-        
+
         // start http request to transmit data
         var obj_http_request = new XMLHttpRequest();
         obj_http_request.open("POST", "/paramUpdate", true);
@@ -159,13 +162,11 @@
         // send file content
         obj_http_request.send(str_file_content);
       };
-      // initiate FileRead
-      obj_file_reader.readAsText(obj_file);
       // reload text field content
       onGetParameter();
     }
   }
-  
+
   const saveDownloadedData = (fileName, data) => {
     // code based on: https://stackoverflow.com/questions/3665115/how-to-create-a-file-in-memory-for-user-to-download-but-not-through-server
     if(~navigator.userAgent.indexOf('MSIE') || ~navigator.appVersion.indexOf('Trident/')) { /* IE9-11 */
@@ -245,7 +246,7 @@ function onRequestRestart(){
       color: white;
       padding: 8px 16px;
       text-decoration: none;
-      margin: 4px 2px;  
+      margin: 4px 2px;
       cursor: pointer;
       border-radius: 4px;
       font-size:medium;
@@ -261,9 +262,9 @@ function onRequestRestart(){
       display: block;
       font-size: 0.8em;
       color: darkslategrey;
-      padding-left: 3px;  
+      padding-left: 3px;
     }
-    
+
   </style>
 <div class="header">
   <h1>BananaCoffee</h1>
@@ -295,7 +296,7 @@ function onRequestRestart(){
       </p>
       <p>
         <input type="button" onclick="onRequestRestart()" value="Restart ESP32">
-      </p>  
+      </p>
       </p>
     </form>
 </div>
