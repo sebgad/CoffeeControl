@@ -7,7 +7,7 @@
 #define LOG_LEVEL ESP_LOG_VERBOSE
 
 /* PIN definitions */
-#define P_PUMP_RELAY 99
+#define P_PUMP_RELAY 15
 
 /* I2C pins */
 #define SDA_0 23
@@ -536,7 +536,7 @@ void configWebserver(){
    */
 
   /* favicons in LitleFs have to be included in the server */
-  /*TODO maybe not static? */
+  /* TODO maybe not static? */
   server.serveStatic("/favicon-32x32.png", LittleFS, "favicon-32x32.png");
   server.serveStatic("/apple-touch-icon.png", LittleFS, "apple-touch-icon.png");
 
