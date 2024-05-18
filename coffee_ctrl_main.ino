@@ -7,7 +7,6 @@
 #define LOG_LEVEL ESP_LOG_VERBOSE
 
 /* PIN definitions */
-
 #define P_PUMP_RELAY 99
 
 /* I2C pins */
@@ -25,7 +24,6 @@
 /* File system definitions */
 #define FORMAT_SPIFFS_IF_FAILED true
 #define JSON_MEMORY 1600
-
 
 /* define timer related channels for PWM signals */
 #define RwmRedChannel 13 /*  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED */
@@ -137,7 +135,6 @@ hw_timer_t * objTimerLong = NULL;
 /* define Counter for interrupt handling */
 volatile unsigned long iInterruptCntLong = 0;
 volatile unsigned long iInterruptCntAlert = 0;
-volatile unsigned long iInterruptCntAlertCatch = 0;
 
 enum eState{
   IDLE      = (1u << 0),
@@ -1013,7 +1010,7 @@ void setup(){
   obj_meas_file.println(i_high_reg, BIN);
 
   obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,TargetPWM,Buffer,InterruptCountAlertReady");
+  obj_meas_file.println("Time,Temperature,TargetPWM,Brewing");
   obj_meas_file.close();
 
   /* Initialize Timer */
@@ -1072,18 +1069,27 @@ bool writeMeasFile(){
    */
 
   bool b_success = false;
+
+  uint8_t brewing = 0;
   portENTER_CRITICAL_ISR(&objTimerMux);
   float f_temp_local = fTemp;
   float f_tar_pwm = fTarPwm;
   float f_time = fTime;
   portEXIT_CRITICAL_ISR(&objTimerMux);
 
+  if ((iState & BREWING) == BREWING)
+  {
+    brewing = 1;
+  }
+
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
   obj_meas_file.print(f_time, 3);
   obj_meas_file.print(",");
   obj_meas_file.print(f_temp_local);
   obj_meas_file.print(",");
-  obj_meas_file.println(f_tar_pwm);
+  obj_meas_file.print(f_tar_pwm);
+  obj_meas_file.print(",");
+  obj_meas_file.println(brewing);
   obj_meas_file.close();
   b_success = true;
   return b_success;
