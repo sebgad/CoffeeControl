@@ -8,6 +8,8 @@
 
 // PIN definitions
 
+#define P_PUMP_RELAY 99
+
 // I2C pins
 #define SDA_0 23
 #define SCL_0 22
@@ -143,7 +145,8 @@ enum eState{
   PID_CTRL  = (1u << 2),
   STORE     = (1u << 3),
   DIAG      = (1u << 4),
-  LED_CTRL  = (1u << 5)
+  LED_CTRL  = (1u << 5),
+  BREWING   = (1u << 6)
 };
 
 enum eError{
@@ -196,6 +199,21 @@ void IRAM_ATTR onAlertRdy(){
     }
     iInterruptCntAlert++;
     portEXIT_CRITICAL_ISR(&objTimerMux);
+}
+
+void IRAM_ATTR onPumpRelayChange(){
+  /**
+   * ISR for changing Pump Relay Status
+   */
+
+  /* Set State for activating deactivating brewing process */
+  portENTER_CRITICAL_ISR(&objTimerMux);
+    if (digitalRead(P_PUMP_RELAY) == HIGH){
+      iState |= BREWING;
+    } else {
+      iState &= ~BREWING;
+    }
+  portEXIT_CRITICAL_ISR(&objTimerMux);
 }
 
 void IRAM_ATTR onTimerLong(){
@@ -920,6 +938,11 @@ void setup(){
   configLED();
   setColor(LED_COLOR_WHITE, true); // White
 
+  /* Set GPIO Pump Relay to Input mode */
+  pinMode(P_PUMP_RELAY, INPUT);
+  attachInterrupt(digitalPinToInterrupt(P_PUMP_RELAY), &onPumpRelayChange, CHANGE);
+
+
   // Connect to wifi and create time stamp if device is Online
   bEspOnline = connectWiFi(3, 6000);
   char char_timestamp[50];
@@ -1002,7 +1025,7 @@ void setup(){
   // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
-  attachInterrupt(CONV_RDY_PIN, &onAlertRdy, RISING);
+  attachInterrupt(digitalPinToInterrupt(CONV_RDY_PIN), &onAlertRdy, RISING);
 
   // Define timer alarm
   // factor is 100000, equals 100ms when prescaler is 80
@@ -1130,21 +1153,21 @@ void setColor(int i_color, bool b_gain_active) {
 
 
 void loop(){
+  /* Reset watchdog if loop is entered */
+  esp_task_wdt_reset();
+
   if ((iState & MEASURE) == MEASURE) {
     fTime = (float)(millis() - iTimeStart) / 1000.0;
-    // get physical value of sensor
+    /* get physical value of sensor */
     fTemp = objADS1115->getPhysVal();
 
     portENTER_CRITICAL_ISR(&objTimerMux);
       iState &= ~MEASURE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
-
-    // reset watchdog timer every time a sensor value is read
-    esp_task_wdt_reset();
   }
 
   if ((iState & PID_CTRL) == PID_CTRL) {
-    // Call heating control function
+    /* Call heating control function */
     controlHeating();
 
     portENTER_CRITICAL_ISR(&objTimerMux);
@@ -1153,6 +1176,7 @@ void loop(){
   }
 
   if ((iState & LED_CTRL) == LED_CTRL) {
+    /* Control LED color */
     if(iErrorId > NO_ERROR){
       setColor(LED_COLOR_PURPLE, false);
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
@@ -1172,7 +1196,7 @@ void loop(){
   }
 
   if ((iState & STORE) == STORE) {
-    // Write values to measurement file
+    /* Write values to measurement file */
     bool b_result_meas_write;
     b_result_meas_write = writeMeasFile();
     if (b_result_meas_write){
@@ -1182,13 +1206,19 @@ void loop(){
 
     }
   }
+
+  if ((iState & BREWING) == BREWING) {
+    /* Brew process active */
+
+  }
+
   if ((millis() >= objConfig.TimeToStandby * 1000) && (bTimeOutReached == false)) {
-    // check whether timeout is reached, PWM will be deactivated.
+    /* check whether timeout is reached, PWM will be deactivated. */
     bTimeOutReached = true;
     esp_log_write(ESP_LOG_WARN, strUserLogLabel, "Timeout reached -> machine going into sleep\n");
   }
 
-  // Diagnosis functionality
+  /* Diagnosis functionality */
   if ((iState & DIAG) == DIAG){
     // Error: Temperature Range unplausible
     if (fTemp < 10.F){
