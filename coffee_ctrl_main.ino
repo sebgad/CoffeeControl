@@ -6,34 +6,34 @@
 *********/
 #define LOG_LEVEL ESP_LOG_VERBOSE
 
-// PIN definitions
+/* PIN definitions */
 
 #define P_PUMP_RELAY 99
 
-// I2C pins
+/* I2C pins */
 #define SDA_0 23
 #define SCL_0 22
 #define CONV_RDY_PIN 14
 
-// PWM defines
+/* PWM defines */
 #define P_SSR_PWM 21
 #define P_RED_LED_PWM 13
 #define P_GRN_LED_PWM 27
 #define P_BLU_LED_PWM 12
-#define P_STAT_LED 33 // green status LED
+#define P_STAT_LED 33 /* green status LED */
 
-// File system definitions
+/* File system definitions */
 #define FORMAT_SPIFFS_IF_FAILED true
 #define JSON_MEMORY 1600
 
 
-// define timer related channels for PWM signals
-#define RwmRedChannel 13 //  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED
-#define RwmGrnChannel 14 //  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED
-#define RwmBluChannel 15 //  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED
-#define PwmSsrChannel 0  //  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll
+/* define timer related channels for PWM signals */
+#define RwmRedChannel 13 /*  PWM channel. There are 16 channels from 0 to 15. Channel 13 is now Red-LED */
+#define RwmGrnChannel 14 /*  PWM channel. There are 16 channels from 0 to 15. Channel 14 is now Green-LED */
+#define RwmBluChannel 15 /*  PWM channel. There are 16 channels from 0 to 15. Channel 15 is now Blue-LED */
+#define PwmSsrChannel 0  /*  PWM channel. There are 16 channels from 0 to 15. Channel 0 is now SSR-Controll */
 
-#define WDT_Timeout 75 // WatchDog Timeout in seconds
+#define WDT_Timeout 75 /* WatchDog Timeout in seconds */
 
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -54,7 +54,7 @@
 #include "esp32-hal-log.h"
 
 
-// config structure for online calibration
+/* config structure for online calibration */
 struct config {
   String wifiSSID;
   String wifiPassword;
@@ -90,7 +90,7 @@ struct config {
 };
 
 
-// File paths for measurement and calibration file
+/* File paths for measurement and calibration file */
 const char* strMeasFilePath = "/data.csv";
 bool bMeasFileLocked = false;
 const char* strParamFilePath = "/params.json";
@@ -100,41 +100,41 @@ const char* strLastLogFilePath = "/logfile_last.txt";
 static char bufPrintLog[512];
 const char* strUserLogLabel = "USER";
 
-// Time out status for soft off
+/* Time out status for soft off */
 bool bTimeOutReached = false;
 
-// start time for measurement
+/* start time for measurement */
 unsigned long iTimeStart = 0;
 
-// define target PWM
+/* define target PWM */
 float fTarPwm;
 
-// define configuration struct
+/* define configuration struct */
 config objConfig;
 
-// global variabel for WiFi strength
+/* global variabel for WiFi strength */
 int iDbmPercentage = 0;
 
-// Sensor variables
+/* Sensor variables */
 float fTime = 0.F;
 float fTemp = 0.F;
 
-// bit variable to indicate whether ESP32 has a online connection
+/* bit variable to indicate whether ESP32 has a online connection */
 bool bEspOnline = false;
 bool bEspMdns = false;
 
-// configure NTP client
+/* configure NTP client */
 const char* charNtpServerUrl = "europe.pool.ntp.org";
-const long  iGmtOffsetSec = 3600; // UTC for germany +1h = 3600s
-const int   iDayLightOffsetSec = 3600; //s Time change in germany 1h = 3600s
+const long  iGmtOffsetSec = 3600; /* UTC for germany +1h = 3600s */
+const int   iDayLightOffsetSec = 3600; /*s Time change in germany 1h = 3600s */
 
-// Initialize ADS1115 I2C connection
+/* Initialize ADS1115 I2C connection */
 ADS1115 *objADS1115 = new ADS1115;
 
-// timer object for ISR
+/* timer object for ISR */
 hw_timer_t * objTimerLong = NULL;
 
-// define Counter for interrupt handling
+/* define Counter for interrupt handling */
 volatile unsigned long iInterruptCntLong = 0;
 volatile unsigned long iInterruptCntAlert = 0;
 volatile unsigned long iInterruptCntAlertCatch = 0;
@@ -165,36 +165,36 @@ enum eLEDColor{
   LED_COLOR_WHITE
 };
 
-// Initialisation of PID controler
+/* Initialisation of PID controler */
 PidCtrl objPid;
 
-// Definition for critical section port
+/* Definition for critical section port */
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
-// Task intervals in microseconds
-const unsigned long iInterruptLongIntervalMicros = 450000; //microseconds
+/* Task intervals in microseconds */
+const unsigned long iInterruptLongIntervalMicros = 450000; /*microseconds */
 
-// Create AsyncWebServer object on port 80
+/* Create AsyncWebServer object on port 80 */
 AsyncWebServer server(80);
 
-// Status for function call timing, used in ISR
+/* Status for function call timing, used in ISR */
 volatile unsigned int iState = IDLE;
 
 int iErrorId = NO_ERROR;
 
-// timers ==============================================================================================================
+/* timers ============================================================================================================== */
 void IRAM_ATTR onAlertRdy(){
   /** Interrupt Service Routine for sensor read outs
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
   **/
 
-  // Define Critical Code section, also needs to be called in Main-Loop
+  /* Define Critical Code section, also needs to be called in Main-Loop */
     portENTER_CRITICAL_ISR(&objTimerMux);
-    // Perform Measurement on interrupt call
+    /* Perform Measurement on interrupt call */
     iState |= MEASURE;
 
     if (iInterruptCntAlert % 2 == 0) {
-        // Only apply control on every second interrupt
+        /* Only apply control on every second interrupt */
         iState |= PID_CTRL;
     }
     iInterruptCntAlert++;
@@ -221,15 +221,15 @@ void IRAM_ATTR onTimerLong(){
    *  Info: IRAM_ATTR stores function in RAM instead of flash memory, faster.
   **/
 
-  // Define Critical Code section, also needs to be called in Main-Loop
+  /* Define Critical Code section, also needs to be called in Main-Loop */
     portENTER_CRITICAL_ISR(&objTimerMux);
-      // Only change Status when idle to measurement running
+      /* Only change Status when idle to measurement running */
       if (iInterruptCntLong % 1 == 0) {
         iState |= STORE;
       }
 
       if (iInterruptCntLong % 3 == 0) {
-        // Only write LED value when interrupt function is called 5 times
+        /* Only write LED value when interrupt function is called 5 times */
         iState |= LED_CTRL;
       }
 
@@ -238,7 +238,7 @@ void IRAM_ATTR onTimerLong(){
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 
-    // Interrupt counter
+    /* Interrupt counter */
     iInterruptCntLong++;
 }
 
@@ -257,8 +257,8 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
 
   bool b_successful = false;
 
-  //WiFi.disconnect(true);
-  //delay(100);
+  /*WiFi.disconnect(true); */
+  /*delay(100); */
 
   esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Device %s try connecting to %s\n", WiFi.macAddress().c_str(), objConfig.wifiSSID.c_str());
 
@@ -267,12 +267,12 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
 
   WiFi.mode(WIFI_STA);
 
-  // Connect to WPA/WPA2 network:
+  /* Connect to WPA/WPA2 network: */
   WiFi.begin(objConfig.wifiSSID.c_str(), objConfig.wifiPassword.c_str());
   i_wifi_status = WiFi.status();
 
   while ((i_wifi_status != WL_CONNECTED) && (i_run_cnt_fail<i_total_fail)) {
-    // wait for connection establish
+    /* wait for connection establish */
     vTaskDelay(i_timout_attemp/portTICK_PERIOD_MS);
     i_run_cnt_fail++;
     i_wifi_status = WiFi.status();
@@ -280,9 +280,9 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   }
 
   if (i_wifi_status == WL_CONNECTED) {
-      // Print ESP32 Local IP Address
+      /* Print ESP32 Local IP Address */
       esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection successful. Local IP: %s\n", WiFi.localIP().toString().c_str());
-      // Signal strength and approximate conversion to percentage
+      /* Signal strength and approximate conversion to percentage */
       int i_dBm = WiFi.RSSI();
       calcWifiStrength(i_dBm);
 
@@ -294,7 +294,7 @@ bool connectWiFi(const int i_total_fail = 3, const int i_timout_attemp = 1000){
   }
 
   return b_successful;
-} // connectWiFi
+} /* connectWiFi */
 
 void calcWifiStrength(int i_dBm){
   /**
@@ -308,7 +308,7 @@ void calcWifiStrength(int i_dBm){
   } else {
     iDbmPercentage = 2*(i_dBm+100);
   }
-}//getWifiStreng
+}/*getWifiStreng */
 
 bool loadConfiguration(){
   /**
@@ -318,7 +318,7 @@ bool loadConfiguration(){
   bool b_success = false;
 
   if (!bParamFileLocked){
-    // file is not locked by another process ->  save to read or write
+    /* file is not locked by another process ->  save to read or write */
     bParamFileLocked = true;
     File obj_param_file = LittleFS.open(strParamFilePath, "r");
     JsonDocument json_doc;
@@ -332,22 +332,22 @@ bool loadConfiguration(){
       }
 
       if (error) {
-        //esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "JSON deserializion error: %*c\n", error.c_str());
+        /*esp_log_write(ESP_LOG_ERROR, strUserLogLabel, "JSON deserializion error: %*c\n", error.c_str()); */
       }
       obj_param_file.close();
 
       bParamFileLocked = false;
       resetConfiguration(true);
     } else {
-      // file could be read without issues and json document could be interpreted
+      /* file could be read without issues and json document could be interpreted */
       bParamFileLocked = false;
-      // reset configuration struct before writing to get default values
+      /* reset configuration struct before writing to get default values */
       resetConfiguration(false);
       bool b_set_default_values = false;
 
-      // Assign Values from json-File to configuration struct. If Field does not exist in JSON-File write default value to JSON file.
-      (json_doc["Wifi"]["wifiSSID"])?objConfig.wifiSSID = json_doc["Wifi"]["wifiSSID"].as<String>():b_set_default_values = true; // issue #118 in ArduinoJson
-      (json_doc["Wifi"]["wifiPassword"])?objConfig.wifiPassword = json_doc["Wifi"]["wifiPassword"].as<String>():b_set_default_values = true; // issue #118 in ArduinoJson
+      /* Assign Values from json-File to configuration struct. If Field does not exist in JSON-File write default value to JSON file. */
+      (json_doc["Wifi"]["wifiSSID"])?objConfig.wifiSSID = json_doc["Wifi"]["wifiSSID"].as<String>():b_set_default_values = true; /* issue #118 in ArduinoJson */
+      (json_doc["Wifi"]["wifiPassword"])?objConfig.wifiPassword = json_doc["Wifi"]["wifiPassword"].as<String>():b_set_default_values = true; /* issue #118 in ArduinoJson */
       (json_doc["PID"]["CtrlTimeFactor"])?objConfig.CtrlTimeFactor = json_doc["PID"]["CtrlTimeFactor"]:b_set_default_values = true;
       (json_doc["PID"]["CtrlPropActivate"])?objConfig.CtrlPropActivate = json_doc["PID"]["CtrlPropActivate"]:b_set_default_values = true;
       (json_doc["PID"]["CtrlPropFactor"])?objConfig.CtrlPropFactor = json_doc["PID"]["CtrlPropFactor"]:b_set_default_values = true;
@@ -379,7 +379,7 @@ bool loadConfiguration(){
       (json_doc["System"]["TimeToStandby"])?objConfig.TimeToStandby = json_doc["System"]["TimeToStandby"]:b_set_default_values = true;
 
       if (b_set_default_values){
-        // default values are set to Json object -> write it back to file.
+        /* default values are set to Json object -> write it back to file. */
         if (!saveConfiguration()){
           esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Cannot write back to JSON file.\n");
         }
@@ -476,8 +476,8 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.HighLimitManipulation = 255;
   objConfig.SsrFreq = 15;
   objConfig.PwmSsrResolution = 8;
-  objConfig.RwmRgbFreq = 500; // Hz - PWM frequency
-  objConfig.RwmRgbResolution = 8; //  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%.
+  objConfig.RwmRgbFreq = 500; /* Hz - PWM frequency */
+  objConfig.RwmRgbResolution = 8; /*  resulution of the DC; 0 => 0%; 255 = (2**8) => 100%. */
   objConfig.RwmRgbGainFactorRed = 1.0;
   objConfig.RwmRgbGainFactorGreen = 1.0;
   objConfig.RwmRgbGainFactorBlue = 1.0;
@@ -488,7 +488,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.RwmRgbColorPurpleFactor = 1.0;
   objConfig.RwmRgbColorWhiteFactor = 1.0;
   objConfig.SigFilterActive = true;
-  objConfig.TimeToStandby =  3600; //s
+  objConfig.TimeToStandby =  3600; /* s */
 
   if (b_safe_to_json){
     saveConfiguration();
@@ -529,7 +529,7 @@ void configPID(){
 
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
 
-  // configure PWM functionalitites
+  /* configure PWM functionalitites */
   ledcSetup(PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
 }
 
@@ -538,66 +538,66 @@ void configWebserver(){
    * Configure and start asynchronous webserver
    */
 
-  // favicons in LitleFs have to be included in the server
-  //TODO maybe not static?
+  /* favicons in LitleFs have to be included in the server */
+  /*TODO maybe not static? */
   server.serveStatic("/favicon-32x32.png", LittleFS, "favicon-32x32.png");
   server.serveStatic("/apple-touch-icon.png", LittleFS, "apple-touch-icon.png");
 
-  // Route for root / web page
+  /* Route for root / web page */
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/index.html");
   });
 
-  // Route for graphs web page
+  /* Route for graphs web page */
   server.on("/graphs.html", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/graphs.html");
   });
 
-  // Route for settings web page
+  /* Route for settings web page */
   server.on("/settings.html", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/settings.html");
   });
 
-  // Route for ota web page
+  /* Route for ota web page */
   server.on("/ota.html", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/ota.html");
   });
 
-  // Route for ota web page
+  /* Route for ota web page */
   server.on("/log.html", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/log.html");
   });
 
-  // Route for ota web page
+  /* Route for ota web page */
   server.on("/failsafe", HTTP_GET, [](AsyncWebServerRequest *request){
     AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ota_html_gz, ota_html_gz_len);
     response->addHeader("Content-Encoding", "gzip");
     request->send(response);
   });
 
-  // Route for stylesheets.css
+  /* Route for stylesheets.css */
   server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/style.css");
   });
 
-  // Measurement file, available under http://coffee.local/data.csv
+  /* Measurement file, available under http://coffee.local/data.csv */
   server.on("/data.csv", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, strMeasFilePath, "text/plain");
   });
 
-  // Current log file
+  /* Current log file */
   server.on("/recentlogfile.txt", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, strRecentLogFilePath, "text/plain");
   });
 
-  // Log file from previous session
+  /* Log file from previous session */
   server.on("/lastlogfile.txt", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, strLastLogFilePath, "text/plain");
   });
 
   server.on("/lastvalues.json", HTTP_GET, [](AsyncWebServerRequest *request){
       JsonDocument obj_json_values;
-      // send TargetPWM, Temperature, PID-values
+      /* send TargetPWM, Temperature, PID-values */
       portENTER_CRITICAL_ISR(&objTimerMux);
         obj_json_values["Time"] = fTime;
         obj_json_values["Temperature"] = fTemp;
@@ -617,7 +617,7 @@ void configWebserver(){
 
   });
 
-  // Parameter file, available under http://coffee.local/params.json
+  /* Parameter file, available under http://coffee.local/params.json */
   server.on("/params.json", HTTP_GET, [](AsyncWebServerRequest *request){
       request->send(LittleFS, strParamFilePath, "text/plain");
   });
@@ -628,8 +628,8 @@ void configWebserver(){
 
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Inside JSON upload handler.\n");
 
-    objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); // issue #118 in ArduinoJson
-    objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); // issue #118 in ArduinoJson
+    objConfig.wifiSSID = obj_json["Wifi"]["wifiSSID"].as<String>(); /* issue #118 in ArduinoJson */
+    objConfig.wifiPassword = obj_json["Wifi"]["wifiPassword"].as<String>(); /* issue #118 in ArduinoJson */
     objConfig.CtrlTimeFactor = obj_json["PID"]["CtrlTimeFactor"];
     objConfig.CtrlPropActivate = obj_json["PID"]["CtrlPropActivate"];
     objConfig.CtrlPropFactor = obj_json["PID"]["CtrlPropFactor"];
@@ -676,20 +676,20 @@ void configWebserver(){
   server.addHandler(obj_handler);
 
   server.on("/paramReset", HTTP_GET, [](AsyncWebServerRequest *request){
-    // initialization of a new parameter file
+    /* initialization of a new parameter file */
     resetConfiguration(true);
     configPID();
     configLED();
     request->send(200, "text/plain", "Parameters are set back to default values");
   });
 
-  // OTA Update functionality
+  /* OTA Update functionality */
   server.on("/ota_firmware", HTTP_POST, [&](AsyncWebServerRequest *request) {
-    // definition of response when request is finished (file upload is complete)
+    /* definition of response when request is finished (file upload is complete) */
     AsyncWebServerResponse *response = request->beginResponse((Update.hasError())?500:200, "text/plain", (Update.hasError())?"Firmware flash FAIL":"Firmware flash OK");
     response->addHeader("Connection", "close");
     response->addHeader("Access-Control-Allow-Origin", "*");
-    request->send(response); // request->send is called when upload from client is finished
+    request->send(response); /* request->send is called when upload from client is finished */
     delay(1000);
     request->redirect("/index.html");
     delay(1000);
@@ -708,20 +708,20 @@ void configWebserver(){
             */
 
             if (!i_index){
-              // precheck before upload the filestream (index not given)
+              /* precheck before upload the filestream (index not given) */
               if(!ptr_request->hasParam("MD5", true)) {
-                // request has no parameter MD5 (Hash value) --> aborting file upload
+                /* request has no parameter MD5 (Hash value) --> aborting file upload */
                 return ptr_request->send(400, "text/plain", "MD5 parameter missing");
               }
 
               if(!Update.setMD5(ptr_request->getParam("MD5", true)->value().c_str())) {
-                // MD5 parameter is not a valid format --> aborting file upload
+                /* MD5 parameter is not a valid format --> aborting file upload */
                 return ptr_request->send(400, "text/plain", "MD5 parameter invalid");
               }
 
-              // MD5 precheck done, creating temp file on LittleFS file system
+              /* MD5 precheck done, creating temp file on LittleFS file system */
               if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)){
-                // Update cannot be started for reasons
+                /* Update cannot be started for reasons */
                 Update.printError(Serial);
                 return ptr_request->send(400, "text/plain", "OTA could not begin");
               }
@@ -729,13 +729,13 @@ void configWebserver(){
 
             if (i_len) {
               if (Update.write(ptr_data, i_len) != i_len){
-                // data chunks cannot be written for defined length
+                /* data chunks cannot be written for defined length */
                 return ptr_request->send(400, "text/plain", "OTA aborted.");
               }
             }
 
             if (b_final){
-              // file download finished, last data chunk is reached
+              /* file download finished, last data chunk is reached */
               if (!Update.end(true)) {
                 Update.printError(Serial);
                 return ptr_request->send(400, "text/plain", "Could not end OTA");
@@ -743,7 +743,7 @@ void configWebserver(){
                 esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Firmware flash successful. Restart ESP.\n");
               }
             } else {
-              // everything runs smooth in this iteration -> return none
+              /* everything runs smooth in this iteration -> return none */
               return;
             }
      });
@@ -763,18 +763,18 @@ void configWebserver(){
           * @param b_final        fileupload is completed
           */
           if (!i_index) {
-            // open the file on first call and store the file handle in the request object
+            /* open the file on first call and store the file handle in the request object */
             ptr_request->_tempFile = LittleFS.open("/" + str_filename, "w");
             esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Start uploading file: %s\n", str_filename.c_str());
           }
 
           if (i_len) {
-            // stream the incoming chunk to the opened file
+            /* stream the incoming chunk to the opened file */
             ptr_request->_tempFile.write(ptr_data, i_len);
           }
 
           if (b_final) {
-            // close the file handle as the upload is now done
+            /* close the file handle as the upload is now done */
             ptr_request->_tempFile.close();
             ptr_request->redirect("/ota.html");
             esp_log_write(ESP_LOG_INFO, strUserLogLabel, "File upload finished.\n");
@@ -788,7 +788,7 @@ void configWebserver(){
     ESP.restart();
   });
 
-  // Start web server
+  /* Start web server */
   server.begin();
 }
 
@@ -798,24 +798,24 @@ bool configADS1115(){
    * Configure Analog digital converter ADS1115
    */
 
-  // Initialize I2c on defined pins with default adress
+  /* Initialize I2c on defined pins with default adress */
   if (!objADS1115->begin(SDA_0, SCL_0, ADS1115_I2CADD_DEFAULT)){
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to initialize I2C sensor connection, stop working.\n");
     return false;
   }
 
-  // Set Signal Filter Status
+  /* Set Signal Filter Status */
   if(objConfig.SigFilterActive){
     objADS1115->activateFilter();
   }
 
-  // set Comparator Polarity to active high
+  /* set Comparator Polarity to active high */
   objADS1115->setCompPolarity(ADS1115_CMP_POL_ACTIVE_HIGH);
 
-  // set differential voltage: A0-A1
+  /* set differential voltage: A0-A1 */
   objADS1115->setMux(ADS1115_MUX_AIN0_AIN1);
 
-  // set data rate (samples per second)
+  /* set data rate (samples per second) */
   objADS1115->setRate(ADS1115_RATE_8);
 
 
@@ -837,16 +837,16 @@ bool configADS1115(){
     }
   #endif
 
-  // set gain amplifier
+  /* set gain amplifier */
   objADS1115->setPGA(ADS1115_PGA_0P512);
 
-  // set latching mode
+  /* set latching mode */
   objADS1115->setCompLatchingMode(ADS1115_CMP_LAT_ACTIVE);
 
-  // assert after one conversion
+  /* assert after one conversion */
   objADS1115->setPinRdyMode(ADS1115_CONV_READY_ACTIVE, ADS1115_CMP_QUE_ASSERT_1_CONV);
 
-  // set to continues conversion method
+  /* set to continues conversion method */
   objADS1115->setOpMode(ADS1115_MODE_CONTINUOUS);
 
   objADS1115->printConfigReg();
@@ -855,13 +855,13 @@ bool configADS1115(){
 
 
 int vprintf_into_FS(const char* szFormat, va_list args) {
-	// write evaluated format string into buffer
+	/* write evaluated format string into buffer */
 	int i_ret = vsnprintf (bufPrintLog, sizeof(bufPrintLog), szFormat, args);
 
-	//output is now in buffer. write to file.
+	/*output is now in buffer. write to file. */
 	if(i_ret >= 0) {
     if(!LittleFS.exists(strRecentLogFilePath)) {
-      // Create logfile if it does not exist.
+      /* Create logfile if it does not exist. */
       File writeLog = LittleFS.open(strRecentLogFilePath, FILE_WRITE);
       if(!writeLog) Serial.println("Couldn't open log file");
       delay(50);
@@ -869,9 +869,9 @@ int vprintf_into_FS(const char* szFormat, va_list args) {
     }
 
 		File LogFile = LittleFS.open(strRecentLogFilePath, FILE_APPEND);
-		//debug output
+		/*debug output */
 		LogFile.write((uint8_t*) bufPrintLog, (size_t) i_ret);
-		//flush print log, to make sure message is written to file.
+		/*flush print log, to make sure message is written to file. */
 		LogFile.flush();
 		LogFile.close();
 
@@ -882,18 +882,18 @@ int vprintf_into_FS(const char* szFormat, va_list args) {
 }
 
 void setup(){
-  // Initialize Serial port for debugging purposes
+  /* Initialize Serial port for debugging purposes */
   Serial.begin(115200);
   delay(50);
 
-  // initialize LittleFS and load configuration files
+  /* initialize LittleFS and load configuration files */
   if(!LittleFS.begin(FORMAT_SPIFFS_IF_FAILED)){
-    // Initialization of LittleFS failed, restart it
+    /* Initialization of LittleFS failed, restart it */
     Serial.println("LittleFS mount Failed, restart ESP.");
     delay(1000);
     ESP.restart();
   } else {
-    // Move last log file
+    /* Move last log file */
     if (LittleFS.exists(strLastLogFilePath)){
       LittleFS.remove(strLastLogFilePath);
     }
@@ -902,9 +902,9 @@ void setup(){
       LittleFS.rename(strRecentLogFilePath, strLastLogFilePath);
     }
 
-    // Link logging output to function
+    /* Link logging output to function */
     esp_log_set_vprintf(&vprintf_into_FS);
-    // Verbose output level
+    /* Verbose output level */
     esp_log_level_set("*", LOG_LEVEL);
     esp_log_level_set("wifi", LOG_LEVEL);
     esp_log_level_set(strUserLogLabel, ESP_LOG_VERBOSE);
@@ -913,16 +913,16 @@ void setup(){
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "LittleFS mount successfully.\n");
     unsigned int i_reset_reason = esp_reset_reason();
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Last reset reason: %d\n", i_reset_reason);
-    // initialize configuration before load json file
+    /* initialize configuration before load json file */
     resetConfiguration(false);
 
-    // load configuration from file in eeprom
+    /* load configuration from file in eeprom */
     if (!loadConfiguration()) {
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Parameter file is locked on startup. Please reset to factory settings.\n");
     }
   }
 
-  // Initialization successfull, create csv file
+  /* Initialization successfull, create csv file */
   unsigned int i_total_bytes = LittleFS.totalBytes();
   unsigned int i_used_bytes = LittleFS.usedBytes();
 
@@ -930,74 +930,74 @@ void setup(){
   esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Total space on LittleFS: %d bytes\n", i_total_bytes);
   esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Total space used on LittleFS: %d bytes\n", i_used_bytes);
 
-  // turn green status LED on
+  /* turn green status LED on */
   pinMode(P_STAT_LED, OUTPUT);
   digitalWrite(P_STAT_LED, HIGH);
 
-  // configure RGB-LED PWM output (done early so error codes can be outputted via LED)
+  /* configure RGB-LED PWM output (done early so error codes can be outputted via LED) */
   configLED();
-  setColor(LED_COLOR_WHITE, true); // White
+  setColor(LED_COLOR_WHITE, true); /* White */
 
   /* Set GPIO Pump Relay to Input mode */
   pinMode(P_PUMP_RELAY, INPUT);
   attachInterrupt(digitalPinToInterrupt(P_PUMP_RELAY), &onPumpRelayChange, CHANGE);
 
 
-  // Connect to wifi and create time stamp if device is Online
+  /* Connect to wifi and create time stamp if device is Online */
   bEspOnline = connectWiFi(3, 6000);
   char char_timestamp[50];
 
   if (bEspOnline == true) {
-    // ESP has wifi connection
+    /* ESP has wifi connection */
 
-    // initialize NTP client
+    /* initialize NTP client */
     configTime(iGmtOffsetSec, iDayLightOffsetSec, charNtpServerUrl);
 
-    // get local time
+    /* get local time */
     struct tm obj_timeinfo;
     if(!getLocalTime(&obj_timeinfo)){
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Failed to obtain time stamp online\n");
     } else {
-      // write time stamp into variable
+      /* write time stamp into variable */
       strftime(char_timestamp, sizeof(char_timestamp), "%s", &obj_timeinfo);
     }
-    // print location to measurement file
+    /* print location to measurement file */
     esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Create File %s%s\n", WiFi.localIP().toString().c_str(), strMeasFilePath);
   } else {
-    // No wifi connection possible start SoftAP
+    /* No wifi connection possible start SoftAP */
 
     esp_log_write(ESP_LOG_INFO, strUserLogLabel,  "Connection to SSID '%s' not possible. Making Soft-AP with SSID 'SilviaCoffeeCtrl'\n", objConfig.wifiSSID.c_str());
     WiFi.softAP("SilviaCoffeeCtrl");
 
-    // print location to measurement file
+    /* print location to measurement file */
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Create file %s%s\n", WiFi.softAPIP().toString().c_str(), strMeasFilePath);
 
-    // set RGB-LED to purple to user knows whats up
+    /* set RGB-LED to purple to user knows whats up */
     setColor(LED_COLOR_PURPLE, false);
   }
 
-  // configure and start webserver
+  /* configure and start webserver */
   configWebserver();
 
-  // register mDNS. ESP is available under http://coffee.local
+  // register mDNS. ESP is available under http:/*coffee.local */
   if (!MDNS.begin("coffee")) {
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "Error setting up MDNS responder!\n");
   } else {
-    // add service to standart http connection
+    /* add service to standart http connection */
     MDNS.addService("http", "tcp", 80);
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "MDNS responder successfully initialized.\n");
   }
 
-  // configure ADS1115
+  /* configure ADS1115 */
   if(!configADS1115()) {
-    // TODO add diagnosis when ADS1115 is not connected
+    /* TODO add diagnosis when ADS1115 is not connected */
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ADS1115 configuration not successful.\n");
     iErrorId |= MEAS_DEV_RESET;
   } else {
     esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ADS initialized successfully.\n");
   }
 
-  // Write Measurement file header
+  /* Write Measurement file header */
   File obj_meas_file = LittleFS.open(strMeasFilePath, "w");
   uint16_t i_config_reg = objADS1115->getRegisterValue(ADS1115_CONFIG_REG);
   uint16_t i_low_reg = objADS1115->getRegisterValue(ADS1115_LOW_THRESH_REG);
@@ -1016,36 +1016,36 @@ void setup(){
   obj_meas_file.println("Time,Temperature,TargetPWM,Buffer,InterruptCountAlertReady");
   obj_meas_file.close();
 
-  // Initialize Timer
-  // Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency)
-  // true: increasing counter
+  /* Initialize Timer */
+  /* Prescaler: 80 --> 1 step per microsecond (80Mhz base frequency) */
+  /* true: increasing counter */
   objTimerLong = timerBegin(1, 80, true);
 
-  // Attach ISR function to timer
-  // timerAttachInterrupt(objTimerShort, &onAlertRdy, true);
+  /* Attach ISR function to timer */
+  /* timerAttachInterrupt(objTimerShort, &onAlertRdy, true); */
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(CONV_RDY_PIN), &onAlertRdy, RISING);
 
-  // Define timer alarm
-  // factor is 100000, equals 100ms when prescaler is 80
-  // true: Alarm will be reseted automatically
+  /* Define timer alarm */
+  /* factor is 100000, equals 100ms when prescaler is 80 */
+  /* true: Alarm will be reseted automatically */
   timerAlarmWrite(objTimerLong, iInterruptLongIntervalMicros, true);
   timerAlarmEnable(objTimerLong);
   iTimeStart = millis();
 
-  // Enable Hardware Watchdog with Kernel panic reaction
+  /* Enable Hardware Watchdog with Kernel panic reaction */
   esp_task_wdt_init(WDT_Timeout, true);
-  esp_task_wdt_add(NULL); // add current thread to watchdog
+  esp_task_wdt_add(NULL); /* add current thread to watchdog */
 
-  // Configure PID library
+  /* Configure PID library */
   configPID();
 
-  // attach the channel to the GPIO to be controlled
+  /* attach the channel to the GPIO to be controlled */
   ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
   esp_log_write(ESP_LOG_INFO, strUserLogLabel, "JUMP to main loop.\n");
 
-}// Setup
+}/* Setup */
 
 bool controlHeating(){
   /** PID regulator function for controling heating device
@@ -1064,7 +1064,7 @@ bool controlHeating(){
 
   return b_success;
 
-} // controlHeating
+} /* controlHeating */
 
 bool writeMeasFile(){
   /** Function to store the data in measurement file
@@ -1087,7 +1087,7 @@ bool writeMeasFile(){
   obj_meas_file.close();
   b_success = true;
   return b_success;
-}// writeMeasFile
+}/* writeMeasFile */
 
 
 void setColor(int i_color, bool b_gain_active) {
@@ -1129,13 +1129,13 @@ void setColor(int i_color, bool b_gain_active) {
   }
 
   if (b_gain_active){
-    // gain is active
+    /* gain is active */
     f_red_value *= objConfig.RwmRgbGainFactorRed;
     f_green_value *= objConfig.RwmRgbGainFactorGreen;
     f_blue_value *= objConfig.RwmRgbGainFactorBlue;
   }
 
-  // Value saturation check
+  /* Value saturation check */
   f_red_value = (f_red_value>f_max_resolution) ? f_max_resolution : f_red_value;
   f_red_value = (f_red_value<0.F) ? 0.F: f_red_value;
 
@@ -1149,7 +1149,7 @@ void setColor(int i_color, bool b_gain_active) {
   ledcWrite(RwmGrnChannel, (int)f_green_value);
   ledcWrite(RwmBluChannel, (int)f_blue_value);
 
-}// setColor
+} /* setColor */
 
 
 void loop(){
@@ -1180,13 +1180,13 @@ void loop(){
     if(iErrorId > NO_ERROR){
       setColor(LED_COLOR_PURPLE, false);
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
-      // Heat up signal
+      /* Heat up signal */
       setColor(LED_COLOR_ORANGE, true);
     } else if (fTemp > objConfig.CtrlTarget + 1.0){
-      // Cool down signal
+      /* Cool down signal */
       setColor(LED_COLOR_BLUE, true);
     } else {
-      // temperature in range signal
+      /* temperature in range signal */
       setColor(LED_COLOR_GREEN, true);
     }
 
@@ -1220,16 +1220,16 @@ void loop(){
 
   /* Diagnosis functionality */
   if ((iState & DIAG) == DIAG){
-    // Error: Temperature Range unplausible
+    /* Error: Temperature Range unplausible */
     if (fTemp < 10.F){
-      // Sensor range is not valid
+      /* Sensor range is not valid */
       iErrorId |= TEMP_OUT_RANGE;
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Temperature range unplausible. Measured Value: %.2f C.\n", fTemp);
     } else {
       iErrorId &= ~TEMP_OUT_RANGE;
     }
 
-    // Error: Internal reset of ADS
+    /* Error: Internal reset of ADS */
     if (objADS1115->getOpMode()==ADS1115_MODE_SINGLESHOT){
       iErrorId |= MEAS_DEV_RESET;
       esp_log_write(ESP_LOG_INFO, strUserLogLabel, "ERROR: Conversion mode changed to single shot (default) during runtime.\n");
@@ -1244,7 +1244,7 @@ void loop(){
       iErrorId &= ~WIFI_DISCONNECT;
     }
 
-    // try error handling
+    /* try error handling */
     if (iErrorId > NO_ERROR){
       if (iErrorId == WIFI_DISCONNECT) {
         server.end();
@@ -1256,4 +1256,4 @@ void loop(){
       iState &= ~DIAG;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
-}// loop
+}/* loop */
