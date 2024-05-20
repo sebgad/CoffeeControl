@@ -165,7 +165,6 @@ enum eLEDColor{
 /* Initialisation of PID controler */
 PidCtrl objPid;
 PidCtrl objPidBrewing;
-int iBrewingRelayDebounceTimer = 0;
 
 /* Definition for critical section port */
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -203,16 +202,24 @@ void IRAM_ATTR onAlertRdy(){
 void IRAM_ATTR onPumpRelayChange(){
   /**
    * ISR for changing Pump Relay Status
-   */
+  */
+  
+  static unsigned long pump_relay_last_interrupt_time = 0;
+  unsigned long pump_relay_interrupt_time = millis();
 
-  /* Set State for activating deactivating brewing process */
-  portENTER_CRITICAL_ISR(&objTimerMux);
-    if (digitalRead(P_PUMP_RELAY) == HIGH){
-      iState |= BREWING;
-    } else {
-      iState &= ~BREWING;
-    }
-  portEXIT_CRITICAL_ISR(&objTimerMux);
+  /* Debouncing */
+  if (pump_relay_interrupt_time - pump_relay_last_interrupt_time > 300) 
+  {
+    /* Set State for activating deactivating brewing process */
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      if (digitalRead(P_PUMP_RELAY) == HIGH){
+        iState |= BREWING;
+      } else {
+        iState &= ~BREWING;
+      }
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+  }
+  pump_relay_last_interrupt_time = pump_relay_interrupt_time;
 }
 
 void IRAM_ATTR onTimerLong(){
