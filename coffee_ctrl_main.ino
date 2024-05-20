@@ -164,6 +164,8 @@ enum eLEDColor{
 
 /* Initialisation of PID controler */
 PidCtrl objPid;
+PidCtrl objPidBrewing;
+int iBrewingRelayDebounceTimer = 0;
 
 /* Definition for critical section port */
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -511,6 +513,11 @@ void configPID(){
    * Configurate the PID controller
    */
 
+  objPidBrewing.begin(&fTemp, &fTarPwm);
+  objPidBrewing.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
+  objPidBrewing.changeTargetValue(objConfig.CtrlTarget);
+  objPidBrewing.changePidCoeffs(objConfig.CtrlPropFactor, objConfig.CtrlIntFactor, objConfig.CtrlDifFactor, objConfig.CtrlTimeFactor);
+  
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPid.changeTargetValue(objConfig.CtrlTarget);
@@ -518,13 +525,16 @@ void configPID(){
 
   if (objConfig.LowThresholdActivate) {
     objPid.setOnThres(objConfig.LowThresholdValue);
+    objPidBrewing.setOnThres(objConfig.LowThresholdValue);
   }
 
   if (objConfig.HighThresholdActivate) {
     objPid.setOffThres(objConfig.HighTresholdValue);
+    objPidBrewing.setOnOffThres(objConfig.LowThresholdValue);
   }
 
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
+  objPidBrewing.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
 
   /* configure PWM functionalitites */
   ledcSetup(PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
@@ -1051,7 +1061,12 @@ bool controlHeating(){
 
   bool b_success = false;
   if ((!bTimeOutReached) && (iErrorId == NO_ERROR)) {
-    objPid.compute();
+    if ((iState & BREWING) == BREWING)
+    {
+      objPidBrewing.compute();
+    } else {
+      objPid.compute();
+    }
     b_success = true;
   } else {
     fTarPwm = 0.F;
