@@ -248,7 +248,6 @@ void PidCtrl::_calcControlEquation(){
         // Proportional component of the controler
         *_ptrManipValue += f_k_p_coeff * f_control_deviation;
 
-
         if (_bKdActivate){
             // Differential component of the controler
             _fErrDiff = (f_control_deviation - _fLastControlDev); // deviation of error

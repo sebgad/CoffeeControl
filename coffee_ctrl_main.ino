@@ -68,6 +68,8 @@ hw_timer_t * objTimerLong = NULL;
 /* define Counter for interrupt handling */
 volatile unsigned long iInterruptCntLong = 0;
 volatile unsigned long iInterruptCntAlert = 0;
+volatile unsigned long pump_relay_last_interrupt_time = 0;
+volatile unsigned long iInterruptCntPump = 0;
 
 /* Initialisation of PID controler */
 PidCtrl objPid;
@@ -110,19 +112,19 @@ void IRAM_ATTR onPumpRelayChange(){
   /**
    * ISR for changing Pump Relay Status
   */
-  
-  static unsigned long pump_relay_last_interrupt_time = 0;
-  unsigned long pump_relay_interrupt_time = millis();
 
+  unsigned long pump_relay_interrupt_time = millis();
+  iInterruptCntPump++;
   /* Debouncing */
-  if (pump_relay_interrupt_time - pump_relay_last_interrupt_time > 300) 
+  if ((pump_relay_interrupt_time - pump_relay_last_interrupt_time) > 200)
   {
     /* Set State for activating deactivating brewing process */
     portENTER_CRITICAL_ISR(&objTimerMux);
-      if (digitalRead(P_PUMP_RELAY) == HIGH){
-        iState |= BREWING;
-      } else {
+      if ((iState & BREWING) == BREWING)
+      {
         iState &= ~BREWING;
+      } else {
+        iState |= BREWING;
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
@@ -431,7 +433,7 @@ void configPID(){
   objPidBrewing.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPidBrewing.changeTargetValue(objConfig.CtrlTarget);
   objPidBrewing.changePidCoeffs(objConfig.CtrlPropFactor, objConfig.CtrlIntFactor, objConfig.CtrlDifFactor, objConfig.CtrlTimeFactor);
-  
+
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPid.changeTargetValue(objConfig.CtrlTarget);
@@ -444,7 +446,7 @@ void configPID(){
 
   if (objConfig.HighThresholdActivate) {
     objPid.setOffThres(objConfig.HighTresholdValue);
-    objPidBrewing.setOnOffThres(objConfig.LowThresholdValue);
+    objPidBrewing.setOffThres(objConfig.LowThresholdValue);
   }
 
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
@@ -859,10 +861,13 @@ void setup(){
   configLED();
   setColor(LED_COLOR_WHITE, true); /* White */
 
-  /* Set GPIO Pump Relay to Input mode */
-  pinMode(P_PUMP_RELAY, INPUT);
-  attachInterrupt(digitalPinToInterrupt(P_PUMP_RELAY), &onPumpRelayChange, CHANGE);
+  /* Use GPIO for 3.3V source */
+  pinMode(A0, OUTPUT);
+  digitalWrite(A0, HIGH);
 
+  /* Set GPIO Pump Relay to Input mode */
+  pinMode(P_PUMP_RELAY, INPUT_PULLDOWN);
+  attachInterrupt(digitalPinToInterrupt(P_PUMP_RELAY), &onPumpRelayChange, CHANGE);
 
   /* Connect to wifi and create time stamp if device is Online */
   bEspOnline = connectWiFi(3, 6000);
@@ -934,7 +939,7 @@ void setup(){
   obj_meas_file.println(i_high_reg, BIN);
 
   obj_meas_file.println("");
-  obj_meas_file.println("Time,Temperature,TargetPWM,Brewing");
+  obj_meas_file.println("Time,Temperature,TargetPWM,TargetTemperature,Brewing");
   obj_meas_file.close();
 
   /* Initialize Timer */
@@ -943,7 +948,6 @@ void setup(){
   objTimerLong = timerBegin(1, 80, true);
 
   /* Attach ISR function to timer */
-  /* timerAttachInterrupt(objTimerShort, &onAlertRdy, true); */
   timerAttachInterrupt(objTimerLong, &onTimerLong, true);
   pinMode(CONV_RDY_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(CONV_RDY_PIN), &onAlertRdy, RISING);
@@ -965,7 +969,6 @@ void setup(){
   /* attach the channel to the GPIO to be controlled */
   ledcAttachPin(P_SSR_PWM, PwmSsrChannel);
   esp_log_write(ESP_LOG_INFO, strUserLogLabel, "JUMP to main loop.\n");
-
 }/* Setup */
 
 bool controlHeating(){
@@ -1001,22 +1004,24 @@ bool writeMeasFile(){
 
   uint8_t brewing = 0;
   portENTER_CRITICAL_ISR(&objTimerMux);
-  float f_temp_local = fTemp;
-  float f_tar_pwm = fTarPwm;
-  float f_time = fTime;
-  portEXIT_CRITICAL_ISR(&objTimerMux);
+    float f_temp_local = fTemp;
+    float f_tar_pwm = fTarPwm;
+    float f_time = fTime;
 
-  if ((iState & BREWING) == BREWING)
-  {
-    brewing = 1;
-  }
+    if ((iState & BREWING) == BREWING)
+    {
+      brewing = 1;
+    }
+  portEXIT_CRITICAL_ISR(&objTimerMux);
 
   File obj_meas_file = LittleFS.open(strMeasFilePath, "a");
   obj_meas_file.print(f_time, 3);
   obj_meas_file.print(",");
   obj_meas_file.print(f_temp_local);
   obj_meas_file.print(",");
-  obj_meas_file.print(f_tar_pwm);
+  obj_meas_file.print(f_tar_pwm / objConfig.HighLimitManipulation * 100.F);
+  obj_meas_file.print(",");
+  obj_meas_file.print(objConfig.CtrlTarget);
   obj_meas_file.print(",");
   obj_meas_file.println(brewing);
   obj_meas_file.close();

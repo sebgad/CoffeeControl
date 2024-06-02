@@ -5,7 +5,7 @@
 #define LOG_LEVEL ESP_LOG_VERBOSE
 
 /* PIN definitions */
-#define P_PUMP_RELAY 15
+#define P_PUMP_RELAY 17
 
 /* I2C pins */
 #define SDA_0 23
