@@ -279,6 +279,15 @@ void PidCtrl::_calcControlEquation(){
 
 }
 
+void PidCtrl::reset() {
+    /** Resets the integration part and differential part of the controller and sets last time point to actual time
+     *
+     */
+    _fLastControlDev = 0.F;
+    _fSumIntegrator = 0.F;
+    _iLastComputeMillis = millis();
+}
+
 void PidCtrl::_initCoeffTable(size_t i_size_conv) {
   /**
    * Initialize pointer for conversion table

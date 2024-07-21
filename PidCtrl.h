@@ -36,6 +36,7 @@ class PidCtrl
     float getErrorIntegrator();
     float getErrorDiff();
     float getTargetValue();
+    void reset();
 
   private:
     float ** ptrConstants;

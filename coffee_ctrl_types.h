@@ -72,7 +72,8 @@ enum eState{
   STORE     = (1u << 3),
   DIAG      = (1u << 4),
   LED_CTRL  = (1u << 5),
-  BREWING   = (1u << 6)
+  BREWING_DETECTION = (1 << 6),
+  BREWING   = (1u << 7)
 };
 
 enum eError{
@@ -89,4 +90,9 @@ enum eLEDColor{
   LED_COLOR_ORANGE,
   LED_COLOR_PURPLE,
   LED_COLOR_WHITE
+};
+
+struct state{
+  unsigned int previous;
+  unsigned int actual;
 };

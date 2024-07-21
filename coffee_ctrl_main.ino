@@ -73,7 +73,6 @@ volatile unsigned long iInterruptCntPump = 0;
 
 /* Initialisation of PID controler */
 PidCtrl objPid;
-PidCtrl objPidBrewing;
 
 /* Definition for critical section port */
 portMUX_TYPE objTimerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -85,7 +84,7 @@ const unsigned long iInterruptLongIntervalMicros = 450000; /*microseconds */
 AsyncWebServer server(80);
 
 /* Status for function call timing, used in ISR */
-volatile unsigned int iState = IDLE;
+volatile struct state iState = {IDLE, IDLE};
 
 int iErrorId = NO_ERROR;
 
@@ -98,11 +97,12 @@ void IRAM_ATTR onAlertRdy(){
   /* Define Critical Code section, also needs to be called in Main-Loop */
     portENTER_CRITICAL_ISR(&objTimerMux);
     /* Perform Measurement on interrupt call */
-    iState |= MEASURE;
+    iState.previous = iState.actual;
+    iState.actual |= MEASURE;
 
-    if (iInterruptCntAlert % 2 == 0) {
-        /* Only apply control on every second interrupt */
-        iState |= PID_CTRL;
+    if (iInterruptCntAlert % 3 == 0) {
+        /* Only apply control on every third interrupt */
+        iState.actual |= PID_CTRL;
     }
     iInterruptCntAlert++;
     portEXIT_CRITICAL_ISR(&objTimerMux);
@@ -113,22 +113,16 @@ void IRAM_ATTR onPumpRelayChange(){
    * ISR for changing Pump Relay Status
   */
 
-  unsigned long pump_relay_interrupt_time = millis();
-  iInterruptCntPump++;
-  /* Debouncing */
-  if ((pump_relay_interrupt_time - pump_relay_last_interrupt_time) > 200)
+  portENTER_CRITICAL_ISR(&objTimerMux);
+
+  if ((iState.actual & BREWING_DETECTION) != BREWING_DETECTION)
   {
-    /* Set State for activating deactivating brewing process */
-    portENTER_CRITICAL_ISR(&objTimerMux);
-      if ((iState & BREWING) == BREWING)
-      {
-        iState &= ~BREWING;
-      } else {
-        iState |= BREWING;
-      }
-    portEXIT_CRITICAL_ISR(&objTimerMux);
+    iState.previous = iState.actual;
+    iState.actual |= BREWING_DETECTION;
+    pump_relay_last_interrupt_time = millis();
   }
-  pump_relay_last_interrupt_time = pump_relay_interrupt_time;
+  portEXIT_CRITICAL_ISR(&objTimerMux);
+  iInterruptCntPump++;
 }
 
 void IRAM_ATTR onTimerLong(){
@@ -139,17 +133,18 @@ void IRAM_ATTR onTimerLong(){
   /* Define Critical Code section, also needs to be called in Main-Loop */
     portENTER_CRITICAL_ISR(&objTimerMux);
       /* Only change Status when idle to measurement running */
+      iState.previous = iState.actual;
       if (iInterruptCntLong % 1 == 0) {
-        iState |= STORE;
+        iState.actual |= STORE;
       }
 
       if (iInterruptCntLong % 3 == 0) {
         /* Only write LED value when interrupt function is called 5 times */
-        iState |= LED_CTRL;
+        iState.actual |= LED_CTRL;
       }
 
       if (iInterruptCntLong % 2 == 0){
-        iState |= DIAG;
+        iState.actual |= DIAG;
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
 
@@ -429,11 +424,6 @@ void configPID(){
    * Configurate the PID controller
    */
 
-  objPidBrewing.begin(&fTemp, &fTarPwm);
-  objPidBrewing.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
-  objPidBrewing.changeTargetValue(objConfig.CtrlTarget);
-  objPidBrewing.changePidCoeffs(objConfig.CtrlPropFactor, objConfig.CtrlIntFactor, objConfig.CtrlDifFactor, objConfig.CtrlTimeFactor);
-
   objPid.begin(&fTemp, &fTarPwm);
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPid.changeTargetValue(objConfig.CtrlTarget);
@@ -441,16 +431,13 @@ void configPID(){
 
   if (objConfig.LowThresholdActivate) {
     objPid.setOnThres(objConfig.LowThresholdValue);
-    objPidBrewing.setOnThres(objConfig.LowThresholdValue);
   }
 
   if (objConfig.HighThresholdActivate) {
     objPid.setOffThres(objConfig.HighTresholdValue);
-    objPidBrewing.setOffThres(objConfig.LowThresholdValue);
   }
 
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
-  objPidBrewing.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
 
   /* configure PWM functionalitites */
   ledcSetup(PwmSsrChannel, objConfig.SsrFreq, objConfig.PwmSsrResolution);
@@ -526,7 +513,7 @@ void configWebserver(){
         obj_json_values["Temperature"] = fTemp;
 
         obj_json_values["PID"]["TargetValue"] = objPid.getTargetValue();
-        obj_json_values["PID"]["TargetPWM"] = fTarPwm;
+        obj_json_values["PID"]["TargetPWM"] = fTarPwm / objConfig.HighLimitManipulation * 100.F;
         obj_json_values["PID"]["ErrorIntegrator"] = objPid.getErrorIntegrator();
         obj_json_values["PID"]["ErrorDiff"] = objPid.getErrorDiff();
 
@@ -824,7 +811,6 @@ void setup(){
     if (LittleFS.exists(strRecentLogFilePath)){
       LittleFS.rename(strRecentLogFilePath, strLastLogFilePath);
     }
-
     /* Link logging output to function */
     esp_log_set_vprintf(&vprintf_into_FS);
     /* Verbose output level */
@@ -978,10 +964,15 @@ bool controlHeating(){
 
   bool b_success = false;
   if ((!bTimeOutReached) && (iErrorId == NO_ERROR)) {
-    if ((iState & BREWING) == BREWING)
+    if ((iState.actual & BREWING) == BREWING)
     {
-      objPidBrewing.compute();
+      fTarPwm = 200.F;
     } else {
+      /* Change from Brewing to not brewing: Reset PID */
+      if ((iState.previous & BREWING) == BREWING)
+      {
+        objPid.reset();
+      }
       objPid.compute();
     }
     b_success = true;
@@ -1008,7 +999,7 @@ bool writeMeasFile(){
     float f_tar_pwm = fTarPwm;
     float f_time = fTime;
 
-    if ((iState & BREWING) == BREWING)
+    if ((iState.actual & BREWING) == BREWING)
     {
       brewing = 1;
     }
@@ -1096,29 +1087,50 @@ void loop(){
   /* Reset watchdog if loop is entered */
   esp_task_wdt_reset();
 
-  if ((iState & MEASURE) == MEASURE) {
+  /* Check for brewing status when debouncing counter is elapsed */
+  if (((iState.actual & BREWING_DETECTION) == BREWING_DETECTION) && (millis() - pump_relay_last_interrupt_time > 200L))
+  {
+    /* Set State for activating deactivating brewing process */
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState.previous = iState.actual;
+      if (digitalRead(P_PUMP_RELAY) == HIGH)
+      {
+        iState.actual |= BREWING;
+      } else {
+        iState.actual &= ~BREWING;
+      }
+    portEXIT_CRITICAL_ISR(&objTimerMux);
+    iState.actual &= ~BREWING_DETECTION;
+  }
+
+  if ((iState.actual & MEASURE) == MEASURE) {
     fTime = (float)(millis() - iTimeStart) / 1000.0;
     /* get physical value of sensor */
     fTemp = objADS1115->getPhysVal();
 
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~MEASURE;
+      iState.previous = iState.actual;
+      iState.actual &= ~MEASURE;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 
-  if ((iState & PID_CTRL) == PID_CTRL) {
+  if ((iState.actual & PID_CTRL) == PID_CTRL) {
     /* Call heating control function */
     controlHeating();
 
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~PID_CTRL;
+      iState.previous = iState.actual;
+      iState.actual &= ~PID_CTRL;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 
-  if ((iState & LED_CTRL) == LED_CTRL) {
+  if ((iState.actual & LED_CTRL) == LED_CTRL) {
     /* Control LED color */
     if(iErrorId > NO_ERROR){
       setColor(LED_COLOR_PURPLE, false);
+    } else if ((iState.actual & BREWING) == BREWING) {
+      /* Brew process active */
+      setColor(LED_COLOR_RED, true);
     } else if (fTemp < objConfig.CtrlTarget - 1.0) {
       /* Heat up signal */
       setColor(LED_COLOR_ORANGE, true);
@@ -1131,25 +1143,22 @@ void loop(){
     }
 
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~LED_CTRL;
+      iState.previous = iState.actual;
+      iState.actual &= ~LED_CTRL;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 
-  if ((iState & STORE) == STORE) {
+  if ((iState.actual & STORE) == STORE) {
     /* Write values to measurement file */
     bool b_result_meas_write;
     b_result_meas_write = writeMeasFile();
     if (b_result_meas_write){
       portENTER_CRITICAL_ISR(&objTimerMux);
-        iState &= ~STORE;
+        iState.previous = iState.actual;
+        iState.actual &= ~STORE;
       portEXIT_CRITICAL_ISR(&objTimerMux);
 
     }
-  }
-
-  if ((iState & BREWING) == BREWING) {
-    /* Brew process active */
-
   }
 
   if ((millis() >= objConfig.TimeToStandby * 1000) && (bTimeOutReached == false)) {
@@ -1159,7 +1168,7 @@ void loop(){
   }
 
   /* Diagnosis functionality */
-  if ((iState & DIAG) == DIAG){
+  if ((iState.actual & DIAG) == DIAG){
     /* Error: Temperature Range unplausible */
     if (fTemp < 10.F){
       /* Sensor range is not valid */
@@ -1191,9 +1200,8 @@ void loop(){
         server.begin();
       }
     }
-
     portENTER_CRITICAL_ISR(&objTimerMux);
-      iState &= ~DIAG;
+      iState.actual &= ~DIAG;
     portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 }/* loop */
