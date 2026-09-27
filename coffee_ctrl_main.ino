@@ -7,6 +7,7 @@
 
 #include "coffee_ctrl_types.h"
 #include <WiFi.h>
+#include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
@@ -14,7 +15,6 @@
 #include "ADS1115.h"
 #include "PidCtrl.h"
 #include "WifiAccess.h"
-#include <ArduinoJson.h>
 #include "AsyncJson.h"
 #include "ota.h"
 #include <Update.h>
@@ -39,6 +39,9 @@ unsigned long iTimeStart = 0;
 
 /* define target PWM */
 float fTarPwm;
+/* state of the brewing feedforward (exponential decay, see controlHeating) */
+float fBrewFf = 0.F;
+unsigned long iBrewFfMillis = 0;
 
 /* define configuration struct */
 config objConfig;
@@ -272,6 +275,12 @@ bool loadConfiguration(){
       (json_doc["PID"]["HighTresholdValue"])?objConfig.HighTresholdValue = json_doc["PID"]["HighTresholdValue"]:b_set_default_values = true;
       (json_doc["PID"]["LowLimitManipulation"])?objConfig.LowLimitManipulation = json_doc["PID"]["LowLimitManipulation"]:b_set_default_values = true;
       (json_doc["PID"]["HighLimitManipulation"])?objConfig.HighLimitManipulation = json_doc["PID"]["HighLimitManipulation"]:b_set_default_values = true;
+      /* isNull() instead of truthiness: a deliberate 0 must not be mistaken for a missing key */
+      (!json_doc["PID"]["CtrlDifFilterTime"].isNull())?objConfig.CtrlDifFilterTime = json_doc["PID"]["CtrlDifFilterTime"]:b_set_default_values = true;
+      (!json_doc["PID"]["BrewFfStart"].isNull())?objConfig.BrewFfStart = json_doc["PID"]["BrewFfStart"]:b_set_default_values = true;
+      (!json_doc["PID"]["BrewFfEnd"].isNull())?objConfig.BrewFfEnd = json_doc["PID"]["BrewFfEnd"]:b_set_default_values = true;
+      (!json_doc["PID"]["BrewFfTau"].isNull())?objConfig.BrewFfTau = json_doc["PID"]["BrewFfTau"]:b_set_default_values = true;
+      (!json_doc["PID"]["BrewFfGain"].isNull())?objConfig.BrewFfGain = json_doc["PID"]["BrewFfGain"]:b_set_default_values = true;
       (json_doc["SSR"]["SsrFreq"])?objConfig.SsrFreq = json_doc["SSR"]["SsrFreq"]:b_set_default_values = true;
       (json_doc["SSR"]["PwmSsrResolution"])?objConfig.PwmSsrResolution = json_doc["SSR"]["PwmSsrResolution"]:b_set_default_values = true;
       (json_doc["LED"]["RwmRgbFreq"])?objConfig.RwmRgbFreq = json_doc["LED"]["RwmRgbFreq"]:b_set_default_values = true;
@@ -326,6 +335,11 @@ bool saveConfiguration(){
   json_doc["PID"]["HighTresholdValue"] = objConfig.HighTresholdValue;
   json_doc["PID"]["LowLimitManipulation"] = objConfig.LowLimitManipulation;
   json_doc["PID"]["HighLimitManipulation"] = objConfig.HighLimitManipulation;
+  json_doc["PID"]["CtrlDifFilterTime"] = objConfig.CtrlDifFilterTime;
+  json_doc["PID"]["BrewFfStart"] = objConfig.BrewFfStart;
+  json_doc["PID"]["BrewFfEnd"] = objConfig.BrewFfEnd;
+  json_doc["PID"]["BrewFfTau"] = objConfig.BrewFfTau;
+  json_doc["PID"]["BrewFfGain"] = objConfig.BrewFfGain;
   json_doc["SSR"]["SsrFreq"]  = objConfig.SsrFreq;
   json_doc["SSR"]["PwmSsrResolution"]  = objConfig.PwmSsrResolution;
   json_doc["LED"]["RwmRgbFreq"] = objConfig.RwmRgbFreq;
@@ -377,6 +391,7 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.CtrlIntFactor = 350.0;
   objConfig.CtrlDifActivate = false;
   objConfig.CtrlDifFactor = 0.0;
+  objConfig.CtrlDifFilterTime = 5.0;
   objConfig.CtrlTarget = 85.0;
   objConfig.LowThresholdActivate = false;
   objConfig.LowThresholdValue = 0.0;
@@ -384,6 +399,12 @@ void resetConfiguration(boolean b_safe_to_json){
   objConfig.HighTresholdValue = 0.0;
   objConfig.LowLimitManipulation = 0;
   objConfig.HighLimitManipulation = 255;
+  /* brewing feedforward: decays from BrewFfStart towards BrewFfEnd with BrewFfTau,
+     plus BrewFfGain counts per Kelvin of remaining control deviation */
+  objConfig.BrewFfStart = 255.0;
+  objConfig.BrewFfEnd = 10.0;
+  objConfig.BrewFfTau = 14.0;
+  objConfig.BrewFfGain = 35.0;
   objConfig.SsrFreq = 15;
   objConfig.PwmSsrResolution = 8;
   objConfig.RwmRgbFreq = 500; /* Hz - PWM frequency */
@@ -428,13 +449,19 @@ void configPID(){
   objPid.addOutputLimits(objConfig.LowLimitManipulation, objConfig.HighLimitManipulation);
   objPid.changeTargetValue(objConfig.CtrlTarget);
   objPid.changePidCoeffs(objConfig.CtrlPropFactor, objConfig.CtrlIntFactor, objConfig.CtrlDifFactor, objConfig.CtrlTimeFactor);
+  objPid.setDiffFilterTime(objConfig.CtrlDifFilterTime);
 
   if (objConfig.LowThresholdActivate) {
     objPid.setOnThres(objConfig.LowThresholdValue);
+  } else {
+    /* explicit deactivation, configPID() can be called again at runtime */
+    objPid.deactivateOnThres();
   }
 
   if (objConfig.HighThresholdActivate) {
     objPid.setOffThres(objConfig.HighTresholdValue);
+  } else {
+    objPid.deactivateOffThres();
   }
 
   objPid.activate(objConfig.CtrlPropActivate, objConfig.CtrlIntActivate, objConfig.CtrlDifActivate);
@@ -554,6 +581,12 @@ void configWebserver(){
     objConfig.HighTresholdValue = obj_json["PID"]["HighTresholdValue"];
     objConfig.HighLimitManipulation = obj_json["PID"]["HighLimitManipulation"];
     objConfig.LowLimitManipulation = obj_json["PID"]["LowLimitManipulation"];
+    /* keep the current value when the key is absent, e.g. an older cached settings page */
+    if (!obj_json["PID"]["CtrlDifFilterTime"].isNull()) { objConfig.CtrlDifFilterTime = obj_json["PID"]["CtrlDifFilterTime"]; }
+    if (!obj_json["PID"]["BrewFfStart"].isNull()) { objConfig.BrewFfStart = obj_json["PID"]["BrewFfStart"]; }
+    if (!obj_json["PID"]["BrewFfEnd"].isNull())   { objConfig.BrewFfEnd = obj_json["PID"]["BrewFfEnd"]; }
+    if (!obj_json["PID"]["BrewFfTau"].isNull())   { objConfig.BrewFfTau = obj_json["PID"]["BrewFfTau"]; }
+    if (!obj_json["PID"]["BrewFfGain"].isNull())  { objConfig.BrewFfGain = obj_json["PID"]["BrewFfGain"]; }
     objConfig.SsrFreq = obj_json["SSR"]["SsrFreq"];
     objConfig.PwmSsrResolution = obj_json["SSR"]["PwmSsrResolution"];
     objConfig.RwmRgbFreq = obj_json["LED"]["RwmRgbFreq"];
@@ -571,11 +604,12 @@ void configWebserver(){
     objConfig.TimeToStandby = obj_json["System"]["TimeToStandby"];
 
     if (saveConfiguration()){
-      if(objConfig.SigFilterActive){
-        objADS1115->activateFilter();
-      } else {
-        objADS1115->deactivateFilter();
-      }
+      /* Apply the new configuration in the main loop, not in the webserver task,
+         so that the PID is not reconfigured while controlHeating() is using it. */
+      portENTER_CRITICAL(&objTimerMux);
+        iState.previous = iState.actual;
+        iState.actual |= CONFIG_UPDATE;
+      portEXIT_CRITICAL(&objTimerMux);
 
       request->send(200, "text/plain", "Parameters are updated and changes applied.");
     } else {
@@ -963,13 +997,45 @@ bool controlHeating(){
    */
 
   bool b_success = false;
+  /* own edge memory: iState.previous is overwritten by the other loop branches before
+     controlHeating() is reached, so it cannot be used to detect the end of brewing */
+  static bool b_brewing_prev = false;
+  bool b_brewing = ((iState.actual & BREWING) == BREWING);
+
   if ((!bTimeOutReached) && (iErrorId == NO_ERROR)) {
-    if ((iState.actual & BREWING) == BREWING)
+    if (b_brewing)
     {
-      fTarPwm = 200.F;
+      /* During brewing cold water is drawn into the boiler. The controller cannot anticipate
+         this and the heating element lags by about a minute, so the output is driven open loop:
+         a feedforward decaying exponentially from BrewFfStart towards BrewFfEnd, trimmed
+         proportionally with the remaining control deviation. Front loading the energy limits the
+         temperature drop, while the decay avoids leaving the element charged when the pump stops,
+         which used to push the boiler far above the target after the shot. */
+      unsigned long i_now = millis();
+
+      if (!b_brewing_prev) {
+        /* brewing has just started, charge the feedforward */
+        fBrewFf = objConfig.BrewFfStart;
+        iBrewFfMillis = i_now;
+      }
+
+      float f_delta_sec = (float)(i_now - iBrewFfMillis) / 1000.F;
+      iBrewFfMillis = i_now;
+
+      if (objConfig.BrewFfTau > 0.F) {
+        fBrewFf += (objConfig.BrewFfEnd - fBrewFf) * f_delta_sec / objConfig.BrewFfTau;
+      } else {
+        fBrewFf = objConfig.BrewFfEnd;
+      }
+
+      fTarPwm = fBrewFf + objConfig.BrewFfGain * (objConfig.CtrlTarget - fTemp);
+
+      /* Check lower and upper limit of manipulation variable */
+      if (fTarPwm < objConfig.LowLimitManipulation) { fTarPwm = objConfig.LowLimitManipulation; }
+      if (fTarPwm > objConfig.HighLimitManipulation) { fTarPwm = objConfig.HighLimitManipulation; }
     } else {
       /* Change from Brewing to not brewing: Reset PID */
-      if ((iState.previous & BREWING) == BREWING)
+      if (b_brewing_prev)
       {
         objPid.reset();
       }
@@ -980,6 +1046,7 @@ bool controlHeating(){
     fTarPwm = 0.F;
     b_success = false;
   }
+  b_brewing_prev = b_brewing;
   ledcWrite(PwmSsrChannel, (int)fTarPwm);
 
   return b_success;
@@ -1101,6 +1168,26 @@ void loop(){
       }
     portEXIT_CRITICAL_ISR(&objTimerMux);
     iState.actual &= ~BREWING_DETECTION;
+  }
+
+  if ((iState.actual & CONFIG_UPDATE) == CONFIG_UPDATE) {
+    /* New parameters were stored via /paramUpdate, put them into effect */
+    configPID();
+    configLED();
+
+    if(objConfig.SigFilterActive){
+      objADS1115->activateFilter();
+    } else {
+      objADS1115->deactivateFilter();
+    }
+
+    /* the integrator content belongs to the previous coefficients, start clean */
+    objPid.reset();
+
+    portENTER_CRITICAL_ISR(&objTimerMux);
+      iState.previous = iState.actual;
+      iState.actual &= ~CONFIG_UPDATE;
+    portEXIT_CRITICAL_ISR(&objTimerMux);
   }
 
   if ((iState.actual & MEASURE) == MEASURE) {

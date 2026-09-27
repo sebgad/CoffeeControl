@@ -42,12 +42,17 @@ struct config {
   float CtrlIntFactor;
   bool CtrlDifActivate;
   float CtrlDifFactor;
+  float CtrlDifFilterTime;
   bool LowThresholdActivate;
   float LowThresholdValue;
   bool HighThresholdActivate;
   float HighTresholdValue;
   float LowLimitManipulation;
   float HighLimitManipulation;
+  float BrewFfStart;
+  float BrewFfEnd;
+  float BrewFfTau;
+  float BrewFfGain;
   uint32_t SsrFreq;
   uint32_t PwmSsrResolution;
   uint32_t RwmRgbFreq;
@@ -73,7 +78,8 @@ enum eState{
   DIAG      = (1u << 4),
   LED_CTRL  = (1u << 5),
   BREWING_DETECTION = (1 << 6),
-  BREWING   = (1u << 7)
+  BREWING   = (1u << 7),
+  CONFIG_UPDATE = (1u << 8)
 };
 
 enum eError{
