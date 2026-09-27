@@ -7,10 +7,10 @@
   <title>BananaCoffee</title>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  
+
   <!-- include google charts libraries  -->
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-  
+
   <!-- Java script for graphs.html -->
   <script type="text/javascript">
     // load core packages from google charts
@@ -32,23 +32,25 @@
       obj_data_table.addColumn('number', "Time");
       obj_data_table.addColumn('number', "Temperature");
       obj_data_table.addColumn('number', "TargetPWM");
+      obj_data_table.addColumn('number', "TargetTemperature");
 
       // chart display options
       dct_chart_options = {
         title: 'Temperature and Target PWM',
         // Gives each series an axis that matches the vAxes number below.
         series: {
+          2: {targetAxisIndex: 0, color:'black', lineDashStyle: [8,8] },
           0: {targetAxisIndex: 0},
           1: {targetAxisIndex: 1}
         },
         vAxes: {
           // Adds settings for each vertical axis.
-          0: {title: 'Temperature (Celsius)', 
-              viewWindow: { max: 170, min: 20},
-              ticks:[20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170] },
-          1: {title: 'Target PWM ([0-255])',
-              viewWindow: { max: 255, min: 0 },
-              ticks:[0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255]},
+          0: {title: 'Temperature (\°C)',
+              viewWindow: { max: 100, min: 0},
+              ticks:[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]},
+          1: {title: 'Target PWM (\%)',
+              viewWindow: { max: 100, min: 0 },
+              ticks:[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100 ]},
         },
         legend: {position: 'top'},
         hAxis: {
@@ -60,7 +62,7 @@
     var obj_http_request=new XMLHttpRequest();
     // request data.csv from http server
     obj_http_request.open("GET","data.csv");
-      
+
     // define function which is executed when requested is fully loaded
     obj_http_request.onload= function() {
       // assign response text from request to variable
@@ -68,7 +70,7 @@
       // split string request to list (on line breaks)
       // columms: Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm
       lst_data = str_buf.split(/\r?\n/g);
-      
+
       // iterate over rows in data
       for (let i_row = 3; i_row<lst_data.length; i_row++){
         if (lst_data[i_row] !== "") {
@@ -76,13 +78,14 @@
           var f_time = parseFloat(lst_line[0]);
           var f_temp  = parseFloat(lst_line[1]);
           var f_pwm  = parseFloat(lst_line[2]);
-          obj_data_table.addRow([f_time, f_temp, f_pwm]);
+          var f_target_temp  = parseFloat(lst_line[3]);
+          obj_data_table.addRow([f_time, f_temp, f_target_temp]);
           i_data_pointer++;
         }
       }
     }
     obj_http_request.send();
-    
+
     // draw classic chart with data
     obj_chart.draw(obj_data_table, dct_chart_options);
     }
@@ -126,13 +129,12 @@
       }
     }
 
-
     function drawChart(){
     // initialize http request object for asynchronous file request
     var obj_http_request=new XMLHttpRequest();
     // request data.csv from http server
     obj_http_request.open("GET","data.csv");
-      
+
     // define function which is executed when requested is fully loaded
     obj_http_request.onload= function() {
       // get response as string from esp async webserver
@@ -140,7 +142,7 @@
       // split string request to list (on line breaks)
       // columms: Time,Temperature,AdReadVoltage,Pressure,HeatOn,PumpOn,TarPwm
       lst_data = str_buf.split(/\r?\n/g);
-      
+
       // iterate over rows in data
       for (let i_row = i_data_pointer; i_row<lst_data.length; i_row++){
         if (lst_data[i_row] !== "") {
@@ -148,7 +150,9 @@
           var f_time = parseFloat(lst_line[0]);
           var f_temp  = parseFloat(lst_line[1]);
           var f_pwm  = parseFloat(lst_line[2]);
-          obj_data_table.addRow([f_time, f_temp, f_pwm]);
+          var f_target_temp = parseFloat(lst_line[3])
+
+          obj_data_table.addRow([f_time, f_temp, f_pwm, f_target_temp]);
           i_data_pointer++;
         }
       }
@@ -204,7 +208,7 @@
       color: white;
       padding: 16px 32px;
       text-decoration: none;
-      margin: 4px 2px;  
+      margin: 4px 2px;
       cursor: pointer;
       border-radius: 4px;
       font-size:medium;
@@ -232,7 +236,7 @@
 
 <div class="main">
   <h3>Sensor Graphs</h3>
-  <div id="chart_div", style="width:80%;height:500px"></div>
+  <div id="chart_div", style="width:95%;height:600px"></div>
   <form>
   <input type="button" onclick="onFileDownload()" value="Download Measurement">
   </form>

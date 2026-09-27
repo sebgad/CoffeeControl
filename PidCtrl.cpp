@@ -7,6 +7,11 @@ PidCtrl::PidCtrl() {
      */
     _iSizeCoeffTbl = 0;
     _fSumIntegrator = 0;
+    _fLastControlDev = 0.F;
+    _fErrDiff = 0.F;
+    _fErrRateFilt = 0.F;
+    _fDiffFilterTime = 0.F;
+    _bDiffInit = false;
 
 }
 
@@ -188,6 +193,32 @@ void PidCtrl::setOffThres(float f_tresh) {
 }//void PidCtrl::setOffThresh
 
 
+void PidCtrl::setDiffFilterTime(float f_time_const) {
+    /**
+    * Set the time constant of the low pass filter on the differential part.
+    * The measurement is quantised, so one quantum per cycle would otherwise move the output by
+    * Kd*quantum/dT, which for a strong Kd is a large step. 0 disables the filter.
+    * @param f_time_const   filter time constant in seconds, should stay well below Tv
+    */
+  _fDiffFilterTime = f_time_const;
+}//void PidCtrl::setDiffFilterTime
+
+
+void PidCtrl::deactivateOnThres() {
+    /**
+    * Deactivate the lower threshold, the PID output is no longer hard set to on
+    */
+  _bThresOn = false;
+}//void PidCtrl::deactivateOnThres
+
+void PidCtrl::deactivateOffThres() {
+    /**
+    * Deactivate the upper threshold, the PID output is no longer hard set to off
+    */
+  _bThresOff = false;
+}//void PidCtrl::deactivateOffThres
+
+
 void PidCtrl::compute() {
     /**
      * Compute and calculate controler equitation. Actual value variable and manipulation value variable have to
@@ -248,11 +279,27 @@ void PidCtrl::_calcControlEquation(){
         // Proportional component of the controler
         *_ptrManipValue += f_k_p_coeff * f_control_deviation;
 
-
         if (_bKdActivate){
             // Differential component of the controler
-            _fErrDiff = (f_control_deviation - _fLastControlDev); // deviation of error
-            *_ptrManipValue += f_k_d_coeff * _fErrDiff / f_delta_sec;
+            // after start or reset() no previous deviation is known, suppress the derivative kick
+            _fErrDiff = (_bDiffInit)?(f_control_deviation - _fLastControlDev):0.0F; // deviation of error
+
+            if (f_delta_sec > 0.0F){
+                // reset() sets the time base to now, so compute() called directly afterwards sees
+                // no elapsed time. Dividing by it would yield NaN and poison the output.
+                float f_err_rate = _fErrDiff / f_delta_sec;
+
+                if (_fDiffFilterTime > 0.0F){
+                    // first order low pass, removes the quantisation noise of the raw difference
+                    float f_alpha = f_delta_sec / _fDiffFilterTime;
+                    if (f_alpha > 1.0F) { f_alpha = 1.0F; }
+                    _fErrRateFilt += (f_err_rate - _fErrRateFilt) * f_alpha;
+                } else {
+                    _fErrRateFilt = f_err_rate;
+                }
+
+                *_ptrManipValue += f_k_d_coeff * _fErrRateFilt;
+            }
         }
 
         if (_bKiActivate){
@@ -276,8 +323,21 @@ void PidCtrl::_calcControlEquation(){
     if (_bThresOff &&  (*_ptrActualValue > _fThresOff)) { *_ptrManipValue = _fLoLim; }; // below lower thres -> set to upper limit
 
     _fLastControlDev = f_control_deviation;
+    _bDiffInit = true;
     _iLastComputeMillis = millis();
 
+}
+
+void PidCtrl::reset() {
+    /** Resets the integration part and differential part of the controller and sets last time point to actual time
+     *
+     */
+    _fLastControlDev = 0.F;
+    _fErrDiff = 0.F;
+    _fErrRateFilt = 0.F;
+    _bDiffInit = false;
+    _fSumIntegrator = 0.F;
+    _iLastComputeMillis = millis();
 }
 
 void PidCtrl::_initCoeffTable(size_t i_size_conv) {

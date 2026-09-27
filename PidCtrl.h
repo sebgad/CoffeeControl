@@ -30,12 +30,16 @@ class PidCtrl
     void setOnOffThres(float f_tresh);
     void setOnThres(float f_tresh);
     void setOffThres(float f_tresh);
+    void setDiffFilterTime(float f_time_const);
+    void deactivateOnThres();
+    void deactivateOffThres();
     void compute();
     void compute(const float &, float &);
     void addOutputLimits(float, float);
     float getErrorIntegrator();
     float getErrorDiff();
     float getTargetValue();
+    void reset();
 
   private:
     float ** ptrConstants;
@@ -47,6 +51,8 @@ class PidCtrl
     float _fTargetValue;
     float _fSumIntegrator;
     float _fErrDiff;
+    float _fErrRateFilt;
+    float _fDiffFilterTime;
     float _fLoLim;
     float _fUpLim;
     float _fThresOn;
@@ -56,6 +62,7 @@ class PidCtrl
     int _iLinkMode;
     unsigned long _iLastComputeMillis;
     float _fLastControlDev;
+    bool _bDiffInit = false;
     size_t _iSizeCoeffTbl;
     void _calcControlEquation();
     void _initCoeffTable(size_t);
